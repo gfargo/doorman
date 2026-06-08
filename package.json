@@ -1,9 +1,10 @@
 {
-  "name": "vercel-doorman",
+  "name": "@gfargo/doorman",
   "version": "2.0.0",
-  "description": "Manage Vercel and Cloudflare WAF rules as code",
+  "description": "Manage firewall rules as code across multiple providers",
   "bin": {
-    "vercel-doorman": "./bin/run"
+    "doorman": "./bin/run",
+    "vercel-doorman": "./bin/run-deprecated"
   },
   "directories": {
     "lib": "src",
@@ -17,14 +18,14 @@
   "agents": {
     "skills": [
       {
-        "name": "vercel-doorman",
-        "path": "./skills/vercel-doorman"
+        "name": "doorman",
+        "path": "./skills/doorman"
       }
     ]
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/gfargo/vercel-doorman.git"
+    "url": "git+ssh://git@github.com/gfargo/doorman.git"
   },
   "scripts": {
     "prebuild": "pnpm clean",
@@ -54,10 +55,13 @@
     "benchmark": "echo 'Performance benchmarks would run here'"
   },
   "keywords": [
-    "vercel",
     "firewall",
+    "waf",
     "IaC",
-    "security"
+    "security",
+    "vercel",
+    "cloudflare",
+    "cli"
   ],
   "author": "Griffen Fargo <ghfargo@gmail.com>",
   "license": "MIT",

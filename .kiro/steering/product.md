@@ -1,6 +1,6 @@
 # Product Overview
 
-Vercel Doorman is a CLI tool for managing firewall rules as code across multiple providers. It enables Infrastructure as Code (IaC) approach for security configuration, allowing teams to version control, validate, and automate deployment of firewall rules.
+Doorman is a CLI tool for managing firewall rules as code across multiple providers. It enables Infrastructure as Code (IaC) approach for security configuration, allowing teams to version control, validate, and automate deployment of firewall rules.
 
 ## Supported Providers
 - **Vercel Firewall** (stable) — full CRUD, sync, validation, templates

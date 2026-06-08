@@ -1,6 +1,6 @@
 # Examples & Getting Started
 
-This directory contains example configurations and templates to help you get started with Vercel Doorman. Whether you're looking to use pre-built templates or create custom rules, you'll find everything you need here.
+This directory contains example configurations and templates to help you get started with Doorman. Whether you're looking to use pre-built templates or create custom rules, you'll find everything you need here.
 
 ## Quick Start with Templates
 
@@ -8,12 +8,12 @@ The fastest way to get started is by using our built-in templates based on Verce
 
 ```bash
 # List available templates
-vercel-doorman template
+doorman template
 
 # Add a specific template
-vercel-doorman template wordpress    # Block WordPress-related URLs
-vercel-doorman template ai-bots      # Block AI bot traffic
-vercel-doorman template bad-bots     # Block known malicious bots
+doorman template wordpress    # Block WordPress-related URLs
+doorman template ai-bots      # Block AI bot traffic
+doorman template bad-bots     # Block known malicious bots
 ```
 
 ### Available Templates
@@ -25,7 +25,7 @@ vercel-doorman template bad-bots     # Block known malicious bots
 
 ## Rule Structure
 
-Each firewall rule in Vercel Doorman follows this structure:
+Each firewall rule in Doorman follows this structure:
 
 ```json
 {

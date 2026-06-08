@@ -67,7 +67,7 @@ pnpm release            # Semantic release
 
 ## Branching & Release Strategy
 - **`main`**: Stable releases (e.g., `1.5.11`). Pushes trigger semantic-release → npm publish.
-- **`beta`**: Prerelease channel (e.g., `1.6.0-beta.1`). Pushes trigger semantic-release → npm publish with `beta` dist-tag. Install with `npm install vercel-doorman@beta`.
+- **`beta`**: Prerelease channel (e.g., `1.6.0-beta.1`). Pushes trigger semantic-release → npm publish with `beta` dist-tag. Install with `npm install @gfargo/doorman@beta`.
 - **Feature branches**: Branch from target (`main` or `beta`), PR back.
 - **Commit prefixes control version bumps**:
   - `feat:` → minor bump (1.5.x → 1.6.0)

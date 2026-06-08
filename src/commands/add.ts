@@ -4,14 +4,14 @@ import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
 import { firewallRuleSchema, ipBlockingRuleSchema } from '../lib/schemas/firewallSchemas'
 import {
-  ActionType,
-  ConditionGroup,
-  CustomRule,
-  FirewallConfig,
-  IPBlockingRule,
-  RuleCondition,
-  RuleOperator,
-  RuleType,
+    ActionType,
+    ConditionGroup,
+    CustomRule,
+    FirewallConfig,
+    IPBlockingRule,
+    RuleCondition,
+    RuleOperator,
+    RuleType,
 } from '../lib/types'
 import { prompt } from '../lib/ui/prompt'
 import { getConfig, saveConfig } from '../lib/utils/config'
@@ -639,7 +639,7 @@ export const handler = async (argv: Arguments<AddOptions>) => {
     }
 
     logger.log('')
-    logger.log(chalk.dim(`Run ${chalk.cyan('vercel-doorman sync')} to deploy this rule.`))
+    logger.log(chalk.dim(`Run ${chalk.cyan('doorman sync')} to deploy this rule.`))
   } catch (error) {
     handleCommandError(error, 'adding rule')
   }

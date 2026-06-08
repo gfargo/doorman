@@ -65,7 +65,7 @@ describe('Command Integration Tests', () => {
 
   beforeEach(async () => {
     // Create temporary directory for test configs
-    tempDir = await fs.mkdtemp(join(tmpdir(), 'vercel-doorman-test-'))
+    tempDir = await fs.mkdtemp(join(tmpdir(), 'doorman-test-'))
     configPath = join(tempDir, 'test-config.json')
 
     // Mock process.exit to prevent it from killing Jest workers

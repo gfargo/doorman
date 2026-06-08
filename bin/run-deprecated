@@ -1,0 +1,11 @@
+#!/usr/bin/env node
+
+// Deprecation warning using raw ANSI codes (no dependencies needed)
+process.stderr.write(
+  '\x1b[33m⚠️  The "vercel-doorman" command is deprecated and will be removed in a future release.\x1b[0m\n' +
+  '\x1b[33m   Please use \x1b[1m"doorman"\x1b[22m instead.\x1b[0m\n' +
+  '\x1b[2m   Install: npm i -g @gfargo/doorman\x1b[0m\n\n'
+)
+
+// Delegate to the real CLI
+import('../dist/bin/run.mjs')

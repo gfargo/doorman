@@ -366,7 +366,7 @@ export const handler = async (argv: Arguments<RemoveOptions>) => {
 
       // Suggest backup for bulk operations
       if (toRemove.length >= 5 && !argv.dryRun && !argv.force) {
-        logger.log(chalk.yellow(`\n💡 Tip: Run ${chalk.cyan('vercel-doorman backup')} before bulk removal operations.`))
+        logger.log(chalk.yellow(`\n💡 Tip: Run ${chalk.cyan('doorman backup')} before bulk removal operations.`))
       }
 
       // Show what will be removed
@@ -402,7 +402,7 @@ export const handler = async (argv: Arguments<RemoveOptions>) => {
     }
 
     logger.log('')
-    logger.log(chalk.dim(`Run ${chalk.cyan('vercel-doorman sync')} to deploy these changes.`))
+    logger.log(chalk.dim(`Run ${chalk.cyan('doorman sync')} to deploy these changes.`))
   } catch (error) {
     handleCommandError(error, 'removing rule')
   }

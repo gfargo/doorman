@@ -1,7 +1,7 @@
-# Vercel Doorman Development Guidelines
+# Doorman Development Guidelines
 
 ## Overview
-Vercel Doorman is a CLI tool for managing firewall rules as code across multiple providers. It supports Vercel Firewall (stable) and Cloudflare WAF (beta), enabling version control and automated deployment of security configurations.
+Doorman is a CLI tool for managing firewall rules as code across multiple providers. It supports Vercel Firewall (stable) and Cloudflare WAF (beta), enabling version control and automated deployment of security configurations.
 
 ## Commands
 - **Build:** `pnpm build`, `pnpm build:watch`, `pnpm build:schema`
@@ -14,18 +14,18 @@ Vercel Doorman is a CLI tool for managing firewall rules as code across multiple
 ## Available CLI Commands
 All commands accept `--provider vercel|cloudflare` (auto-detected if not specified), `--debug`, and `--ci` flags.
 
-- **list:** Display firewall rules - `vercel-doorman list [configVersion]`
-- **sync:** Push local config to provider - `vercel-doorman sync`
-- **download:** Import rules from provider - `vercel-doorman download [configVersion]`
-- **template:** Add rule templates - `vercel-doorman template [templateName]`
-- **validate:** Check config validity - `vercel-doorman validate`
-- **status:** Check sync status and config health - `vercel-doorman status`
-- **diff:** Show detailed changes between local and remote - `vercel-doorman diff`
-- **watch:** Auto-sync on file changes - `vercel-doorman watch`
-- **backup:** Create/restore configuration backups - `vercel-doorman backup`
-- **export:** Export in multiple formats - `vercel-doorman export`
-- **init:** Initialize new configuration - `vercel-doorman init`
-- **setup:** Show comprehensive setup guide - `vercel-doorman setup`
+- **list:** Display firewall rules - `doorman list [configVersion]`
+- **sync:** Push local config to provider - `doorman sync`
+- **download:** Import rules from provider - `doorman download [configVersion]`
+- **template:** Add rule templates - `doorman template [templateName]`
+- **validate:** Check config validity - `doorman validate`
+- **status:** Check sync status and config health - `doorman status`
+- **diff:** Show detailed changes between local and remote - `doorman diff`
+- **watch:** Auto-sync on file changes - `doorman watch`
+- **backup:** Create/restore configuration backups - `doorman backup`
+- **export:** Export in multiple formats - `doorman export`
+- **init:** Initialize new configuration - `doorman init`
+- **setup:** Show comprehensive setup guide - `doorman setup`
 
 ## Code Style
 - **TypeScript:** Strict type checking, explicit return types

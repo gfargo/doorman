@@ -50,7 +50,7 @@ export async function getConfig(
     }
     const defaultPath = ConfigFinder.getDefaultConfigPath()
     throw new Error(
-      `No config file found. Run \`vercel-doorman init\` to create one at ${defaultPath}, ` +
+      `No config file found. Run \`doorman init\` to create one at ${defaultPath}, ` +
         `or use --config to specify a custom path.`,
     )
   }

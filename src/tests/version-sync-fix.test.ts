@@ -21,7 +21,7 @@ describe('Version Sync Fix', () => {
   }
 
   beforeEach(async () => {
-    tempDir = await fs.mkdtemp(join(tmpdir(), 'vercel-doorman-version-test-'))
+    tempDir = await fs.mkdtemp(join(tmpdir(), 'doorman-version-test-'))
     configPath = join(tempDir, 'test-config.json')
 
     // Mock the prompt functions
