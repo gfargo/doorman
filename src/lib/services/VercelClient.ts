@@ -23,7 +23,9 @@ export interface VercelConfig {
   updatedAt: string
 }
 
-export const VERCEL_API_BASE_URL = 'https://api.vercel.com/v1/security/firewall/config'
+// Overridable for testing/demos against a local mock server — never set this in production.
+export const VERCEL_API_BASE_URL =
+  process.env.DOORMAN_VERCEL_API_BASE_URL || 'https://api.vercel.com/v1/security/firewall/config'
 
 /**
  * A client for interacting with the Vercel API to manage firewall rules.

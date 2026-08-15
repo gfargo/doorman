@@ -11,6 +11,12 @@
 
 Doorman enables Infrastructure as Code (IaC) for Vercel's security layer, bringing version control, automated deployment, and team collaboration to your firewall configuration.
 
+<p align="center">
+  <img src="./assets/demos/quickstart.gif" alt="vercel-doorman init security-focused, then vercel-doorman validate --verbose, showing a passing configuration" width="720" />
+</p>
+
+<p align="center"><sub>Real terminal output — <code>vercel-doorman init security-focused</code> followed by <code>vercel-doorman validate --verbose</code>. Recorded with <a href="https://github.com/charmbracelet/vhs">VHS</a>, see <a href="/demos">/demos</a>.</sub></p>
+
 ## ✨ Features
 
 ### Core Functionality
@@ -118,12 +124,20 @@ vercel-doorman add --interactive          # Guided prompts
 vercel-doorman add --name "Block Admin" --field path --op pre --value "/admin" --action deny
 ```
 
+<p align="center">
+  <img src="./assets/demos/add-interactive.gif" alt="vercel-doorman add --interactive walking through creating a Block Admin Access rule" width="720" />
+</p>
+
 **Option 2: Use Templates**
 
 ```bash
 vercel-doorman template          # Browse available templates
 vercel-doorman template ai-bots  # Add AI bot protection
 ```
+
+<p align="center">
+  <img src="./assets/demos/template-picker.gif" alt="vercel-doorman template picker adding the ai-bots template" width="720" />
+</p>
 
 **Option 3: Interactive Setup**
 
@@ -154,16 +168,17 @@ vercel-doorman download  # Import your current Vercel rules
 
 ### Rule Creation
 
-| Command    | Description                                          | Example                                                                  |
-| ---------- | ---------------------------------------------------- | ------------------------------------------------------------------------ |
-| `add`      | Add a new rule from the CLI (interactive or inline)  | `vercel-doorman add --name "Block" --field path --op pre --value "/admin" --action deny` |
-| `template` | Add predefined rule templates                        | `vercel-doorman template ai-bots`                                        |
+| Command    | Description                                         | Example                                                                                  |
+| ---------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `add`      | Add a new rule from the CLI (interactive or inline) | `vercel-doorman add --name "Block" --field path --op pre --value "/admin" --action deny` |
+| `template` | Add predefined rule templates                       | `vercel-doorman template ai-bots`                                                        |
+
 ### Rule Management
 
-| Command    | Description                                          | Example                                                |
-| ---------- | ---------------------------------------------------- | ------------------------------------------------------ |
-| `remove`   | Remove rules by name, ID, or interactive selection   | `vercel-doorman remove --name "Old Rule"`              |
-| `template` | Add predefined rule templates                        | `vercel-doorman template ai-bots`                      |
+| Command    | Description                                        | Example                                   |
+| ---------- | -------------------------------------------------- | ----------------------------------------- |
+| `remove`   | Remove rules by name, ID, or interactive selection | `vercel-doorman remove --name "Old Rule"` |
+| `template` | Add predefined rule templates                      | `vercel-doorman template ai-bots`         |
 
 ### Status & Information
 
@@ -183,11 +198,11 @@ vercel-doorman download  # Import your current Vercel rules
 
 ### Advanced Features
 
-| Command    | Description                                                  | Use Case             |
-| ---------- | ------------------------------------------------------------ | -------------------- |
-| `watch`    | Auto-sync on file changes                                    | Development workflow |
-| `backup`   | Create/restore configuration backups                         | Safety & rollback    |
-| `export`   | Export in multiple formats (JSON, YAML, Markdown, Terraform) | Documentation & IaC  |
+| Command  | Description                                                  | Use Case             |
+| -------- | ------------------------------------------------------------ | -------------------- |
+| `watch`  | Auto-sync on file changes                                    | Development workflow |
+| `backup` | Create/restore configuration backups                         | Safety & rollback    |
+| `export` | Export in multiple formats (JSON, YAML, Markdown, Terraform) | Documentation & IaC  |
 
 ## 🔄 Workflows
 

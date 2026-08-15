@@ -1,0 +1,15 @@
+{
+  "version": 4,
+  "updatedAt": "2026-01-12T15:45:00.000Z",
+  "rules": [
+    {
+      "id": "rule_block_bad_bots",
+      "name": "Block Bad Bots",
+      "description": "Block known malicious bots and crawlers based on user agent patterns",
+      "conditionGroup": [{ "conditions": [{ "type": "user_agent", "op": "sub", "value": "bot" }] }],
+      "action": { "mitigate": { "action": "deny" } },
+      "active": true
+    }
+  ],
+  "ips": []
+}
