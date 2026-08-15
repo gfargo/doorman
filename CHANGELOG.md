@@ -1,3 +1,16 @@
+# [2.1.0](https://github.com/gfargo/vercel-doorman/compare/v2.0.0...v2.1.0) (2026-05-08)
+
+
+### Bug Fixes
+
+* **ci:** use --no-frozen-lockfile and pin pnpm@10 ([13a818c](https://github.com/gfargo/vercel-doorman/commit/13a818ce4d556ca4662f7aad7f000cf1318ae78a))
+
+
+### Features
+
+* add `add` command for creating rules from CLI ([#71](https://github.com/gfargo/vercel-doorman/issues/71)) ([01a901b](https://github.com/gfargo/vercel-doorman/commit/01a901bef17ec0211cc643a3977499ed9cf7db3e)), closes [#69](https://github.com/gfargo/vercel-doorman/issues/69)
+* add `remove` command for deleting rules from CLI ([#72](https://github.com/gfargo/vercel-doorman/issues/72)) ([ec3251d](https://github.com/gfargo/vercel-doorman/commit/ec3251d3a9e5005a96fd5acacdf80a1436bbe076)), closes [#70](https://github.com/gfargo/vercel-doorman/issues/70)
+
 # [2.0.0](https://github.com/gfargo/vercel-doorman/compare/v1.5.10...v2.0.0) (2026-05-05)
 
 

@@ -4,14 +4,14 @@ import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
 import { firewallRuleSchema, ipBlockingRuleSchema } from '../lib/schemas/firewallSchemas'
 import {
-    ActionType,
-    ConditionGroup,
-    CustomRule,
-    FirewallConfig,
-    IPBlockingRule,
-    RuleCondition,
-    RuleOperator,
-    RuleType,
+  ActionType,
+  ConditionGroup,
+  CustomRule,
+  FirewallConfig,
+  IPBlockingRule,
+  RuleCondition,
+  RuleOperator,
+  RuleType,
 } from '../lib/types'
 import { prompt } from '../lib/ui/prompt'
 import { getConfig, saveConfig } from '../lib/utils/config'

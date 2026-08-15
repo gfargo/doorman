@@ -11,6 +11,12 @@
 
 Doorman enables Infrastructure as Code (IaC) for your security layer, bringing version control, automated deployment, and team collaboration to your firewall configuration. Supports Vercel Firewall and Cloudflare WAF.
 
+<p align="center">
+  <img src="./assets/demos/quickstart.gif" alt="vercel-doorman init security-focused, then vercel-doorman validate --verbose, showing a passing configuration" width="720" />
+</p>
+
+<p align="center"><sub>Real terminal output — <code>vercel-doorman init security-focused</code> followed by <code>vercel-doorman validate --verbose</code>. Recorded with <a href="https://github.com/charmbracelet/vhs">VHS</a>, see <a href="/demos">/demos</a>.</sub></p>
+
 ## ✨ Features
 
 ### Core Functionality
@@ -118,12 +124,20 @@ doorman add --interactive          # Guided prompts
 doorman add --name "Block Admin" --field path --op pre --value "/admin" --action deny
 ```
 
+<p align="center">
+  <img src="./assets/demos/add-interactive.gif" alt="vercel-doorman add --interactive walking through creating a Block Admin Access rule" width="720" />
+</p>
+
 **Option 2: Use Templates**
 
 ```bash
 doorman template          # Browse available templates
 doorman template ai-bots  # Add AI bot protection
 ```
+
+<p align="center">
+  <img src="./assets/demos/template-picker.gif" alt="vercel-doorman template picker adding the ai-bots template" width="720" />
+</p>
 
 **Option 3: Interactive Setup**
 
@@ -147,22 +161,22 @@ doorman download  # Import your current Vercel rules
 
 ### Setup & Initialization
 
-| Command | Description                                       | Example                             |
-| ------- | ------------------------------------------------- | ----------------------------------- |
+| Command | Description                                       | Example                      |
+| ------- | ------------------------------------------------- | ---------------------------- |
 | `setup` | Show comprehensive setup guide with links         | `doorman setup`              |
 | `init`  | Create new configuration with interactive prompts | `doorman init --interactive` |
 
 ### Rule Creation
 
-| Command    | Description                                         | Example                                                                                  |
-| ---------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Command    | Description                                         | Example                                                                           |
+| ---------- | --------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `add`      | Add a new rule from the CLI (interactive or inline) | `doorman add --name "Block" --field path --op pre --value "/admin" --action deny` |
 | `template` | Add predefined rule templates                       | `doorman template ai-bots`                                                        |
 
 ### Rule Management
 
-| Command    | Description                                        | Example                                   |
-| ---------- | -------------------------------------------------- | ----------------------------------------- |
+| Command    | Description                                        | Example                            |
+| ---------- | -------------------------------------------------- | ---------------------------------- |
 | `remove`   | Remove rules by name, ID, or interactive selection | `doorman remove --name "Old Rule"` |
 | `template` | Add predefined rule templates                      | `doorman template ai-bots`         |
 

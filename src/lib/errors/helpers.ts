@@ -1,12 +1,12 @@
 import { DoormanError } from './DoormanError'
 import {
-    ConfigErrorCode,
-    ValidationErrorCode,
-    SyncErrorCode,
-    ProviderErrorCode,
-    CloudflareErrorCode,
-    NetworkErrorCode,
-    TranslationErrorCode,
+  ConfigErrorCode,
+  ValidationErrorCode,
+  SyncErrorCode,
+  ProviderErrorCode,
+  CloudflareErrorCode,
+  NetworkErrorCode,
+  TranslationErrorCode,
 } from './ErrorCodes'
 
 const DOCS_BASE_URL = 'https://docs.doorman.griffen.codes/errors'

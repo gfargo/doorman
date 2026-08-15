@@ -1,0 +1,23 @@
+{
+  "version": 3,
+  "updatedAt": "2026-01-10T09:30:00.000Z",
+  "rules": [
+    {
+      "id": "rule_block_bad_bots",
+      "name": "Block Bad Bots",
+      "description": "Block malicious bots",
+      "conditionGroup": [{ "conditions": [{ "type": "user_agent", "op": "sub", "value": "bot" }] }],
+      "action": { "mitigate": { "action": "deny" } },
+      "active": true
+    },
+    {
+      "id": "rule_block_admin_access",
+      "name": "Block Admin Access",
+      "description": "Restrict admin routes",
+      "conditionGroup": [{ "conditions": [{ "type": "path", "op": "pre", "value": "/admin" }] }],
+      "action": { "mitigate": { "action": "deny" } },
+      "active": true
+    }
+  ],
+  "ips": []
+}
