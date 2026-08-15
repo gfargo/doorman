@@ -2,6 +2,9 @@
   "name": "@gfargo/doorman",
   "version": "2.1.0",
   "description": "Manage firewall rules as code across multiple providers",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "doorman": "./bin/run",
     "vercel-doorman": "./bin/run-deprecated"
