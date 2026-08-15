@@ -3,9 +3,134 @@ import { existsSync } from 'fs'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
 import { prompt } from '../lib/ui/prompt'
+import { CustomRule } from '../lib/types'
 import { createEmptyConfig } from '../lib/utils/createEmptyConfig'
 import { saveConfig } from '../lib/utils/config'
 import { handleCommandError } from '../lib/utils/handleCommandError'
+
+export const BASIC_TEMPLATE_RULES: CustomRule[] = [
+  {
+    id: 'rule_block_bad_bots',
+    name: 'Block Bad Bots',
+    description: 'Block known malicious bots and crawlers based on user agent patterns',
+    conditionGroup: [
+      {
+        conditions: [
+          {
+            type: 'user_agent',
+            op: 'sub',
+            value: 'bot',
+          },
+        ],
+      },
+    ],
+    action: {
+      mitigate: {
+        action: 'deny',
+      },
+    },
+    active: false, // Start disabled for safety
+  },
+  {
+    id: 'rule_block_scrapers',
+    name: 'Block Scrapers',
+    description: 'Block common scraping tools and automated requests',
+    conditionGroup: [
+      {
+        conditions: [
+          {
+            type: 'user_agent',
+            op: 'sub',
+            value: 'scraper',
+          },
+        ],
+      },
+    ],
+    action: {
+      mitigate: {
+        action: 'deny',
+      },
+    },
+    active: false,
+  },
+]
+
+export const SECURITY_FOCUSED_TEMPLATE_RULES: CustomRule[] = [
+  {
+    id: 'rule_rate_limit_api',
+    name: 'Rate Limit API',
+    description: 'Rate limit API endpoints to prevent abuse and DoS attacks',
+    conditionGroup: [
+      {
+        conditions: [
+          {
+            type: 'path',
+            op: 'pre',
+            value: '/api/',
+          },
+        ],
+      },
+    ],
+    action: {
+      mitigate: {
+        action: 'rate_limit',
+        rateLimit: {
+          requests: 100,
+          window: '1m',
+        },
+      },
+    },
+    active: false,
+  },
+  {
+    id: 'rule_block_suspicious_ips',
+    name: 'Block Suspicious IPs',
+    description: 'Block requests from a known suspicious IP range',
+    conditionGroup: [
+      {
+        conditions: [
+          {
+            type: 'ip_address',
+            op: 'eq',
+            value: '10.0.0.0/24',
+          },
+        ],
+      },
+    ],
+    action: {
+      mitigate: {
+        action: 'deny',
+      },
+    },
+    active: false,
+  },
+  {
+    id: 'rule_protect_admin',
+    name: 'Protect Admin Routes',
+    description: 'Add extra protection for admin and sensitive routes',
+    conditionGroup: [
+      {
+        conditions: [
+          {
+            type: 'path',
+            op: 'pre',
+            value: '/admin',
+          },
+        ],
+      },
+    ],
+    action: {
+      mitigate: {
+        action: 'rate_limit',
+        rateLimit: {
+          requests: 10,
+          window: '1m',
+        },
+      },
+    },
+    active: false,
+  },
+]
 
 interface InitOptions {
   config?: string
@@ -198,137 +323,11 @@ export const handler = async (argv: Arguments<InitOptions>) => {
     // Add template-specific content
     switch (template) {
       case 'basic':
-        config = {
-          ...config,
-          rules: [
-            {
-              id: 'rule_block_bad_bots',
-              name: 'Block Bad Bots',
-              description: 'Block known malicious bots and crawlers based on user agent patterns',
-              conditionGroup: [
-                {
-                  conditions: [
-                    {
-                      type: 'user_agent',
-                      op: 'sub',
-                      value: 'bot',
-                    },
-                  ],
-                },
-              ],
-              action: {
-                mitigate: {
-                  action: 'deny',
-                },
-              },
-              active: false, // Start disabled for safety
-            },
-            {
-              id: 'rule_block_scrapers',
-              name: 'Block Scrapers',
-              description: 'Block common scraping tools and automated requests',
-              conditionGroup: [
-                {
-                  conditions: [
-                    {
-                      type: 'user_agent',
-                      op: 'sub',
-                      value: 'scraper',
-                    },
-                  ],
-                },
-              ],
-              action: {
-                mitigate: {
-                  action: 'deny',
-                },
-              },
-              active: false,
-            },
-          ],
-        }
+        config = { ...config, rules: BASIC_TEMPLATE_RULES }
         break
 
       case 'security-focused':
-        config = {
-          ...config,
-          rules: [
-            {
-              id: 'rule_rate_limit_api',
-              name: 'Rate Limit API',
-              description: 'Rate limit API endpoints to prevent abuse and DoS attacks',
-              conditionGroup: [
-                {
-                  conditions: [
-                    {
-                      type: 'path',
-                      op: 'pre',
-                      value: '/api/',
-                    },
-                  ],
-                },
-              ],
-              action: {
-                mitigate: {
-                  action: 'rate_limit',
-                  rateLimit: {
-                    requests: 100,
-                    window: '1m',
-                  },
-                },
-              },
-              active: false,
-            },
-            {
-              id: 'rule_block_suspicious_ips',
-              name: 'Block Suspicious IPs',
-              description: 'Block requests from known suspicious IP ranges',
-              conditionGroup: [
-                {
-                  conditions: [
-                    {
-                      type: 'ip_address',
-                      op: 'sub',
-                      value: '10.0.0.',
-                    },
-                  ],
-                },
-              ],
-              action: {
-                mitigate: {
-                  action: 'deny',
-                },
-              },
-              active: false,
-            },
-            {
-              id: 'rule_protect_admin',
-              name: 'Protect Admin Routes',
-              description: 'Add extra protection for admin and sensitive routes',
-              conditionGroup: [
-                {
-                  conditions: [
-                    {
-                      type: 'path',
-                      op: 'pre',
-                      value: '/admin',
-                    },
-                  ],
-                },
-              ],
-              action: {
-                mitigate: {
-                  action: 'rate_limit',
-                  rateLimit: {
-                    requests: 10,
-                    window: '1m',
-                  },
-                },
-              },
-              active: false,
-            },
-          ],
-        }
+        config = { ...config, rules: SECURITY_FOCUSED_TEMPLATE_RULES }
         break
 
       default:
