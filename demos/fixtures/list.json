@@ -1,0 +1,31 @@
+{
+  "version": 7,
+  "updatedAt": "2026-01-15T12:00:00.000Z",
+  "rules": [
+    {
+      "id": "rule_block_bad_bots",
+      "name": "Block Bad Bots",
+      "description": "Block malicious bots",
+      "conditionGroup": [{ "conditions": [{ "type": "user_agent", "op": "sub", "value": "bot" }] }],
+      "action": { "mitigate": { "action": "deny" } },
+      "active": true
+    },
+    {
+      "id": "rule_rate_limit_api",
+      "name": "Rate Limit API",
+      "description": "Prevent API abuse",
+      "conditionGroup": [{ "conditions": [{ "type": "path", "op": "pre", "value": "/api/" }] }],
+      "action": { "mitigate": { "action": "rate_limit", "rateLimit": { "requests": 100, "window": "1m" } } },
+      "active": true
+    },
+    {
+      "id": "rule_block_admin_access",
+      "name": "Block Admin Access",
+      "description": "Restrict admin routes",
+      "conditionGroup": [{ "conditions": [{ "type": "path", "op": "pre", "value": "/admin" }] }],
+      "action": { "mitigate": { "action": "deny" } },
+      "active": true
+    }
+  ],
+  "ips": [{ "id": "ip_block_1", "ip": "10.0.0.0/24", "hostname": "*", "action": "deny", "notes": "Known bad range" }]
+}

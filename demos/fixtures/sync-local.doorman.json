@@ -1,0 +1,23 @@
+{
+  "$schema": "https://doorman.griffen.codes/schema.json",
+  "version": 4,
+  "rules": [
+    {
+      "id": "rule_block_bad_bots",
+      "name": "Block Bad Bots",
+      "description": "Block known malicious bots and crawlers based on user agent patterns",
+      "conditionGroup": [{ "conditions": [{ "type": "user_agent", "op": "sub", "value": "bot" }] }],
+      "action": { "mitigate": { "action": "deny" } },
+      "active": true
+    },
+    {
+      "id": "rule_block_admin_access",
+      "name": "Block Admin Access",
+      "description": "Restrict admin routes",
+      "conditionGroup": [{ "conditions": [{ "type": "path", "op": "pre", "value": "/admin" }] }],
+      "action": { "mitigate": { "action": "deny" } },
+      "active": true
+    }
+  ],
+  "ips": []
+}
