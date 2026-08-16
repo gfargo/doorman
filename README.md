@@ -1,15 +1,15 @@
-# 🚪 Vercel Doorman
+# 🚪 Doorman
 
-[![NPM Version](https://img.shields.io/npm/v/vercel-doorman.svg)](https://www.npmjs.com/package/vercel-doorman)
-[![Typescript Support](https://img.shields.io/npm/types/vercel-doorman.svg)](https://www.npmjs.com/package/vercel-doorman)
-[![NPM Downloads](https://img.shields.io/npm/dt/vercel-doorman.svg)](https://www.npmjs.com/package/vercel-doorman)
-[![GitHub issues](https://img.shields.io/github/issues/gfargo/vercel-doorman)](https://github.com/gfargo/vercel-doorman/issues)
-[![GitHub pull requests](https://img.shields.io/github/issues-pr/gfargo/vercel-doorman)](https://github.com/gfargo/vercel-doorman/pulls)
-[![Last Commit](https://img.shields.io/github/last-commit/gfargo/vercel-doorman)](https://github.com/gfargo/vercel-doorman/tree/main)
+[![NPM Version](https://img.shields.io/npm/v/@gfargo/doorman.svg)](https://www.npmjs.com/package/@gfargo/doorman)
+[![Typescript Support](https://img.shields.io/npm/types/@gfargo/doorman.svg)](https://www.npmjs.com/package/@gfargo/doorman)
+[![NPM Downloads](https://img.shields.io/npm/dt/@gfargo/doorman.svg)](https://www.npmjs.com/package/@gfargo/doorman)
+[![GitHub issues](https://img.shields.io/github/issues/gfargo/doorman)](https://github.com/gfargo/doorman/issues)
+[![GitHub pull requests](https://img.shields.io/github/issues-pr/gfargo/doorman)](https://github.com/gfargo/doorman/pulls)
+[![Last Commit](https://img.shields.io/github/last-commit/gfargo/doorman)](https://github.com/gfargo/doorman/tree/main)
 
-**The complete toolkit for managing [Vercel Firewall](https://vercel.com/docs/security/vercel-firewall) rules as code.**
+**The complete toolkit for managing firewall rules as code across multiple providers.**
 
-Doorman enables Infrastructure as Code (IaC) for Vercel's security layer, bringing version control, automated deployment, and team collaboration to your firewall configuration.
+Doorman enables Infrastructure as Code (IaC) for your security layer, bringing version control, automated deployment, and team collaboration to your firewall configuration. Supports Vercel Firewall and Cloudflare WAF.
 
 <p align="center">
   <img src="./assets/demos/quickstart.gif" alt="vercel-doorman init security-focused, then vercel-doorman validate --verbose, showing a passing configuration" width="720" />
@@ -49,27 +49,27 @@ Doorman enables Infrastructure as Code (IaC) for Vercel's security layer, bringi
 ### Installation
 
 ```bash
-npm install -g vercel-doorman
+npm install -g @gfargo/doorman
 # or
-yarn global add vercel-doorman
+yarn global add @gfargo/doorman
 # or
-pnpm add -g vercel-doorman
+pnpm add -g @gfargo/doorman
 ```
 
 ### Get Started in 30 Seconds
 
 ```bash
 # 1. See the setup guide
-vercel-doorman setup
+doorman setup
 
 # 2. Initialize your project (interactive)
-vercel-doorman init --interactive
+doorman init --interactive
 
 # 3. Check your configuration health
-vercel-doorman status
+doorman status
 
 # 4. Deploy your rules
-vercel-doorman sync
+doorman sync
 ```
 
 ## 📋 Configuration
@@ -120,8 +120,8 @@ Doorman uses a simple JSON configuration file with full TypeScript support and J
 **Option 1: Use the `add` Command** (Recommended)
 
 ```bash
-vercel-doorman add --interactive          # Guided prompts
-vercel-doorman add --name "Block Admin" --field path --op pre --value "/admin" --action deny
+doorman add --interactive          # Guided prompts
+doorman add --name "Block Admin" --field path --op pre --value "/admin" --action deny
 ```
 
 <p align="center">
@@ -131,8 +131,8 @@ vercel-doorman add --name "Block Admin" --field path --op pre --value "/admin" -
 **Option 2: Use Templates**
 
 ```bash
-vercel-doorman template          # Browse available templates
-vercel-doorman template ai-bots  # Add AI bot protection
+doorman template          # Browse available templates
+doorman template ai-bots  # Add AI bot protection
 ```
 
 <p align="center">
@@ -142,13 +142,13 @@ vercel-doorman template ai-bots  # Add AI bot protection
 **Option 3: Interactive Setup**
 
 ```bash
-vercel-doorman init security-focused  # Start with security templates
+doorman init security-focused  # Start with security templates
 ```
 
 **Option 4: Import Existing**
 
 ```bash
-vercel-doorman download  # Import your current Vercel rules
+doorman download  # Import your current Vercel rules
 ```
 
 ### 📚 Examples & Templates
@@ -161,24 +161,24 @@ vercel-doorman download  # Import your current Vercel rules
 
 ### Setup & Initialization
 
-| Command | Description                                       | Example                             |
-| ------- | ------------------------------------------------- | ----------------------------------- |
-| `setup` | Show comprehensive setup guide with links         | `vercel-doorman setup`              |
-| `init`  | Create new configuration with interactive prompts | `vercel-doorman init --interactive` |
+| Command | Description                                       | Example                      |
+| ------- | ------------------------------------------------- | ---------------------------- |
+| `setup` | Show comprehensive setup guide with links         | `doorman setup`              |
+| `init`  | Create new configuration with interactive prompts | `doorman init --interactive` |
 
 ### Rule Creation
 
-| Command    | Description                                         | Example                                                                                  |
-| ---------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `add`      | Add a new rule from the CLI (interactive or inline) | `vercel-doorman add --name "Block" --field path --op pre --value "/admin" --action deny` |
-| `template` | Add predefined rule templates                       | `vercel-doorman template ai-bots`                                                        |
+| Command    | Description                                         | Example                                                                           |
+| ---------- | --------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `add`      | Add a new rule from the CLI (interactive or inline) | `doorman add --name "Block" --field path --op pre --value "/admin" --action deny` |
+| `template` | Add predefined rule templates                       | `doorman template ai-bots`                                                        |
 
 ### Rule Management
 
-| Command    | Description                                        | Example                                   |
-| ---------- | -------------------------------------------------- | ----------------------------------------- |
-| `remove`   | Remove rules by name, ID, or interactive selection | `vercel-doorman remove --name "Old Rule"` |
-| `template` | Add predefined rule templates                      | `vercel-doorman template ai-bots`         |
+| Command    | Description                                        | Example                            |
+| ---------- | -------------------------------------------------- | ---------------------------------- |
+| `remove`   | Remove rules by name, ID, or interactive selection | `doorman remove --name "Old Rule"` |
+| `template` | Add predefined rule templates                      | `doorman template ai-bots`         |
 
 ### Status & Information
 
@@ -210,30 +210,30 @@ vercel-doorman download  # Import your current Vercel rules
 
 ```bash
 # Start watching for changes
-vercel-doorman watch
+doorman watch
 
 # Or manual development cycle:
-vercel-doorman status    # Check what needs syncing
-vercel-doorman diff      # Review changes
-vercel-doorman sync      # Deploy changes
+doorman status    # Check what needs syncing
+doorman diff      # Review changes
+doorman sync      # Deploy changes
 ```
 
 ### Production Deployment
 
 ```bash
-vercel-doorman backup           # Safety first
-vercel-doorman validate         # Check syntax
-vercel-doorman diff             # Review changes
-vercel-doorman sync             # Deploy
-vercel-doorman status           # Verify deployment
+doorman backup           # Safety first
+doorman validate         # Check syntax
+doorman diff             # Review changes
+doorman sync             # Deploy
+doorman status           # Verify deployment
 ```
 
 ### Team Collaboration
 
 ```bash
-vercel-doorman export --format markdown  # Generate docs
-vercel-doorman backup --list             # Manage backups
-vercel-doorman download                  # Sync with team changes
+doorman export --format markdown  # Generate docs
+doorman backup --list             # Manage backups
+doorman download                  # Sync with team changes
 ```
 
 ## 🔧 Configuration
@@ -256,7 +256,7 @@ export VERCEL_TEAM_ID="team_xyz789"    # Optional if using team
 4. Scope: Select your project/team
 5. Copy token and set as `VERCEL_TOKEN`
 
-**Need help?** Run `vercel-doorman setup` for detailed instructions with direct links.
+**Need help?** Run `doorman setup` for detailed instructions with direct links.
 
 ## 📊 Command Examples
 
@@ -264,42 +264,42 @@ export VERCEL_TEAM_ID="team_xyz789"    # Optional if using team
 
 ```bash
 # Quick status check
-vercel-doorman status
+doorman status
 
 # See what's currently deployed
-vercel-doorman list
+doorman list
 
 # Apply your local changes
-vercel-doorman sync
+doorman sync
 ```
 
 ### Advanced Usage
 
 ```bash
 # Export documentation
-vercel-doorman export --format markdown --output firewall-docs.md
+doorman export --format markdown --output firewall-docs.md
 
 # Backup before major changes
-vercel-doorman backup
+doorman backup
 
 # Watch for changes during development
-vercel-doorman watch
+doorman watch
 
 # Get detailed diff in JSON for CI/CD
-vercel-doorman diff --format json
+doorman diff --format json
 ```
 
 ### CI/CD Integration
 
 ```bash
 # Validate in CI pipeline
-vercel-doorman validate
+doorman validate
 
 # Check for changes (exit code indicates changes)
-vercel-doorman diff --format json > changes.json
+doorman diff --format json > changes.json
 
 # Deploy in production
-vercel-doorman sync --config production.config.json
+doorman sync --config production.config.json
 ```
 
 ## 🏥 Configuration Health
@@ -307,7 +307,7 @@ vercel-doorman sync --config production.config.json
 Doorman includes a built-in health checker that scores your configuration and provides recommendations:
 
 ```bash
-vercel-doorman status  # Includes health score
+doorman status  # Includes health score
 ```
 
 **Health Score Factors:**
@@ -351,7 +351,7 @@ vercel-doorman status  # Includes health score
 ### Watch Mode for Development
 
 ```bash
-vercel-doorman watch --interval 1000
+doorman watch --interval 1000
 ```
 
 Automatically syncs changes when you modify your config file. Perfect for rapid development and testing.
@@ -359,22 +359,22 @@ Automatically syncs changes when you modify your config file. Perfect for rapid 
 ### Backup Management
 
 ```bash
-vercel-doorman backup                    # Create backup
-vercel-doorman backup --list             # List backups
-vercel-doorman backup --restore backup.json  # Restore backup
+doorman backup                    # Create backup
+doorman backup --list             # List backups
+doorman backup --restore backup.json  # Restore backup
 ```
 
 ### Multi-Format Export
 
 ```bash
 # Generate team documentation
-vercel-doorman export --format markdown
+doorman export --format markdown
 
 # Export for Terraform (conceptual)
-vercel-doorman export --format terraform
+doorman export --format terraform
 
 # CI/CD integration
-vercel-doorman export --format json --source remote
+doorman export --format json --source remote
 ```
 
 ### Configuration Health Monitoring
@@ -404,19 +404,19 @@ The health checker evaluates:
 
 **Sync issues:**
 
-- Run `vercel-doorman status` to see what's out of sync
-- Use `vercel-doorman diff` to see detailed changes
-- Check for validation errors with `vercel-doorman validate`
+- Run `doorman status` to see what's out of sync
+- Use `doorman diff` to see detailed changes
+- Check for validation errors with `doorman validate`
 
 **Need more help?**
 
 ```bash
-vercel-doorman setup  # Comprehensive setup guide
+doorman setup  # Comprehensive setup guide
 ```
 
 ## 📚 Resources
 
-- **[Setup Guide](https://github.com/gfargo/vercel-doorman#setup)** - Complete setup instructions
+- **[Setup Guide](https://github.com/gfargo/doorman#setup)** - Complete setup instructions
 - **[Example Configurations](/examples)** - Real-world examples
 - **[Vercel Firewall Docs](https://vercel.com/docs/security/vercel-firewall)** - Official documentation
 - **[Template Library](https://vercel.com/templates/vercel-firewall)** - Pre-built rule templates
@@ -429,8 +429,8 @@ We welcome contributions! Here's how you can help:
 ### Development Setup
 
 ```bash
-git clone https://github.com/gfargo/vercel-doorman.git
-cd vercel-doorman
+git clone https://github.com/gfargo/doorman.git
+cd doorman
 pnpm install
 pnpm build
 ```

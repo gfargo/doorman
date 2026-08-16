@@ -19,10 +19,10 @@ describe('DoormanError', () => {
       const error = new DoormanError({
         code: ConfigErrorCode.NOT_FOUND,
         message: 'Configuration file not found',
-        suggestion: 'Run vercel-doorman init to create a new config',
+        suggestion: 'Run doorman init to create a new config',
       })
 
-      expect(error.suggestion).toBe('Run vercel-doorman init to create a new config')
+      expect(error.suggestion).toBe('Run doorman init to create a new config')
     })
 
     it('should create error with details', () => {
@@ -79,12 +79,12 @@ describe('DoormanError', () => {
       const error = new DoormanError({
         code: ConfigErrorCode.NOT_FOUND,
         message: 'Configuration file not found',
-        suggestion: 'Run vercel-doorman init',
+        suggestion: 'Run doorman init',
       })
 
       const formatted = error.format()
       expect(formatted).toContain('Suggestion:')
-      expect(formatted).toContain('Run vercel-doorman init')
+      expect(formatted).toContain('Run doorman init')
     })
 
     it('should include details in formatted output', () => {
@@ -133,7 +133,7 @@ describe('DoormanError', () => {
       const error = new DoormanError({
         code: ConfigErrorCode.NOT_FOUND,
         message: 'Configuration file not found',
-        suggestion: 'Run vercel-doorman init',
+        suggestion: 'Run doorman init',
         details: {
           path: '/path/to/config.json',
         },
@@ -143,7 +143,7 @@ describe('DoormanError', () => {
       const plainText = error.toPlainText()
       expect(plainText).toContain('[CONFIG_1001]')
       expect(plainText).toContain('Configuration file not found')
-      expect(plainText).toContain('Suggestion: Run vercel-doorman init')
+      expect(plainText).toContain('Suggestion: Run doorman init')
       expect(plainText).toContain('path: /path/to/config.json')
       expect(plainText).toContain('Documentation: https://docs.example.com/errors/CONFIG_1001')
       // Should not contain ANSI color codes (no ESC trigger)

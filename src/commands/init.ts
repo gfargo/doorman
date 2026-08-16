@@ -362,13 +362,13 @@ export const handler = async (argv: Arguments<InitOptions>) => {
     const nextStep = !projectId ? 3 : !process.env.VERCEL_TOKEN ? 2 : 1
     logger.log(`${nextStep}. ${chalk.dim('Review and enable rules in')} ${configPath}`)
     logger.log(
-      `${nextStep + 1}. ${chalk.dim('Run')} ${chalk.cyan('vercel-doorman validate')} ${chalk.dim('to check your config')}`,
+      `${nextStep + 1}. ${chalk.dim('Run')} ${chalk.cyan('doorman validate')} ${chalk.dim('to check your config')}`,
     )
     logger.log(
-      `${nextStep + 2}. ${chalk.dim('Run')} ${chalk.cyan('vercel-doorman status')} ${chalk.dim('to see sync status')}`,
+      `${nextStep + 2}. ${chalk.dim('Run')} ${chalk.cyan('doorman status')} ${chalk.dim('to see sync status')}`,
     )
     logger.log(
-      `${nextStep + 3}. ${chalk.dim('Run')} ${chalk.cyan('vercel-doorman sync')} ${chalk.dim('to deploy your rules')}`,
+      `${nextStep + 3}. ${chalk.dim('Run')} ${chalk.cyan('doorman sync')} ${chalk.dim('to deploy your rules')}`,
     )
 
     if (template !== 'empty') {

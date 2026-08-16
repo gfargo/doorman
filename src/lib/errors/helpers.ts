@@ -19,7 +19,7 @@ export const configErrors = {
     new DoormanError({
       code: ConfigErrorCode.NOT_FOUND,
       message: `Configuration file not found: ${path}`,
-      suggestion: 'Run "vercel-doorman init" to create a new configuration file',
+      suggestion: 'Run "doorman init" to create a new configuration file',
       details: { path },
       docsUrl: `${DOCS_BASE_URL}/${ConfigErrorCode.NOT_FOUND}`,
     }),

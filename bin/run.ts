@@ -8,7 +8,7 @@ async function main() {
   const chalk = (await import('chalk')).default
 
   const run = yargs(process.argv.slice(2))
-  run.usage(`${chalk.bold('▲ Doorman')}\n\n${chalk.dim('Manage Vercel Firewall rules via code')}`)
+  run.usage(`${chalk.bold('🚪 Doorman')}\n\n${chalk.dim('Manage firewall rules as code across multiple providers')}`)
 
   for (const command of commands) {
     run.command(command as CommandModule)

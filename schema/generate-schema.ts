@@ -17,7 +17,7 @@ const schema = createGenerator(config).createSchema(config.type)
 const schemaWithMeta = {
   $schema: 'http://json-schema.org/draft-07/schema#',
   title: 'Doorman Config',
-  description: 'Schema for vercel-doorman project configuration files',
+  description: 'Schema for doorman project configuration files',
   ...schema,
 }
 

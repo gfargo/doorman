@@ -208,7 +208,7 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
         logger.log(`${chalk.dim('Created:')} ${new Date().toLocaleString()}`)
         logger.log('')
         logger.log(chalk.dim('To restore this backup later, run:'))
-        logger.log(chalk.cyan(`vercel-doorman backup --restore ${backupFilename}`))
+        logger.log(chalk.cyan(`doorman backup --restore ${backupFilename}`))
       },
     )
   } catch (error) {

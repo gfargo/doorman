@@ -1,9 +1,9 @@
 ---
-name: vercel-doorman
-description: "Use when managing Vercel or Cloudflare WAF rules as code, configuring firewall rules, IP blocking, rate limiting, bot protection, or automating multi-provider security configuration deployment with Doorman CLI."
+name: doorman
+description: 'Use when managing Vercel or Cloudflare WAF rules as code, configuring firewall rules, IP blocking, rate limiting, bot protection, or automating multi-provider security configuration deployment with Doorman CLI.'
 ---
 
-# Vercel Doorman
+# Doorman
 
 Multi-provider WAF automation as code. Manage Vercel Firewall and Cloudflare WAF rules in version-controlled `.doorman.json` files with automated deployment via CLI.
 
@@ -17,17 +17,17 @@ Multi-provider WAF automation as code. Manage Vercel Firewall and Cloudflare WAF
 ## Commands
 
 ```bash
-vercel-doorman init --interactive       # Create new config
-vercel-doorman validate                 # Check config syntax
-vercel-doorman status                   # Sync status + health score
-vercel-doorman list                     # Show deployed rules
-vercel-doorman diff                     # Local vs remote differences
-vercel-doorman sync                     # Deploy local config to provider
-vercel-doorman download                 # Pull remote rules to local config
-vercel-doorman template <name>          # Add pre-built rule template
-vercel-doorman watch                    # Auto-sync on file changes
-vercel-doorman backup                   # Create config backup
-vercel-doorman export --format <fmt>    # Export as markdown|json|yaml|terraform
+doorman init --interactive       # Create new config
+doorman validate                 # Check config syntax
+doorman status                   # Sync status + health score
+doorman list                     # Show deployed rules
+doorman diff                     # Local vs remote differences
+doorman sync                     # Deploy local config to provider
+doorman download                 # Pull remote rules to local config
+doorman template <name>          # Add pre-built rule template
+doorman watch                    # Auto-sync on file changes
+doorman backup                   # Create config backup
+doorman export --format <fmt>    # Export as markdown|json|yaml|terraform
 ```
 
 All commands accept `--provider vercel|cloudflare` and `--config <path>`.
@@ -98,37 +98,35 @@ For Cloudflare, use `provider` and `providers` fields instead of `projectId`/`te
 
 ```json
 {
-  "ips": [
-    { "ip": "192.168.1.0/24", "action": "deny", "hostname": "bad-subnet", "notes": "Blocked for abuse" }
-  ]
+  "ips": [{ "ip": "192.168.1.0/24", "action": "deny", "hostname": "bad-subnet", "notes": "Blocked for abuse" }]
 }
 ```
 
 ## Templates
 
 ```bash
-vercel-doorman template bad-bots       # Block malicious bots
-vercel-doorman template ai-bots        # Block AI crawlers
-vercel-doorman template wordpress      # Block WordPress attack paths
-vercel-doorman template block-ofac-sanctioned-countries  # OFAC compliance
+doorman template bad-bots       # Block malicious bots
+doorman template ai-bots        # Block AI crawlers
+doorman template wordpress      # Block WordPress attack paths
+doorman template block-ofac-sanctioned-countries  # OFAC compliance
 ```
 
 ## Workflow
 
 ```bash
 # Add a rule: edit .doorman.json, then:
-vercel-doorman validate && vercel-doorman sync
+doorman validate && doorman sync
 
 # Pull existing rules from provider:
-vercel-doorman download
+doorman download
 
 # Check what would change before deploying:
-vercel-doorman diff
+doorman diff
 ```
 
 ## Resources
 
 - [Docs](https://doorman.griffen.codes/docs)
-- [GitHub](https://github.com/gfargo/vercel-doorman)
-- [Wiki](https://github.com/gfargo/vercel-doorman/wiki)
-- [Examples](https://github.com/gfargo/vercel-doorman/tree/main/examples)
+- [GitHub](https://github.com/gfargo/doorman)
+- [Wiki](https://github.com/gfargo/doorman/wiki)
+- [Examples](https://github.com/gfargo/doorman/tree/main/examples)

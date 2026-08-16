@@ -1,4 +1,4 @@
-# Vercel Doorman 2.0 — Multi-Provider WAF Automation
+# Doorman 2.0 — Multi-Provider WAF Automation
 
 ## Headline
 
@@ -20,9 +20,9 @@ Doorman now manages Cloudflare WAF rules alongside Vercel Firewall from the same
 
 ```bash
 # Target Cloudflare with any command
-vercel-doorman sync --provider cloudflare
-vercel-doorman list --provider cloudflare
-vercel-doorman status --provider cloudflare
+doorman sync --provider cloudflare
+doorman list --provider cloudflare
+doorman status --provider cloudflare
 ```
 
 ### New Config Format: `.doorman.json`
@@ -49,6 +49,7 @@ The default config filename is now `.doorman.json` — shorter, provider-agnosti
 A unified `IFirewallProvider` interface means every command works identically across providers. Provider is auto-detected from your config, environment variables, or the `--provider` flag.
 
 Detection priority:
+
 1. `--provider` CLI flag
 2. `provider` field in config
 3. Provider-specific config keys
@@ -58,6 +59,7 @@ Detection priority:
 ### Rule Translation Engine
 
 Bidirectional translation between Vercel and Cloudflare rule formats with:
+
 - Expression builder for Cloudflare wirefilter syntax
 - Field mapping between provider-specific field names
 - Translation warnings for lossy conversions (e.g., regex on non-Enterprise Cloudflare plans)
@@ -88,14 +90,14 @@ Documentation: https://doorman.griffen.codes/docs/cloudflare-setup
 
 ## By the Numbers
 
-| Metric | v1.5 | v2.0 |
-|---|---|---|
+| Metric              | v1.5       | v2.0                    |
+| ------------------- | ---------- | ----------------------- |
 | Providers supported | 1 (Vercel) | 2 (Vercel + Cloudflare) |
-| Test suites | 26 | 55 |
-| Tests passing | 410 | 1,132 |
-| Source files (new) | — | 47 |
-| Lines of new code | — | ~3,600 |
-| TypeScript errors | 0 | 0 |
+| Test suites         | 26         | 55                      |
+| Tests passing       | 410        | 1,132                   |
+| Source files (new)  | —          | 47                      |
+| Lines of new code   | —          | ~3,600                  |
+| TypeScript errors   | 0          | 0                       |
 
 ---
 
@@ -104,7 +106,7 @@ Documentation: https://doorman.griffen.codes/docs/cloudflare-setup
 For existing users — nothing breaks:
 
 ```bash
-npm install -g vercel-doorman@latest
+npm install -g @gfargo/doorman@latest
 ```
 
 - Same commands, same config, same env vars
@@ -117,7 +119,7 @@ To start using Cloudflare:
 ```bash
 export CLOUDFLARE_API_TOKEN="..."
 export CLOUDFLARE_ZONE_ID="..."
-vercel-doorman init --provider cloudflare --interactive
+doorman init --provider cloudflare --interactive
 ```
 
 ---
@@ -153,7 +155,8 @@ Vercel Rule ←→ Unified Rule ←→ Cloudflare Rule
 ## What's Next
 
 Phase 6 is spec'd and ready for implementation:
-- `vercel-doorman migrate --from vercel --to cloudflare` — automated cross-provider migration with backup, rollback, and reporting
+
+- `doorman migrate --from vercel --to cloudflare` — automated cross-provider migration with backup, rollback, and reporting
 - Official GitHub Action for CI/CD automation
 - Advanced expression parser for complex Cloudflare wirefilter expressions
 
@@ -162,16 +165,16 @@ Phase 6 is spec'd and ready for implementation:
 ## Links
 
 - [Documentation](https://doorman.griffen.codes/docs)
-- [GitHub](https://github.com/gfargo/vercel-doorman)
-- [npm](https://www.npmjs.com/package/vercel-doorman)
-- [GitHub Wiki](https://github.com/gfargo/vercel-doorman/wiki)
-- [Cloudflare Setup Guide](https://github.com/gfargo/vercel-doorman/wiki/Cloudflare-Setup)
+- [GitHub](https://github.com/gfargo/doorman)
+- [npm](https://www.npmjs.com/package/@gfargo/doorman)
+- [GitHub Wiki](https://github.com/gfargo/doorman/wiki)
+- [Cloudflare Setup Guide](https://github.com/gfargo/doorman/wiki/Cloudflare-Setup)
 
 ---
 
 ## Install
 
 ```bash
-npm install -g vercel-doorman
-vercel-doorman setup
+npm install -g @gfargo/doorman
+doorman setup
 ```
