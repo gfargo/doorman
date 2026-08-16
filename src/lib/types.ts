@@ -104,7 +104,7 @@ export interface ProjectConfig {
 }
 
 /**
- * The main configuration type for Vercel Doorman
+ * The main configuration type for Doorman
  * @property $schema - The URI of the JSON Schema to validate against
  * @property version - Configuration version number
  * @property rules - List of firewall rules

@@ -1,5 +1,5 @@
 /**
- * Error codes for Vercel Doorman
+ * Error codes for Doorman
  * Organized by category for better error tracking and debugging
  */
 

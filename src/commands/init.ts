@@ -142,7 +142,7 @@ interface InitOptions {
 }
 
 export const command = 'init [template]'
-export const desc = 'Initialize a new Vercel Doorman configuration'
+export const desc = 'Initialize a new Doorman configuration'
 
 export const builder = {
   template: {
@@ -183,7 +183,7 @@ export const builder = {
 
 const showWelcomeMessage = () => {
   logger.log('')
-  logger.log(chalk.bold.cyan('🚪 Welcome to Vercel Doorman!'))
+  logger.log(chalk.bold.cyan('🚪 Welcome to Doorman!'))
   logger.log(chalk.dim("Let's set up your firewall configuration.\n"))
 }
 

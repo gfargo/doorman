@@ -21,7 +21,7 @@ export interface DoormanErrorOptions {
 }
 
 /**
- * Custom error class for Vercel Doorman with structured error codes,
+ * Custom error class for Doorman with structured error codes,
  * suggestions, and formatting capabilities
  */
 export class DoormanError extends Error {
