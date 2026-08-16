@@ -1,3 +1,19 @@
+# [2.2.0](https://github.com/gfargo/doorman/compare/v2.1.0...v2.2.0) (2026-08-16)
+
+
+### Bug Fixes
+
+* **deps:** patch vulnerable transitive deps blocking the release pipeline ([5d704c9](https://github.com/gfargo/doorman/commit/5d704c94209b77af4572c95b08e203ac4d7d85f5))
+* **init:** fix invalid security-focused template rule ([9518954](https://github.com/gfargo/doorman/commit/9518954d714543dfabba624f94533b142fd63b02))
+* **prompts:** prevent crash and wrong defaults in interactive prompts ([c1a02d9](https://github.com/gfargo/doorman/commit/c1a02d9dd825e1774d2f46942b46fcf668f13b6c))
+* update repository URL to match the renamed GitHub repo ([b18e3b2](https://github.com/gfargo/doorman/commit/b18e3b28d983deffa87d80aae93d2f77f5be665e))
+
+
+### Features
+
+* add sync/download/list/validate demos via a local mock API ([2ef3884](https://github.com/gfargo/doorman/commit/2ef3884f8d6fa124a372212796badc79e5cec59d))
+* add VHS-recorded demo GIFs to README ([c23f6cf](https://github.com/gfargo/doorman/commit/c23f6cfeaa5dd22439f074aa0db51512431954e8))
+
 # [2.1.0](https://github.com/gfargo/vercel-doorman/compare/v2.0.0...v2.1.0) (2026-05-08)
 
 
