@@ -1,5 +1,5 @@
 /**
- * Centralized error handling system for Vercel Doorman
+ * Centralized error handling system for Doorman
  *
  * This module provides:
  * - Structured error codes organized by category

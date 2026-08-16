@@ -271,7 +271,7 @@ describe('CloudflareClient - Edge Cases', () => {
       const newRuleset: CloudflareRuleset = {
         id: 'new-id',
         name: 'Doorman Custom Firewall Rules',
-        description: 'Custom firewall rules managed by Vercel Doorman',
+        description: 'Custom firewall rules managed by Doorman',
         kind: 'custom',
         phase: 'http_request_firewall_custom',
         version: '1',
@@ -326,7 +326,7 @@ describe('CloudflareClient - Edge Cases', () => {
       const newRuleset: CloudflareRuleset = {
         id: 'new-id',
         name: 'Doorman Custom Firewall Rules',
-        description: 'Custom firewall rules managed by Vercel Doorman',
+        description: 'Custom firewall rules managed by Doorman',
         kind: 'custom',
         phase: 'http_request_firewall_custom',
         version: '1',
@@ -390,7 +390,7 @@ describe('CloudflareClient - Edge Cases', () => {
       const newList = {
         id: 'new-list-id',
         name: 'Doorman IP Blocklist',
-        description: 'IP addresses blocked by Vercel Doorman',
+        description: 'IP addresses blocked by Doorman',
         kind: 'ip' as const,
         num_items: 0,
         num_referencing_filters: 0,
@@ -449,7 +449,7 @@ describe('CloudflareClient - Edge Cases', () => {
       const newList = {
         id: 'new-list-id',
         name: 'Doorman IP Blocklist',
-        description: 'IP addresses blocked by Vercel Doorman',
+        description: 'IP addresses blocked by Doorman',
         kind: 'ip' as const,
         num_items: 0,
         num_referencing_filters: 0,

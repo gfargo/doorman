@@ -50,7 +50,7 @@ export const schema = {
       },
       required: ['rules'],
       additionalProperties: false,
-      description: 'The main configuration type for Vercel Doorman',
+      description: 'The main configuration type for Doorman',
     },
     CustomRule: {
       type: 'object',

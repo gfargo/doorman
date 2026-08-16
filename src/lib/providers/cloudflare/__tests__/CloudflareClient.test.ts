@@ -357,7 +357,7 @@ describe('CloudflareClient', () => {
       const newRuleset: CloudflareRuleset = {
         id: 'new-ruleset',
         name: 'Doorman Custom Firewall Rules',
-        description: 'Custom firewall rules managed by Vercel Doorman',
+        description: 'Custom firewall rules managed by Doorman',
         kind: 'custom',
         phase: 'http_request_firewall_custom',
         version: '1',
@@ -691,7 +691,7 @@ describe('CloudflareClient', () => {
       const newList: CloudflareList = {
         id: 'new-list',
         name: 'Doorman IP Blocklist',
-        description: 'IP addresses blocked by Vercel Doorman',
+        description: 'IP addresses blocked by Doorman',
         kind: 'ip',
         num_items: 0,
         num_referencing_filters: 0,

@@ -413,7 +413,7 @@ export class CloudflareClient extends BaseFirewallClient {
       name: 'Doorman Custom Firewall Rules',
       kind: 'custom',
       phase: 'http_request_firewall_custom',
-      description: 'Custom firewall rules managed by Vercel Doorman',
+      description: 'Custom firewall rules managed by Doorman',
       rules: [],
     })
   }
@@ -767,7 +767,7 @@ export class CloudflareClient extends BaseFirewallClient {
       logger.info('No existing IP blocklist found, creating new one')
       return this.createList({
         name: 'Doorman IP Blocklist',
-        description: 'IP addresses blocked by Vercel Doorman',
+        description: 'IP addresses blocked by Doorman',
         kind: 'ip',
       })
     } catch (error) {

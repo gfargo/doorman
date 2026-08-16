@@ -29,7 +29,7 @@ const ACCOUNT_ID = 'test-account-id'
 const createMockRuleset = (rules: CloudflareRule[] = [], version = '1'): CloudflareRuleset => ({
   id: 'ruleset-1',
   name: 'Doorman Custom Firewall Rules',
-  description: 'Custom firewall rules managed by Vercel Doorman',
+  description: 'Custom firewall rules managed by Doorman',
   kind: 'custom',
   phase: 'http_request_firewall_custom',
   version,
@@ -40,7 +40,7 @@ const createMockRuleset = (rules: CloudflareRule[] = [], version = '1'): Cloudfl
 const createMockIPBlocklist = (numItems = 0) => ({
   id: 'list-1',
   name: 'Doorman IP Blocklist',
-  description: 'IP addresses blocked by Vercel Doorman',
+  description: 'IP addresses blocked by Doorman',
   kind: 'ip' as const,
   num_items: numItems,
   num_referencing_filters: numItems > 0 ? 1 : 0,
