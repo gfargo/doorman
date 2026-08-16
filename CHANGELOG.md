@@ -1,3 +1,28 @@
+# [3.0.0](https://github.com/gfargo/doorman/compare/v2.2.0...v3.0.0) (2026-08-16)
+
+
+* feat!: rename package from vercel-doorman to @gfargo/doorman ([c5676ec](https://github.com/gfargo/doorman/commit/c5676ec66440ce0a08a0f9d0564cd9db9ae42f0d)), closes [#74](https://github.com/gfargo/doorman/issues/74)
+
+
+### Bug Fixes
+
+* **publish:** set publishConfig.access public for the scoped package ([510145f](https://github.com/gfargo/doorman/commit/510145f6148db9a24beefb2f6cf0008908aa988f))
+
+
+### BREAKING CHANGES
+
+* Package name changed from `vercel-doorman` to `@gfargo/doorman`.
+Install with `npm i -g @gfargo/doorman`. The `vercel-doorman` binary is deprecated
+and will be removed in a future release.
+
+- Renamed npm package to @gfargo/doorman (scoped)
+- Primary binary is now `doorman`, `vercel-doorman` shows deprecation warning
+- Updated all CLI help text, error messages, and documentation
+- Updated GitHub URLs to gfargo/doorman (pending repo rename)
+- Updated schema descriptions and constants
+- Renamed skills directory from vercel-doorman to doorman
+- All 57 test suites pass (1154 tests)
+
 # [2.2.0](https://github.com/gfargo/doorman/compare/v2.1.0...v2.2.0) (2026-08-16)
 
 
