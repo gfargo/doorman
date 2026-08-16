@@ -3,7 +3,8 @@ import Ajv, { Ajv as AjvType } from 'ajv'
 import { z } from 'zod'
 import { schema } from '../../constants/schema'
 import { conditionGroupSchema, firewallConfigSchema, rateLimitSchema } from '../schemas/firewallSchemas'
-import { FirewallConfig } from '../types'
+import { validateUnifiedConfig } from '../schemas/unifiedSchemas'
+import { FirewallConfig, hasProviderMetadata } from '../types'
 import { ErrorFormatter } from '../utils/errorFormatter'
 
 export class ValidationError extends Error {
@@ -72,6 +73,23 @@ export class ValidationService {
   }
 
   validateConfig(config: unknown): asserts config is FirewallConfig {
+    // Multi-provider (Unified) configs — e.g. Cloudflare — declare a top-level
+    // `provider`/`providers` field and use a different rule shape (`conditions` +
+    // `action.type` instead of `conditionGroup` + `action.mitigate`). The AJV/Zod
+    // schemas below only understand the legacy Vercel-only shape, so route those
+    // configs to the unified schema instead of rejecting them as invalid.
+    if (hasProviderMetadata(config)) {
+      try {
+        validateUnifiedConfig(config)
+        return
+      } catch (error) {
+        throw new ValidationError(
+          'Invalid firewall configuration:\n' + (error instanceof Error ? error.message : String(error)),
+          null,
+        )
+      }
+    }
+
     // AJV Validation
     const validate = this.ajv.compile(this.schema)
     const ajvValid = validate(config)

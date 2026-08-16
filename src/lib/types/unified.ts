@@ -100,6 +100,18 @@ export function isUnifiedConfig(obj: unknown): obj is UnifiedConfig {
   )
 }
 
+/**
+ * Distinguishes a multi-provider (Unified) config from a legacy Vercel-only config.
+ * Both shapes have a top-level `rules` array, so `isUnifiedConfig` alone can't tell
+ * them apart — this checks for the `provider`/`providers` fields that only appear on
+ * multi-provider configs (matching the signal `ProviderDetector` already relies on).
+ */
+export function hasProviderMetadata(obj: unknown): boolean {
+  if (!obj || typeof obj !== 'object') return false
+  const rec = obj as Record<string, unknown>
+  return typeof rec.provider === 'string' || (typeof rec.providers === 'object' && rec.providers !== null)
+}
+
 export function isUnifiedRule(obj: unknown): obj is UnifiedRule {
   const rec = obj as Record<string, unknown>
   return !!obj && typeof obj === 'object' && 'name' in rec && 'enabled' in rec && 'conditions' in rec && 'action' in rec

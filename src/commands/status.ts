@@ -1,6 +1,8 @@
 import chalk from 'chalk'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
+import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
+import type { UnifiedConfig } from '../lib/types/unified'
 import { ConfigHealthChecker } from '../lib/utils/configHealth'
 import { withCredentials } from '../lib/utils/withCredentials'
 
@@ -67,7 +69,12 @@ export const handler = async (argv: Arguments<StatusOptions>) => {
       ci: argv.ci,
       errorContext: 'checking status',
     },
-    async ({ config, service }) => {
+    async ({ config, service, provider }) => {
+      if (provider.name !== 'vercel') {
+        await statusWithProvider(provider, config as unknown as UnifiedConfig)
+        return
+      }
+
       logger.start('Checking sync status...')
 
       const { toAdd, toUpdate, toDelete, ipsToAdd, ipsToUpdate, ipsToDelete, version } =
@@ -122,4 +129,42 @@ export const handler = async (argv: Arguments<StatusOptions>) => {
       logger.log(healthReport)
     },
   )
+}
+
+async function statusWithProvider(provider: IFirewallProvider, config: UnifiedConfig): Promise<void> {
+  logger.start('Checking sync status...')
+  const changes = await provider.getChanges(config)
+
+  logger.log(chalk.bold(`\n📊 ${provider.name} Sync Status Summary\n`))
+  logger.log(`${chalk.dim('Rules:')}`)
+  logger.log(`  ${chalk.green('+')} ${changes.rulesToAdd.length} to add`)
+  logger.log(`  ${chalk.cyan('~')} ${changes.rulesToUpdate.length} to update`)
+  logger.log(`  ${chalk.red('-')} ${changes.rulesToDelete.length} to delete`)
+  logger.log(`${chalk.dim('IPs:')}`)
+  logger.log(`  ${chalk.green('+')} ${changes.ipsToAdd?.length ?? 0} to add`)
+  logger.log(`  ${chalk.cyan('~')} ${changes.ipsToUpdate?.length ?? 0} to update`)
+  logger.log(`  ${chalk.red('-')} ${changes.ipsToDelete?.length ?? 0} to delete`)
+  logger.log('')
+
+  if (!changes.hasChanges) {
+    logger.success(chalk.green('✅ Everything is in sync!'))
+  } else {
+    logger.warn(chalk.yellow('⚠️  Changes detected. Run `sync` to apply changes.'))
+  }
+
+  logger.log('\n' + chalk.bold('🏥 Configuration Health Check'))
+  const health = provider.getHealthScore(config)
+  logger.log(`${chalk.dim('Score:')} ${health.score}/100 (${health.grade})`)
+  health.issues.forEach((issue) => {
+    const marker =
+      issue.severity === 'error' ? chalk.red('✗') : issue.severity === 'warning' ? chalk.yellow('⚠') : chalk.dim('ℹ')
+    logger.log(`  ${marker} [${issue.category}] ${issue.message}`)
+    if (issue.suggestion) {
+      logger.log(`    ${chalk.dim(issue.suggestion)}`)
+    }
+  })
+  if (health.recommendations.length > 0) {
+    logger.log(chalk.dim('\nRecommendations:'))
+    health.recommendations.forEach((rec) => logger.log(`  - ${rec}`))
+  }
 }

@@ -2,6 +2,7 @@ import chalk from 'chalk'
 import { Arguments } from 'yargs'
 import { z } from 'zod'
 import { logger } from '../lib/logger'
+import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
 import { configVersionSchema } from '../lib/schemas/firewallSchemas'
 import { FirewallConfig, IPBlockingRule } from '../lib/types'
 import { prompt } from '../lib/ui/prompt'
@@ -87,7 +88,7 @@ export const handler = async (argv: Arguments<DownloadOptions>) => {
       skipValidation: true,
       errorContext: 'downloading firewall rules',
     },
-    async ({ config: existingConfig, client, projectId, teamId }) => {
+    async ({ config: existingConfig, client, provider, projectId, teamId }) => {
       // Validate version if provided
       if (argv.configVersion !== undefined) {
         try {
@@ -99,6 +100,11 @@ export const handler = async (argv: Arguments<DownloadOptions>) => {
           }
           throw error
         }
+      }
+
+      if (provider.name !== 'vercel') {
+        await downloadWithProvider(provider, existingConfig, argv)
+        return
       }
 
       logger.start(
@@ -152,4 +158,56 @@ export const handler = async (argv: Arguments<DownloadOptions>) => {
       logger.success(chalk.green('Successfully downloaded and updated configuration'))
     },
   )
+}
+
+/**
+ * Download via the generic IFirewallProvider interface. Rules/IPs are listed as
+ * plain text rather than through the shared table renderers, which assume the
+ * Vercel-specific rule shape (conditionGroup/action.mitigate).
+ */
+async function downloadWithProvider(
+  provider: IFirewallProvider,
+  existingConfig: FirewallConfig,
+  argv: Arguments<DownloadOptions>,
+): Promise<void> {
+  logger.start(
+    `Fetching remote firewall configuration${argv.configVersion ? ` version ${argv.configVersion}` : ''} ...`,
+  )
+  const remoteConfig = await provider.fetchConfig(argv.configVersion)
+  const rules = remoteConfig.rules
+  const ips = remoteConfig.ips ?? []
+
+  if (rules.length > 0) {
+    logger.log(chalk.bold(`\nRemote Custom Rules to Download (${rules.length}):\n`))
+    rules.forEach((rule) => logger.log(`  - ${rule.name}${rule.enabled ? '' : chalk.dim(' (disabled)')}`))
+  } else {
+    logger.info('No custom rules to download...')
+  }
+
+  if (ips.length > 0) {
+    logger.log(chalk.bold(`\nRemote IP Blocking Rules to Download (${ips.length}):\n`))
+    ips.forEach((ip) => logger.log(`  - ${ip.ip} (${ip.action})`))
+  } else {
+    logger.info('No IP blocking rules to download...')
+  }
+
+  if (argv.dryRun) {
+    logger.info(chalk.cyan('Dry run completed. No changes made.'))
+    return
+  }
+
+  const confirmed = await prompt(
+    `Do you want to download${argv.configVersion ? ` version ${argv.configVersion}` : ' the latest version'} of these rules? This will overwrite your local configuration.`,
+    { type: 'confirm' },
+  )
+  if (!confirmed) {
+    logger.info(chalk.yellow('Download cancelled.'))
+    return
+  }
+
+  const newConfig = { ...existingConfig, ...remoteConfig }
+
+  logger.start('Saving configuration...')
+  await saveConfig(newConfig as unknown as FirewallConfig, argv.config)
+  logger.success(chalk.green('Successfully downloaded and updated configuration'))
 }

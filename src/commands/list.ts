@@ -2,6 +2,7 @@ import chalk from 'chalk'
 import { Arguments } from 'yargs'
 import { z } from 'zod'
 import { logger } from '../lib/logger'
+import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
 import { configVersionSchema } from '../lib/schemas/firewallSchemas'
 import { IPBlockingRule } from '../lib/types'
 import { displayIPBlockingTable, displayRulesTable } from '../lib/ui/table'
@@ -78,7 +79,7 @@ export const handler = async (argv: Arguments<ListOptions>) => {
       skipValidation: true,
       errorContext: 'listing firewall rules',
     },
-    async ({ client, token, projectId, teamId }) => {
+    async ({ client, provider, token, projectId, teamId }) => {
       // Validate version if provided
       if (argv.configVersion !== undefined) {
         try {
@@ -90,6 +91,11 @@ export const handler = async (argv: Arguments<ListOptions>) => {
           }
           throw error
         }
+      }
+
+      if (provider.name !== 'vercel') {
+        await listWithProvider(provider, argv)
+        return
       }
 
       logger.start(`Fetching firewall configuration${argv.configVersion ? ` version ${argv.configVersion}` : ''} ...`)
@@ -147,4 +153,50 @@ export const handler = async (argv: Arguments<ListOptions>) => {
       }
     },
   )
+}
+
+/**
+ * List via the generic IFirewallProvider interface. Rules/IPs are listed as plain
+ * text for the table format rather than through the shared table renderers, which
+ * assume the Vercel-specific rule shape (conditionGroup/action.mitigate).
+ */
+async function listWithProvider(provider: IFirewallProvider, argv: Arguments<ListOptions>): Promise<void> {
+  logger.start(`Fetching firewall configuration${argv.configVersion ? ` version ${argv.configVersion}` : ''} ...`)
+
+  const liveConfig = await provider.fetchConfig(argv.configVersion)
+  const rules = liveConfig.rules
+  const ips = liveConfig.ips ?? []
+  const version = liveConfig.metadata?.version ?? liveConfig.version
+  const updatedAt = liveConfig.metadata?.updatedAt
+
+  logger.info(
+    `Found ${chalk.cyan(rules.length)} custom rules and ${chalk.cyan(ips.length)} IP blocking rules\n` +
+      chalk.dim(
+        `Version: ${chalk.yellow(version ?? 'unknown')}${updatedAt ? ` • Last Updated: ${chalk.yellow(updatedAt)}` : ''}`,
+      ),
+  )
+
+  if (argv.format === 'json') {
+    logger.info(JSON.stringify({ version, updatedAt, rules, ips }, null, 2))
+    return
+  }
+
+  if (rules.length === 0 && ips.length === 0) {
+    logger.info(chalk.yellow('No rules found'))
+    return
+  }
+
+  if (rules.length > 0) {
+    logger.log(chalk.bold.underline('\nCustom Rules:'), '\n')
+    rules.forEach((rule) => logger.log(`  - ${rule.name}${rule.enabled ? '' : chalk.dim(' (disabled)')}`))
+  } else {
+    logger.info(chalk.cyan('No custom rules found'))
+  }
+
+  if (ips.length > 0) {
+    logger.log(chalk.bold.underline('\nIP Blocking Rules:'), '\n')
+    ips.forEach((ip) => logger.log(`  - ${ip.ip} (${ip.action})`))
+  } else {
+    logger.info(chalk.cyan('No IP blocking rules found'))
+  }
 }

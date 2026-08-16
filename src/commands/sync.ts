@@ -1,7 +1,9 @@
 import chalk from 'chalk'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
+import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
 import { CustomRule, FirewallConfig } from '../lib/types'
+import type { UnifiedConfig } from '../lib/types/unified'
 import { prompt } from '../lib/ui/prompt'
 import { displayIPBlockingTable, displayRulesTable, RULE_STATUS_MAP } from '../lib/ui/table'
 import { saveConfig } from '../lib/utils/config'
@@ -71,6 +73,11 @@ export const handler = async (argv: Arguments<SyncOptions>) => {
       errorContext: 'syncing firewall rules',
     },
     async (ctx) => {
+      if (ctx.provider.name !== 'vercel') {
+        await syncWithProvider(ctx.provider, ctx.config, argv)
+        return
+      }
+
       let config = ctx.config
       const service = ctx.service
 
@@ -200,4 +207,58 @@ export const handler = async (argv: Arguments<SyncOptions>) => {
       }
     },
   )
+}
+
+/**
+ * Sync using the generic IFirewallProvider interface (Cloudflare and any future
+ * non-Vercel provider). Simpler than the Vercel flow above: providers implementing
+ * this interface handle their own diff/risk-assessment/confirmation internally, and
+ * the interface has no equivalent of Vercel's remote-assigned-ID reconciliation, so
+ * there's nothing to write back to the local config file after a successful sync.
+ */
+async function syncWithProvider(
+  provider: IFirewallProvider,
+  config: FirewallConfig,
+  argv: Arguments<SyncOptions>,
+): Promise<void> {
+  const unifiedConfig = config as unknown as UnifiedConfig
+
+  logger.start(chalk.magenta(`Calculating ${provider.name} firewall configuration changes...`))
+  const changes = await provider.getChanges(unifiedConfig)
+
+  if (!changes.hasChanges) {
+    logger.success(chalk.green('No changes detected. Firewall rules are in sync.'))
+    return
+  }
+
+  logger.log(chalk.bold('\nProposed Changes:\n'))
+  logger.log(`  ${chalk.green('+')} ${changes.rulesToAdd.length} rules to add`)
+  logger.log(`  ${chalk.cyan('~')} ${changes.rulesToUpdate.length} rules to update`)
+  logger.log(`  ${chalk.red('-')} ${changes.rulesToDelete.length} rules to delete`)
+  const ipsToAdd = changes.ipsToAdd ?? []
+  const ipsToUpdate = changes.ipsToUpdate ?? []
+  const ipsToDelete = changes.ipsToDelete ?? []
+  if (ipsToAdd.length || ipsToUpdate.length || ipsToDelete.length) {
+    logger.log(`  ${chalk.green('+')} ${ipsToAdd.length} IPs to add`)
+    logger.log(`  ${chalk.cyan('~')} ${ipsToUpdate.length} IPs to update`)
+    logger.log(`  ${chalk.red('-')} ${ipsToDelete.length} IPs to delete`)
+  }
+
+  logger.start('Starting firewall rules sync...')
+  // Non-vercel providers prompt for confirmation internally (unless --ci); no need
+  // to prompt again here.
+  const result = await provider.syncRules(unifiedConfig, { force: argv.ci })
+
+  if (!result.success) {
+    throw new Error(`Sync failed: ${result.errors?.join(', ') || 'unknown error'}`)
+  }
+
+  logger.success(chalk.green('Firewall rules sync completed successfully'))
+  logger.log(`  Rules: ${result.rulesAdded} added, ${result.rulesUpdated} updated, ${result.rulesDeleted} deleted`)
+  if (result.ipsAdded || result.ipsUpdated || result.ipsDeleted) {
+    logger.log(
+      `  IPs: ${result.ipsAdded ?? 0} added, ${result.ipsUpdated ?? 0} updated, ${result.ipsDeleted ?? 0} deleted`,
+    )
+  }
+  result.warnings?.forEach((w) => logger.warn(w))
 }
