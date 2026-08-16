@@ -16,7 +16,7 @@ jobs:
       contents: write # to be able to publish a GitHub release
       issues: write # to be able to comment on released issues
       pull-requests: write # to be able to comment on released pull requests
-      id-token: write # to enable use of OIDC for npm provenance
+      id-token: write # OIDC: npm Trusted Publishing (auth) + provenance attestation
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,9 +24,13 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Ensure npm CLI supports OIDC trusted publishing (needs >=11.5.1)
+        run: npm install -g npm@latest
 
       - name: Install pnpm
         run: npm i pnpm@10 -g
@@ -50,6 +54,9 @@ jobs:
       - name: Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           HUSKY: '0'
+        # No NPM_TOKEN: publishes via npm Trusted Publishing (OIDC), using the
+        # id-token permission above. Requires a trusted publisher configured
+        # on npmjs.com for this repo + workflow file per package. See
+        # https://docs.npmjs.com/trusted-publishers
         run: pnpm release
