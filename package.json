@@ -24,7 +24,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/gfargo/vercel-doorman.git"
+    "url": "git+ssh://git@github.com/gfargo/doorman.git"
   },
   "scripts": {
     "prebuild": "pnpm clean",
