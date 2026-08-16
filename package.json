@@ -1,6 +1,6 @@
 {
   "name": "vercel-doorman",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Manage Vercel and Cloudflare WAF rules as code",
   "bin": {
     "vercel-doorman": "./bin/run"
