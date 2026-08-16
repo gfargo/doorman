@@ -12,10 +12,10 @@
 Doorman enables Infrastructure as Code (IaC) for your security layer, bringing version control, automated deployment, and team collaboration to your firewall configuration. Supports Vercel Firewall and Cloudflare WAF.
 
 <p align="center">
-  <img src="./assets/demos/quickstart.gif" alt="vercel-doorman init security-focused, then vercel-doorman validate --verbose, showing a passing configuration" width="720" />
+  <img src="./assets/demos/quickstart.gif" alt="doorman init security-focused, then doorman validate --verbose, showing a passing configuration" width="720" />
 </p>
 
-<p align="center"><sub>Real terminal output — <code>vercel-doorman init security-focused</code> followed by <code>vercel-doorman validate --verbose</code>. Recorded with <a href="https://github.com/charmbracelet/vhs">VHS</a>, see <a href="/demos">/demos</a>.</sub></p>
+<p align="center"><sub>Real terminal output — <code>doorman init security-focused</code> followed by <code>doorman validate --verbose</code>. Recorded with <a href="https://github.com/charmbracelet/vhs">VHS</a>, see <a href="/demos">/demos</a>.</sub></p>
 
 ## ✨ Features
 
@@ -125,7 +125,7 @@ doorman add --name "Block Admin" --field path --op pre --value "/admin" --action
 ```
 
 <p align="center">
-  <img src="./assets/demos/add-interactive.gif" alt="vercel-doorman add --interactive walking through creating a Block Admin Access rule" width="720" />
+  <img src="./assets/demos/add-interactive.gif" alt="doorman add --interactive walking through creating a Block Admin Access rule" width="720" />
 </p>
 
 **Option 2: Use Templates**
@@ -136,7 +136,7 @@ doorman template ai-bots  # Add AI bot protection
 ```
 
 <p align="center">
-  <img src="./assets/demos/template-picker.gif" alt="vercel-doorman template picker adding the ai-bots template" width="720" />
+  <img src="./assets/demos/template-picker.gif" alt="doorman template picker adding the ai-bots template" width="720" />
 </p>
 
 **Option 3: Interactive Setup**

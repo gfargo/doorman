@@ -14,11 +14,11 @@ Type "sleep 1" Enter
 Type "export DOORMAN_VERCEL_API_BASE_URL=http://127.0.0.1:4757/v1/security/firewall/config" Enter
 Type "export VERCEL_TOKEN=demo_token_xxx VERCEL_PROJECT_ID=prj_demo123 VERCEL_TEAM_ID=team_demo456" Enter
 Type "mkdir -p demos/.fixtures/list && cd demos/.fixtures/list && rm -f .doorman.json && clear" Enter
-Type "alias vercel-doorman=$REPO_BIN" Enter
+Type "alias doorman=$REPO_BIN" Enter
 Type "clear" Enter
 Show
 
-Type "vercel-doorman list" Enter
+Type "doorman list" Enter
 Sleep 3000ms
 
 Hide
