@@ -1,0 +1,7 @@
+packages:
+  - '.'
+  - '.www'
+
+onlyBuiltDependencies:
+  - esbuild
+  - unrs-resolver
