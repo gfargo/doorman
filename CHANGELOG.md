@@ -1,3 +1,10 @@
+## [3.0.4](https://github.com/gfargo/doorman/compare/v3.0.3...v3.0.4) (2026-08-17)
+
+
+### Bug Fixes
+
+* validate fetched config before writing a backup, not skip validation entirely ([#112](https://github.com/gfargo/doorman/issues/112)) ([be38793](https://github.com/gfargo/doorman/commit/be3879346e1508cd38d72d9ce0869d91b3e1827e))
+
 ## [3.0.3](https://github.com/gfargo/doorman/compare/v3.0.2...v3.0.3) (2026-08-17)
 
 
