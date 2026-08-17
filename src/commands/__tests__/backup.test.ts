@@ -14,7 +14,33 @@ jest.mock('../../lib/providers/cloudflare/CloudflareClient')
 const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
 const MockedCloudflareClient = CloudflareClient as jest.MockedClass<typeof CloudflareClient>
 
-const vercelRemoteConfig = { version: 5, firewallEnabled: true, rules: [], ips: [], updatedAt: '2024-01-01T00:00:00Z' }
+// Shaped like the real Vercel API response (VercelConfig), including the
+// fields Vercel returns that aren't part of a Doorman config — id, crs,
+// projectKey, ownerId at the top level, and valid/validationErrors on every
+// rule — to guard against validating/saving the raw response as-is, which
+// would fail schema validation (additionalProperties: false on both
+// FirewallConfig and CustomRule).
+const vercelRemoteConfig = {
+  version: 5,
+  id: 'config_1',
+  firewallEnabled: true,
+  crs: {},
+  rules: [
+    {
+      id: 'rule_block_admin',
+      name: 'Block Admin',
+      conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/admin' }] }],
+      action: { mitigate: { action: 'deny' } },
+      active: true,
+      valid: true,
+      validationErrors: [],
+    },
+  ],
+  ips: [],
+  projectKey: 'pk_123',
+  ownerId: 'owner_1',
+  updatedAt: '2024-01-01T00:00:00Z',
+}
 
 describe('backup command', () => {
   let tempDir: string
@@ -23,6 +49,9 @@ describe('backup command', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks()
+    jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit called with "${code}"`)
+    }) as any)
     tempDir = await fs.mkdtemp(join(tmpdir(), 'doorman-backup-test-'))
     backupDir = join(tempDir, 'backups')
     // withCredentials always loads a local config file even though the "create
@@ -36,6 +65,7 @@ describe('backup command', () => {
   })
 
   afterEach(async () => {
+    jest.restoreAllMocks()
     await fs.rm(tempDir, { recursive: true, force: true })
   })
 
@@ -57,6 +87,19 @@ describe('backup command', () => {
     const content = JSON.parse(await fs.readFile(join(backupDir, files[0]!), 'utf8'))
     expect(content.backup.provider).toBe('vercel')
     expect(content.backup.projectId).toBe('prj')
+    // Vercel API-only fields must not leak into the saved backup — this is
+    // also what makes the sanitized config pass schema validation at all.
+    expect(content.id).toBeUndefined()
+    expect(content.crs).toBeUndefined()
+    expect(content.projectKey).toBeUndefined()
+    expect(content.ownerId).toBeUndefined()
+    expect(content.version).toBe(5)
+    expect(content.firewallEnabled).toBe(true)
+    // Per-rule API-only fields must not leak into the saved backup either.
+    expect(content.rules).toHaveLength(1)
+    expect(content.rules[0].valid).toBeUndefined()
+    expect(content.rules[0].validationErrors).toBeUndefined()
+    expect(content.rules[0].name).toBe('Block Admin')
   })
 
   it('creates a backup file for the Cloudflare provider without crashing (regression test for #82)', async () => {
@@ -85,6 +128,32 @@ describe('backup command', () => {
     await handler({ list: true, output: backupDir, debug: false, ci: true } as any)
 
     expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Available Backups'))
+  })
+
+  it('refuses to create a backup when the fetched remote config is malformed', async () => {
+    MockedVercelClient.prototype.fetchFirewallConfig = jest.fn().mockResolvedValue({
+      version: 5,
+      firewallEnabled: true,
+      // Missing conditionGroup/action/active — structurally invalid.
+      rules: [{ name: 'Corrupt Rule' }],
+      ips: [],
+      updatedAt: '2024-01-01T00:00:00Z',
+    }) as any
+
+    await expect(
+      handler({
+        provider: 'vercel',
+        token: 't',
+        projectId: 'prj',
+        teamId: 'team',
+        config: configPath,
+        output: backupDir,
+        debug: false,
+        ci: true,
+      } as any),
+    ).rejects.toThrow()
+
+    await expect(fs.readdir(backupDir)).rejects.toThrow()
   })
 
   it('restores from a backup file without needing credentials', async () => {
