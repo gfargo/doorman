@@ -665,18 +665,32 @@ export class CloudflareFirewallService extends BaseFirewallService {
   }
 
   /**
-   * Check if a Cloudflare rule is a simple IP blocking rule
+   * Check if a Cloudflare rule is a simple IP blocking rule. Covers both
+   * forms `unifiedIPToCloudflare` emits: `ip.src eq <ip>` for a single
+   * IPv4/IPv6 address, and `ip.src in {<cidr>}` for a CIDR range (wirefilter's
+   * `eq` only matches a single literal, so CIDR ranges use the `in` set
+   * operator instead). The address pattern allows IPv4 dotted-decimal and
+   * IPv6 hex/colon forms.
    */
   private isIPBlockingRule(rule: CloudflareRule): boolean {
-    // Check if expression is simple IP equality
-    return /^ip\.src eq [\d.]+$/.test(rule.expression.trim())
+    const expression = rule.expression.trim()
+    return (
+      CloudflareFirewallService.IP_EQ_PATTERN.test(expression) ||
+      CloudflareFirewallService.IP_IN_SET_PATTERN.test(expression)
+    )
   }
+
+  private static readonly IP_EQ_PATTERN = /^ip\.src eq ([0-9a-fA-F:.]+)$/
+  private static readonly IP_IN_SET_PATTERN = /^ip\.src in \{([0-9a-fA-F:./]+)\}$/
 
   /**
    * Convert Cloudflare rule to IP rule
    */
   private cloudflareRuleToIPRule(rule: CloudflareRule): UnifiedIPRule {
-    const match = rule.expression.match(/ip\.src eq ([\d.]+)/)
+    const expression = rule.expression.trim()
+    const match =
+      expression.match(CloudflareFirewallService.IP_EQ_PATTERN) ||
+      expression.match(CloudflareFirewallService.IP_IN_SET_PATTERN)
     const ip = match?.[1] || ''
 
     // Extract hostname from description if present
