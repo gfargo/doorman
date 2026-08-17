@@ -1,5 +1,6 @@
 import { getConfig, saveConfig } from '../../lib/utils/config'
 import { logger } from '../../lib/logger'
+import { prompt } from '../../lib/ui/prompt'
 import { handler } from '../template'
 
 jest.mock('../../lib/logger', () => ({
@@ -8,6 +9,7 @@ jest.mock('../../lib/logger', () => ({
     start: jest.fn(),
     success: jest.fn(),
     error: jest.fn(),
+    warn: jest.fn(),
     info: jest.fn(),
     debug: jest.fn(),
   },
@@ -18,8 +20,13 @@ jest.mock('../../lib/utils/config', () => ({
   saveConfig: jest.fn(),
 }))
 
+jest.mock('../../lib/ui/prompt', () => ({
+  prompt: jest.fn(),
+}))
+
 const mockedGetConfig = getConfig as jest.MockedFunction<typeof getConfig>
 const mockedSaveConfig = saveConfig as jest.MockedFunction<typeof saveConfig>
+const mockedPrompt = prompt as jest.MockedFunction<typeof prompt>
 
 describe('template command', () => {
   beforeEach(() => {
@@ -56,5 +63,66 @@ describe('template command', () => {
       'process.exit called with "1"',
     )
     expect(mockedSaveConfig).not.toHaveBeenCalled()
+  })
+
+  it('respects --config, loading and saving through the given path (regression test for #97)', async () => {
+    await handler({ name: 'wordpress', config: '/custom/.doorman.json', dryRun: false, debug: false } as any)
+
+    expect(mockedGetConfig).toHaveBeenCalledWith('/custom/.doorman.json', 'raw')
+    expect(mockedSaveConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      '/custom/.doorman.json',
+      expect.objectContaining({ validate: false }),
+    )
+  })
+
+  it('warns and cancels on a duplicate rule name when the user declines to proceed (regression test for #97)', async () => {
+    mockedGetConfig.mockResolvedValue({
+      rules: [
+        {
+          name: 'Deny WordPress URLs',
+          conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/wp-admin' }] }],
+          action: { mitigate: { action: 'deny' } },
+          active: true,
+        },
+      ],
+      ips: [],
+    } as any)
+    mockedPrompt.mockResolvedValue(false as any)
+
+    await handler({ name: 'wordpress', dryRun: false, debug: false } as any)
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Deny WordPress URLs'))
+    expect(mockedSaveConfig).not.toHaveBeenCalled()
+    expect(logger.info).toHaveBeenCalledWith('Cancelled.')
+  })
+
+  it('applies the template anyway when the user confirms past a duplicate warning', async () => {
+    mockedGetConfig.mockResolvedValue({
+      rules: [
+        {
+          name: 'Deny WordPress URLs',
+          conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/wp-admin' }] }],
+          action: { mitigate: { action: 'deny' } },
+          active: true,
+        },
+      ],
+      ips: [],
+    } as any)
+    mockedPrompt.mockResolvedValue(true as any)
+
+    await handler({ name: 'wordpress', dryRun: false, debug: false } as any)
+
+    expect(mockedSaveConfig).toHaveBeenCalledTimes(1)
+    const [savedConfig] = mockedSaveConfig.mock.calls[0]!
+    // Original rule plus the duplicate-named template rule, both retained.
+    expect((savedConfig as any).rules.length).toBe(2)
+  })
+
+  it('does not warn when running the template against an empty config', async () => {
+    await handler({ name: 'wordpress', dryRun: false, debug: false } as any)
+
+    expect(logger.warn).not.toHaveBeenCalled()
+    expect(mockedSaveConfig).toHaveBeenCalledTimes(1)
   })
 })
