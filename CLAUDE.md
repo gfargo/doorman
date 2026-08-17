@@ -59,7 +59,7 @@ All commands accept `--provider vercel|cloudflare` (auto-detected if not specifi
 - **Test Structure:** Integration tests, edge cases, validation, sync/download
 - **Mocking:** Mock VercelClient, process.exit, and external dependencies
 - **CI/CD:** Lint/test/build run on every PR targeting main or beta (`.github/workflows/ci.yml`); the full release pipeline (lint/test/build/publish) runs again on every push to main or beta (`.github/workflows/release.yml`)
-- **Skipped Tests:** Some Cloudflare tests temporarily skipped in jest.config.js (timeout/mock issues)
+- **Skipped Tests:** 3 Vercel sync integration tests are skipped inline (`test.skip(...)` in `src/tests/commands.integration.test.ts`), not Cloudflare tests, and not via `jest.config.js` (which has no skip configuration)
 
 ## Security & Dependencies
 - **Audit Level:** Moderate severity threshold in CI/CD

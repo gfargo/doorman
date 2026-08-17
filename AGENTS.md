@@ -44,7 +44,7 @@
 - Location: co-locate as `*.test.ts` or use `src/tests/`.
 - Mocks: place under `src/tests/__mocks__/` (e.g., `chalk.ts`).
 - Run a single test: `pnpm test -- src/tests/validation.test.ts`.
-- Some Cloudflare provider tests are temporarily skipped in `jest.config.js` (pre-existing timeout/mock issues).
+- 3 Vercel sync integration tests are skipped inline (`test.skip(...)` in `src/tests/commands.integration.test.ts`), not Cloudflare tests, and not via `jest.config.js` (which has no skip configuration).
 
 ## Commit & Pull Request Guidelines
 - Commits: Conventional Commits enforced by commitlint. Use `pnpm commit` (commitizen) for prompts.
