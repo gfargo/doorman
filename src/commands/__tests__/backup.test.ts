@@ -174,4 +174,43 @@ describe('backup command', () => {
     expect(restored.rules).toEqual([])
     expect(logger.success).toHaveBeenCalledWith(expect.stringContaining('Restored configuration'))
   })
+
+  it('restores from a real backup file that carries the `backup` metadata field (regression test for #113)', async () => {
+    await fs.mkdir(backupDir, { recursive: true })
+    const backupPath = join(backupDir, 'firewall-backup-2024-01-01_00-00-00.json')
+    // Shaped like a file `doorman backup` actually writes — includes the
+    // `backup` metadata wrapper, which isn't part of the live config schema
+    // (additionalProperties: false) and previously failed restore validation.
+    await fs.writeFile(
+      backupPath,
+      JSON.stringify({
+        version: 5,
+        firewallEnabled: true,
+        rules: [],
+        ips: [],
+        backup: {
+          createdAt: '2024-01-01T00:00:00Z',
+          source: 'remote',
+          provider: 'vercel',
+          projectId: 'prj',
+          teamId: 'team',
+          originalVersion: 5,
+        },
+      }),
+    )
+    const outputConfigPath = join(tempDir, 'restored.doorman.json')
+
+    await handler({
+      restore: backupPath,
+      config: outputConfigPath,
+      output: backupDir,
+      debug: false,
+      ci: true,
+    } as any)
+
+    const restored = JSON.parse(await fs.readFile(outputConfigPath, 'utf8'))
+    expect(restored.rules).toEqual([])
+    expect(restored.backup).toBeUndefined()
+    expect(logger.success).toHaveBeenCalledWith(expect.stringContaining('Restored configuration'))
+  })
 })
