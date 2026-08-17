@@ -236,4 +236,50 @@ describe('ValidationService', () => {
       expect(() => validator.validateConfig(config)).not.toThrow()
     })
   })
+
+  describe('IP address condition validation (regression tests for #95)', () => {
+    const configWithIP = (value: string): FirewallConfig => ({
+      rules: [
+        {
+          name: 'test-rule',
+          conditionGroup: [
+            {
+              conditions: [
+                {
+                  type: 'ip_address',
+                  op: 'eq',
+                  value,
+                },
+              ],
+            },
+          ],
+          action: {
+            mitigate: {
+              action: 'deny',
+            },
+          },
+          active: true,
+        },
+      ],
+    })
+
+    it.each(['::1', '2001:db8::1', 'fe80::1ff:fe23:4567:890a', '::', '2001:db8::/32'])(
+      'accepts the compressed IPv6 form %s',
+      (value) => {
+        expect(() => validator.validateConfig(configWithIP(value))).not.toThrow()
+      },
+    )
+
+    it('still accepts a plain IPv4 address', () => {
+      expect(() => validator.validateConfig(configWithIP('192.168.1.1'))).not.toThrow()
+    })
+
+    it('still accepts an IPv4 CIDR range', () => {
+      expect(() => validator.validateConfig(configWithIP('10.0.0.0/8'))).not.toThrow()
+    })
+
+    it('still rejects a malformed address', () => {
+      expect(() => validator.validateConfig(configWithIP('not-an-ip'))).toThrow(ValidationError)
+    })
+  })
 })
