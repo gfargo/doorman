@@ -30,6 +30,7 @@ jest.mock('../../../utils/operationSafety', () => ({
       issues: [],
     }),
     confirmDestructiveOperation: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
+    assessOperationRisk: jest.fn<() => 'low' | 'medium' | 'high'>().mockReturnValue('low'),
   },
 }))
 

@@ -163,6 +163,65 @@ export class OperationSafety {
   }
 
   /**
+   * Assess the risk level of an operation based on changes and configuration.
+   * Shared across providers so both get the same dry-run/confirmation safety
+   * checks, rather than each provider maintaining its own copy.
+   */
+  public static assessOperationRisk(changes: ChangeSet, config: UnifiedConfig): 'low' | 'medium' | 'high' {
+    const totalRules = config.rules.length
+    const totalIPs = config.ips?.length || 0
+    const totalDeletions = (changes.rulesToDelete?.length || 0) + (changes.ipsToDelete?.length || 0)
+    const totalChanges =
+      (changes.rulesToAdd?.length || 0) +
+      (changes.rulesToUpdate?.length || 0) +
+      (changes.ipsToAdd?.length || 0) +
+      (changes.ipsToUpdate?.length || 0) +
+      totalDeletions
+
+    // High risk conditions
+    if (totalDeletions === totalRules && totalRules > 0) {
+      return 'high' // Deleting all rules
+    }
+
+    if (totalDeletions > 0 && totalDeletions / Math.max(totalRules + totalIPs, 1) > 0.5) {
+      return 'high' // Deleting more than 50% of existing rules/IPs
+    }
+
+    if (totalChanges > 50) {
+      return 'high' // Large number of changes
+    }
+
+    // Check for potentially dangerous rules
+    const hasDangerousRules = config.rules.some(
+      (rule) =>
+        rule.action.type === 'deny' &&
+        rule.conditions.some(
+          (condition) => condition.field === 'path' && (condition.value === '/' || condition.value === '*'),
+        ),
+    )
+
+    if (hasDangerousRules) {
+      return 'high'
+    }
+
+    // Medium risk conditions
+    if (totalDeletions > 0) {
+      return 'medium' // Any deletions
+    }
+
+    if (totalChanges > 10) {
+      return 'medium' // Moderate number of changes
+    }
+
+    if (changes.rulesToUpdate && changes.rulesToUpdate.length > 0) {
+      return 'medium' // Rule updates can be risky
+    }
+
+    // Low risk - only additions or small changes
+    return 'low'
+  }
+
+  /**
    * Get backup recommendation for operation
    */
   public static getBackupRecommendation(operation: string, riskLevel: 'low' | 'medium' | 'high'): BackupRecommendation {

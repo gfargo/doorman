@@ -27,6 +27,10 @@ jest.mock('../../../utils/operationSafety', () => ({
       warnings: [],
     }),
     confirmDestructiveOperation: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
+    // assessOperationRisk moved here from a CloudflareFirewallService-private
+    // method (shared with VercelFirewallService — see #104); tests don't
+    // assert on risk level here, so a fixed 'low' keeps the mock simple.
+    assessOperationRisk: jest.fn<() => 'low' | 'medium' | 'high'>().mockReturnValue('low'),
   },
 }))
 
