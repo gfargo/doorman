@@ -1,3 +1,10 @@
+## [3.0.6](https://github.com/gfargo/doorman/compare/v3.0.5...v3.0.6) (2026-08-17)
+
+
+### Bug Fixes
+
+* recognize CIDR and IPv6 IP-blocking rules on Cloudflare fetchConfig ([#123](https://github.com/gfargo/doorman/issues/123)) ([58d57fa](https://github.com/gfargo/doorman/commit/58d57fadd9d0957135ccde7a9a476b5746bb4e78))
+
 ## [3.0.5](https://github.com/gfargo/doorman/compare/v3.0.4...v3.0.5) (2026-08-17)
 
 
