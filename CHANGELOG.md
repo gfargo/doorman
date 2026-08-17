@@ -1,3 +1,10 @@
+## [3.0.5](https://github.com/gfargo/doorman/compare/v3.0.4...v3.0.5) (2026-08-17)
+
+
+### Bug Fixes
+
+* strip backup metadata before validating restored config ([#117](https://github.com/gfargo/doorman/issues/117)) ([1d05105](https://github.com/gfargo/doorman/commit/1d05105d90bea9e5d61562bed780fb40f457f339)), closes [#113](https://github.com/gfargo/doorman/issues/113)
+
 ## [3.0.4](https://github.com/gfargo/doorman/compare/v3.0.3...v3.0.4) (2026-08-17)
 
 
