@@ -136,9 +136,10 @@ describe('Cloudflare Retry Logic and Backoff Behavior', () => {
         throw new Error('Persistent failure')
       }
 
-      await expect(retry(operation, { maxAttempts: 2, delayMs: 100 })).rejects.toThrow(
-        'Operation failed after 2 attempts',
-      )
+      // retry() re-throws the original error after exhausting attempts (see
+      // #94) rather than wrapping it in a generic Error, so handleCommandError
+      // can still branch on the real error's type/name/code.
+      await expect(retry(operation, { maxAttempts: 2, delayMs: 100 })).rejects.toThrow('Persistent failure')
 
       expect(attemptCount).toBe(2)
     })
@@ -362,9 +363,7 @@ describe('Cloudflare Retry Logic and Backoff Behavior', () => {
         }
       }
 
-      await expect(retry(operation, { maxAttempts: 3, delayMs: 100 })).rejects.toThrow(
-        'Operation failed after 3 attempts',
-      )
+      await expect(retry(operation, { maxAttempts: 3, delayMs: 100 })).rejects.toThrow('Persistent failure')
 
       expect(attemptCount).toBe(3)
       expect(cleanupMock).toHaveBeenCalledTimes(3)
@@ -383,7 +382,38 @@ describe('Cloudflare Retry Logic and Backoff Behavior', () => {
       } catch (error) {
         expect(error).toBeInstanceOf(Error)
         expect((error as Error).message).toContain('Original failure')
+        // The exhausted-retries error must be the original error itself, not
+        // a rewrapped generic Error (see #94) — otherwise callers that branch
+        // on `instanceof ZodError`/`error.name`/`error.code` (handleCommandError)
+        // lose that information for anything routed through retry().
+        expect(error).toBe(originalError)
+        expect((error as Error).stack).toBe('Original stack trace')
       }
+    })
+
+    it('preserves a custom error subclass and its properties through retries (regression test for #94)', async () => {
+      class DoormanError extends Error {
+        code = 'CF_RATE_LIMITED'
+        constructor(message: string) {
+          super(message)
+          this.name = 'DoormanError'
+        }
+      }
+
+      const operation = async () => {
+        throw new DoormanError('rate limited')
+      }
+
+      let caught: unknown
+      try {
+        await retry(operation, { maxAttempts: 2, delayMs: 10 })
+      } catch (error) {
+        caught = error
+      }
+
+      expect(caught).toBeInstanceOf(DoormanError)
+      expect((caught as DoormanError).name).toBe('DoormanError')
+      expect((caught as DoormanError).code).toBe('CF_RATE_LIMITED')
     })
 
     it('should handle memory cleanup for long retry sequences', async () => {
