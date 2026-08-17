@@ -136,6 +136,96 @@ describe('OperationSafety', () => {
     })
   })
 
+  describe('assessOperationRisk', () => {
+    // Shared across Vercel and Cloudflare (see #104) — this is the one place
+    // both providers' dry-run/confirmation safety checks actually branch on,
+    // so its classification logic needs direct coverage rather than only
+    // being exercised indirectly through mocked confirmDestructiveOperation
+    // calls in the provider-level test suites.
+    const configWithRules = (ruleCount: number, ipCount = 0): UnifiedConfig => ({
+      version: '2.0',
+      provider: 'cloudflare',
+      rules: Array.from({ length: ruleCount }, (_, i) => ({
+        id: `rule_${i}`,
+        name: `Rule ${i}`,
+        enabled: true,
+        action: { type: 'log' },
+        conditions: [{ field: 'path', operator: 'eq', value: '/test' }],
+      })),
+      ips: Array.from({ length: ipCount }, (_, i) => ({
+        id: `ip_${i}`,
+        ip: `10.0.0.${i}`,
+        action: 'deny',
+      })),
+    })
+
+    const changesWith = (overrides: Partial<ChangeSet>): ChangeSet => ({
+      rulesToAdd: [],
+      rulesToUpdate: [],
+      rulesToDelete: [],
+      ipsToAdd: [],
+      ipsToUpdate: [],
+      ipsToDelete: [],
+      hasChanges: true,
+      ...overrides,
+    })
+
+    it('is low risk for additions only', () => {
+      const changes = changesWith({ rulesToAdd: [{}] as UnifiedConfig['rules'] })
+      expect(OperationSafety.assessOperationRisk(changes, configWithRules(0))).toBe('low')
+    })
+
+    it('is high risk when deleting every existing rule', () => {
+      const changes = changesWith({ rulesToDelete: [{}, {}] as UnifiedConfig['rules'] })
+      expect(OperationSafety.assessOperationRisk(changes, configWithRules(2))).toBe('high')
+    })
+
+    it('is high risk when deleting more than half of existing rules/IPs', () => {
+      // 6 deletions out of 10 existing (rules + ips) = 60% > 50%, but not "all"
+      const changes = changesWith({ rulesToDelete: Array.from({ length: 6 }, () => ({})) as UnifiedConfig['rules'] })
+      expect(OperationSafety.assessOperationRisk(changes, configWithRules(8, 2))).toBe('high')
+    })
+
+    it('is high risk when the total change count exceeds 50', () => {
+      const changes = changesWith({ rulesToAdd: Array.from({ length: 51 }, () => ({})) as UnifiedConfig['rules'] })
+      expect(OperationSafety.assessOperationRisk(changes, configWithRules(0))).toBe('high')
+    })
+
+    it('is high risk for a deny rule matching all traffic on path "/"', () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [
+          {
+            id: 'r1',
+            name: 'Block everything',
+            enabled: true,
+            action: { type: 'deny' },
+            conditions: [{ field: 'path', operator: 'eq', value: '/' }],
+          },
+        ],
+        ips: [],
+      }
+      const changes = changesWith({ rulesToAdd: [{}] as UnifiedConfig['rules'] })
+      expect(OperationSafety.assessOperationRisk(changes, config)).toBe('high')
+    })
+
+    it('is medium risk for any deletion below the high-risk thresholds', () => {
+      const changes = changesWith({ rulesToDelete: [{}] as UnifiedConfig['rules'] })
+      expect(OperationSafety.assessOperationRisk(changes, configWithRules(10))).toBe('medium')
+    })
+
+    it('is medium risk when the total change count exceeds 10 but not 50', () => {
+      const changes = changesWith({ rulesToAdd: Array.from({ length: 11 }, () => ({})) as UnifiedConfig['rules'] })
+      expect(OperationSafety.assessOperationRisk(changes, configWithRules(0))).toBe('medium')
+    })
+
+    it('is medium risk for rule updates', () => {
+      const changes = changesWith({ rulesToUpdate: [{}] as UnifiedConfig['rules'] })
+      expect(OperationSafety.assessOperationRisk(changes, configWithRules(5))).toBe('medium')
+    })
+  })
+
   describe('getBackupRecommendation', () => {
     it('should recommend backup for high-risk operations', () => {
       const recommendation = OperationSafety.getBackupRecommendation('delete ruleset', 'high')
