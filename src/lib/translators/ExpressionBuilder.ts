@@ -65,9 +65,15 @@ export class ExpressionBuilder {
    * Build expression from a single unified condition
    */
   public static fromUnifiedCondition(condition: UnifiedCondition): string {
-    const field = condition.key
-      ? `http.request.headers["${escapeWirefilterString(condition.key)}"]`
-      : this.mapUnifiedFieldToCloudflare(condition.field)
+    const baseField = this.mapUnifiedFieldToCloudflare(condition.field)
+    // `key` only makes sense as a bracket index for header/cookie fields
+    // (matching FieldMapper's Vercel-side behavior) — a header or cookie
+    // condition's key must not fall through to the headers field regardless
+    // of which of the two it actually is.
+    const field =
+      condition.key && (condition.field === 'header' || condition.field === 'cookie')
+        ? `${baseField}["${escapeWirefilterString(condition.key)}"]`
+        : baseField
 
     const operator = this.mapUnifiedOperator(condition.operator)
     const value = this.formatValue(condition.value, operator)
