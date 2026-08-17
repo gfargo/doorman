@@ -78,7 +78,25 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
     const { dryRun = false } = options
 
     try {
-      const changes = await this.getChanges(config)
+      // Import operation safety utilities — this gives Vercel the same
+      // dry-run validation/risk-assessment/confirmation safety check
+      // CloudflareFirewallService.syncRules already has. Previously this was
+      // scoped to Cloudflare only, so a destructive Vercel sync (e.g. one
+      // that deletes every remote rule due to a bad local config) proceeded
+      // with no dry-run check and no confirmation prompt.
+      const { OperationSafety } = require('../../utils/operationSafety')
+
+      const dryRunResult = await OperationSafety.performDryRunValidation(
+        config,
+        'sync rules',
+        async (cfg: UnifiedConfig) => await this.getChanges(cfg),
+      )
+
+      if (!dryRunResult.valid) {
+        throw new Error(`Dry-run validation failed: ${dryRunResult.issues.join(', ')}`)
+      }
+
+      const changes = dryRunResult.changes as ChangeSet & { version: number }
       const { rulesToAdd, rulesToUpdate, rulesToDelete, version } = changes
       const ipsToAdd = changes.ipsToAdd || []
       const ipsToUpdate = changes.ipsToUpdate || []
@@ -99,7 +117,22 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
           ipsUpdated: 0,
           ipsDeleted: 0,
           version,
+          warnings: dryRunResult.warnings,
         }
+      }
+
+      const riskLevel = OperationSafety.assessOperationRisk(changes, config)
+      const confirmed = await OperationSafety.confirmDestructiveOperation({
+        operation: 'sync rules',
+        target: `Vercel project ${this.client['projectId']}`,
+        changes,
+        riskLevel,
+        skipConfirmation: options.force || false,
+        dryRun: false,
+      })
+
+      if (!confirmed) {
+        throw new Error('Operation cancelled by user')
       }
 
       // Convert unified rules back to Vercel format for API calls

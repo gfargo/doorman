@@ -17,6 +17,8 @@ jest.mock('../../../utils/retry', () => ({
   retry: (fn: () => Promise<unknown>) => fn(),
 }))
 
+import { OperationSafety } from '../../../utils/operationSafety'
+
 describe('VercelFirewallService', () => {
   let service: VercelFirewallService
   let client: VercelClient
@@ -65,6 +67,11 @@ describe('VercelFirewallService', () => {
     client = new VercelClient('proj_123', 'team_456', 'test-token')
     service = new VercelFirewallService(client)
     jest.clearAllMocks()
+    // Auto-approve the destructive-operation confirmation prompt syncRules
+    // now performs (regression coverage for #104) — dry-run validation and
+    // risk assessment stay real so computed changes still flow through to
+    // the sync assertions below.
+    jest.spyOn(OperationSafety, 'confirmDestructiveOperation').mockResolvedValue(true)
   })
 
   describe('name', () => {
@@ -178,6 +185,74 @@ describe('VercelFirewallService', () => {
       expect(result.success).toBe(true)
       expect(result.rulesAdded).toBe(1)
       expect(result.ipsAdded).toBe(1)
+    })
+
+    it('asks for confirmation before applying a destructive sync, not just Cloudflare (regression test for #104)', async () => {
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+        ...mockVercelConfig,
+        rules: [],
+        ips: [],
+      })
+      jest.spyOn(client, 'createFirewallRule').mockResolvedValue({
+        id: 'new_rule_1',
+        name: 'Block bots',
+        active: true,
+        conditionGroup: [],
+        action: { mitigate: { action: 'deny', rateLimit: null, redirect: null, actionDuration: null } },
+      })
+      jest.spyOn(client, 'createIPBlockingRule').mockResolvedValue({
+        id: 'new_ip_1',
+        ip: '1.2.3.4',
+        hostname: 'example.com',
+        action: 'deny',
+      })
+
+      await service.syncRules(unifiedConfig)
+
+      expect(OperationSafety.confirmDestructiveOperation).toHaveBeenCalledTimes(1)
+      expect(OperationSafety.confirmDestructiveOperation).toHaveBeenCalledWith(
+        expect.objectContaining({ operation: 'sync rules', skipConfirmation: false }),
+      )
+    })
+
+    it('cancels the sync without calling the API when the user declines the confirmation', async () => {
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+        ...mockVercelConfig,
+        rules: [],
+        ips: [],
+      })
+      const createFirewallRuleSpy = jest.spyOn(client, 'createFirewallRule')
+      jest.spyOn(OperationSafety, 'confirmDestructiveOperation').mockResolvedValue(false)
+
+      await expect(service.syncRules(unifiedConfig)).rejects.toThrow('Failed to synchronize firewall rules')
+      expect(createFirewallRuleSpy).not.toHaveBeenCalled()
+    })
+
+    it('skips the confirmation prompt entirely when force is set', async () => {
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+        ...mockVercelConfig,
+        rules: [],
+        ips: [],
+      })
+      jest.spyOn(client, 'createFirewallRule').mockResolvedValue({
+        id: 'new_rule_1',
+        name: 'Block bots',
+        active: true,
+        conditionGroup: [],
+        action: { mitigate: { action: 'deny', rateLimit: null, redirect: null, actionDuration: null } },
+      })
+      jest.spyOn(client, 'createIPBlockingRule').mockResolvedValue({
+        id: 'new_ip_1',
+        ip: '1.2.3.4',
+        hostname: 'example.com',
+        action: 'deny',
+      })
+
+      await service.syncRules(unifiedConfig, { force: true })
+
+      expect(OperationSafety.confirmDestructiveOperation).toHaveBeenCalledWith(
+        expect.objectContaining({ skipConfirmation: true }),
+      )
     })
 
     it('should throw on error', async () => {
