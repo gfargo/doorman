@@ -48,6 +48,29 @@ describe('list command', () => {
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Found'))
   })
 
+  it('never logs the raw Vercel API token, even in debug mode (regression test for #100)', async () => {
+    const secretToken = 'vercel_super_secret_token_12345'
+
+    await handler({
+      provider: 'vercel',
+      token: secretToken,
+      projectId: 'prj',
+      teamId: 'team',
+      format: 'table',
+      debug: true,
+      ci: true,
+    } as any)
+
+    const loggedText = Object.values(logger)
+      .filter((fn): fn is jest.Mock => jest.isMockFunction(fn))
+      .flatMap((fn) => fn.mock.calls)
+      .flat()
+      .map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg)))
+      .join('\n')
+
+    expect(loggedText).not.toContain(secretToken)
+  })
+
   it('outputs JSON for the Vercel provider when format is json', async () => {
     await handler({
       provider: 'vercel',

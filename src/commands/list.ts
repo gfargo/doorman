@@ -79,7 +79,7 @@ export const handler = async (argv: Arguments<ListOptions>) => {
       skipValidation: true,
       errorContext: 'listing firewall rules',
     },
-    async ({ client, provider, token, projectId, teamId }) => {
+    async ({ client, provider, projectId, teamId }) => {
       // Validate version if provided
       if (argv.configVersion !== undefined) {
         try {
@@ -99,7 +99,7 @@ export const handler = async (argv: Arguments<ListOptions>) => {
       }
 
       logger.start(`Fetching firewall configuration${argv.configVersion ? ` version ${argv.configVersion}` : ''} ...`)
-      logger.verbose(`Token: ${token}\t projectId: ${projectId}\t teamId: ${teamId}`)
+      logger.verbose(`projectId: ${projectId}\t teamId: ${teamId}`)
 
       const liveConfig = await client.fetchFirewallConfig(argv.configVersion)
 
