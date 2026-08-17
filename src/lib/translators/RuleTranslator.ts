@@ -410,10 +410,16 @@ export class RuleTranslator {
       throw new Error(`Invalid IP address or CIDR range: ${ip.ip}`)
     }
 
+    // wirefilter's `eq` only matches a single IP literal — a CIDR range needs
+    // the `in {…}` set-membership operator instead, or Cloudflare's ruleset
+    // API rejects the rule outright.
+    const isCIDR = ip.ip.includes('/')
+    const expression = isCIDR ? `ip.src in {${ip.ip}}` : `ip.src eq ${ip.ip}`
+
     return {
       id: ip.id || crypto.randomUUID(),
       action: ip.action === 'allow' ? 'allow' : 'block',
-      expression: `ip.src eq ${ip.ip}`,
+      expression,
       description: ip.notes || `IP ${ip.action}: ${ip.ip}${ip.hostname ? ` (${ip.hostname})` : ''}`,
       enabled: true,
     }

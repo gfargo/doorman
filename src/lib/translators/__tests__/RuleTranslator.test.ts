@@ -634,10 +634,18 @@ describe('RuleTranslator', () => {
       expect(result.description).not.toContain('(')
     })
 
-    it('accepts a valid CIDR range', () => {
+    it('translates a CIDR range using the `in` set operator, not `eq` (regression test for #86)', () => {
       const ip: UnifiedIPRule = { ip: '203.0.113.0/24', action: 'deny' }
       const result = RuleTranslator.unifiedIPToCloudflare(ip)
-      expect(result.expression).toBe('ip.src eq 203.0.113.0/24')
+      // wirefilter's `eq` only matches a single IP literal — a CIDR range
+      // needs `in {…}` or Cloudflare's ruleset API rejects the rule.
+      expect(result.expression).toBe('ip.src in {203.0.113.0/24}')
+    })
+
+    it('still uses `eq` for a single (non-CIDR) IP', () => {
+      const ip: UnifiedIPRule = { ip: '203.0.113.5', action: 'deny' }
+      const result = RuleTranslator.unifiedIPToCloudflare(ip)
+      expect(result.expression).toBe('ip.src eq 203.0.113.5')
     })
 
     it('rejects an IP value that would inject additional wirefilter syntax', () => {
