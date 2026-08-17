@@ -58,6 +58,25 @@ describe('template command', () => {
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Dry run'))
   })
 
+  it('warns about a duplicate rule name during a dry run too, not just a real apply (regression test)', async () => {
+    mockedGetConfig.mockResolvedValue({
+      rules: [
+        {
+          name: 'Deny WordPress URLs',
+          conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/wp-admin' }] }],
+          action: { mitigate: { action: 'deny' } },
+          active: true,
+        },
+      ],
+      ips: [],
+    } as any)
+
+    await handler({ name: 'wordpress', dryRun: true, debug: false } as any)
+
+    expect(mockedSaveConfig).not.toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Deny WordPress URLs'))
+  })
+
   it('exits with an error for an unknown template name', async () => {
     await expect(handler({ name: 'not-a-real-template', dryRun: false, debug: false } as any)).rejects.toThrow(
       'process.exit called with "1"',
