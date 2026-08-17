@@ -36,7 +36,20 @@ const vercelRemoteConfig = {
       validationErrors: [],
     },
   ],
-  ips: [],
+  // Includes a hypothetical future API-only field on the IP rule too (see
+  // #114) — not observed from the real Vercel API yet, but IPBlockingRule
+  // has the same additionalProperties: false restriction as CustomRule, so
+  // this guards against the same bug class recurring there.
+  ips: [
+    {
+      id: 'ip_1',
+      ip: '203.0.113.5',
+      hostname: 'example.com',
+      notes: 'Known bad actor',
+      action: 'deny',
+      valid: true,
+    },
+  ],
   projectKey: 'pk_123',
   ownerId: 'owner_1',
   updatedAt: '2024-01-01T00:00:00Z',
@@ -100,6 +113,15 @@ describe('backup command', () => {
     expect(content.rules[0].valid).toBeUndefined()
     expect(content.rules[0].validationErrors).toBeUndefined()
     expect(content.rules[0].name).toBe('Block Admin')
+    // Per-IP-rule API-only fields must not leak into the saved backup either
+    // (regression test for #114) — legitimate fields must still survive.
+    expect(content.ips).toHaveLength(1)
+    expect(content.ips[0].valid).toBeUndefined()
+    expect(content.ips[0].id).toBe('ip_1')
+    expect(content.ips[0].ip).toBe('203.0.113.5')
+    expect(content.ips[0].hostname).toBe('example.com')
+    expect(content.ips[0].notes).toBe('Known bad actor')
+    expect(content.ips[0].action).toBe('deny')
   })
 
   it('creates a backup file for the Cloudflare provider without crashing (regression test for #82)', async () => {
