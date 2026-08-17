@@ -62,7 +62,7 @@
   - `feat!:` or `BREAKING CHANGE:` footer → major bump (1.x → 2.0.0)
   - `chore:`, `docs:`, `ci:`, `test:` → no release
 - **Beta → Stable**: Merge `beta` into `main` to promote. Add `BREAKING CHANGE:` footer if major bump desired.
-- **CI/CD**: GitHub Actions workflow (`.github/workflows/release.yml`) runs on both `main` and `beta` branches.
+- **CI/CD**: `.github/workflows/ci.yml` runs lint/test/build on every PR targeting `main` or `beta`. `.github/workflows/release.yml` runs the same checks plus build/publish on every push to `main` or `beta`.
 - **Husky hooks**: Disabled during semantic-release commits via `HUSKY=0` env var in CI.
 
 ## Security & Configuration Tips

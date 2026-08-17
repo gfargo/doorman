@@ -1,0 +1,40 @@
+name: CI
+on:
+  pull_request:
+    branches:
+      - main
+      - beta
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: Lint, Test, Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 'lts/*'
+
+      - name: Install pnpm
+        run: npm i pnpm@10 -g
+
+      # Frozen lockfile: a PR that changes package.json without updating
+      # pnpm-lock.yaml should fail fast here, not silently resolve to
+      # whatever the CI runner happens to pick (see #88).
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test:ci
+
+      - name: Build
+        run: pnpm build
