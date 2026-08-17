@@ -14,7 +14,21 @@ jest.mock('../../lib/providers/cloudflare/CloudflareClient')
 const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
 const MockedCloudflareClient = CloudflareClient as jest.MockedClass<typeof CloudflareClient>
 
-const vercelRemoteConfig = { version: 5, firewallEnabled: true, rules: [], ips: [], updatedAt: '2024-01-01T00:00:00Z' }
+// Shaped like the real Vercel API response (VercelConfig), including the
+// fields Vercel returns that aren't part of a Doorman config — id, crs,
+// projectKey, ownerId — to guard against validating/saving the raw response
+// as-is, which would fail schema validation (additionalProperties: false).
+const vercelRemoteConfig = {
+  version: 5,
+  id: 'config_1',
+  firewallEnabled: true,
+  crs: {},
+  rules: [],
+  ips: [],
+  projectKey: 'pk_123',
+  ownerId: 'owner_1',
+  updatedAt: '2024-01-01T00:00:00Z',
+}
 
 describe('backup command', () => {
   let tempDir: string
@@ -61,6 +75,14 @@ describe('backup command', () => {
     const content = JSON.parse(await fs.readFile(join(backupDir, files[0]!), 'utf8'))
     expect(content.backup.provider).toBe('vercel')
     expect(content.backup.projectId).toBe('prj')
+    // Vercel API-only fields must not leak into the saved backup — this is
+    // also what makes the sanitized config pass schema validation at all.
+    expect(content.id).toBeUndefined()
+    expect(content.crs).toBeUndefined()
+    expect(content.projectKey).toBeUndefined()
+    expect(content.ownerId).toBeUndefined()
+    expect(content.version).toBe(5)
+    expect(content.firewallEnabled).toBe(true)
   })
 
   it('creates a backup file for the Cloudflare provider without crashing (regression test for #82)', async () => {

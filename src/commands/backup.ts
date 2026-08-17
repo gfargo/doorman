@@ -5,6 +5,7 @@ import { LogLevels } from 'consola'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
 import { ValidationService } from '../lib/services/ValidationService'
+import type { VercelConfig } from '../lib/services/VercelClient'
 import { FirewallConfig } from '../lib/types'
 import { prompt } from '../lib/ui/prompt'
 import { getConfig, saveConfig } from '../lib/utils/config'
@@ -170,14 +171,31 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
         const remoteConfig =
           provider.name === 'vercel' ? await client.fetchFirewallConfig() : await provider.fetchConfig()
 
-        // Validate the fetched config itself (before adding the backup metadata
+        // The raw Vercel API response includes fields (id, crs, projectKey,
+        // ownerId) that aren't part of a Doorman config and would fail schema
+        // validation (additionalProperties: false) — strip them before
+        // validating/saving, the same way download.ts builds its saved config.
+        // Cloudflare's fetchConfig() already returns a clean UnifiedConfig with
+        // no extra fields, so it's used as-is.
+        const sanitizedConfig =
+          provider.name === 'vercel'
+            ? {
+                version: remoteConfig.version,
+                firewallEnabled: (remoteConfig as VercelConfig).firewallEnabled,
+                rules: remoteConfig.rules,
+                ips: remoteConfig.ips,
+                updatedAt: (remoteConfig as VercelConfig).updatedAt,
+              }
+            : remoteConfig
+
+        // Validate the sanitized config (before adding the backup metadata
         // wrapper below) — this catches genuine API response corruption rather
         // than trusting whatever the provider returned. It's validated here,
         // not after wrapping, because the wrapper's `backup` field isn't part of
         // the live config schema (additionalProperties: false); see the save
         // below for why that final write is unvalidated.
         const validator: ValidationService = ValidationService.getInstance()
-        validator.validateConfig(remoteConfig)
+        validator.validateConfig(sanitizedConfig)
 
         if (!existsSync(backupDir)) {
           mkdirSync(backupDir, { recursive: true })
@@ -191,7 +209,7 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
         const backupPath = join(backupDir, backupFilename)
 
         const backupConfig = {
-          ...remoteConfig,
+          ...sanitizedConfig,
           backup: {
             createdAt: new Date().toISOString(),
             source: 'remote',
