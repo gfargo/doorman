@@ -1,3 +1,10 @@
+## [3.0.9](https://github.com/gfargo/doorman/compare/v3.0.8...v3.0.9) (2026-08-17)
+
+
+### Bug Fixes
+
+* make template --dryRun preview the duplicate-name warning too ([#140](https://github.com/gfargo/doorman/issues/140)) ([a4dba8b](https://github.com/gfargo/doorman/commit/a4dba8b0f6f84f60b6522b812627b7052f3b5131)), closes [#97](https://github.com/gfargo/doorman/issues/97)
+
 ## [3.0.8](https://github.com/gfargo/doorman/compare/v3.0.7...v3.0.8) (2026-08-17)
 
 
