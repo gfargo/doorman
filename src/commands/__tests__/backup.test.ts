@@ -23,6 +23,9 @@ describe('backup command', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks()
+    jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit called with "${code}"`)
+    }) as any)
     tempDir = await fs.mkdtemp(join(tmpdir(), 'doorman-backup-test-'))
     backupDir = join(tempDir, 'backups')
     // withCredentials always loads a local config file even though the "create
@@ -36,6 +39,7 @@ describe('backup command', () => {
   })
 
   afterEach(async () => {
+    jest.restoreAllMocks()
     await fs.rm(tempDir, { recursive: true, force: true })
   })
 
@@ -85,6 +89,32 @@ describe('backup command', () => {
     await handler({ list: true, output: backupDir, debug: false, ci: true } as any)
 
     expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Available Backups'))
+  })
+
+  it('refuses to create a backup when the fetched remote config is malformed', async () => {
+    MockedVercelClient.prototype.fetchFirewallConfig = jest.fn().mockResolvedValue({
+      version: 5,
+      firewallEnabled: true,
+      // Missing conditionGroup/action/active — structurally invalid.
+      rules: [{ name: 'Corrupt Rule' }],
+      ips: [],
+      updatedAt: '2024-01-01T00:00:00Z',
+    }) as any
+
+    await expect(
+      handler({
+        provider: 'vercel',
+        token: 't',
+        projectId: 'prj',
+        teamId: 'team',
+        config: configPath,
+        output: backupDir,
+        debug: false,
+        ci: true,
+      } as any),
+    ).rejects.toThrow()
+
+    await expect(fs.readdir(backupDir)).rejects.toThrow()
   })
 
   it('restores from a backup file without needing credentials', async () => {

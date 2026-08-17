@@ -4,6 +4,7 @@ import { join } from 'path'
 import { LogLevels } from 'consola'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
+import { ValidationService } from '../lib/services/ValidationService'
 import { FirewallConfig } from '../lib/types'
 import { prompt } from '../lib/ui/prompt'
 import { getConfig, saveConfig } from '../lib/utils/config'
@@ -169,6 +170,15 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
         const remoteConfig =
           provider.name === 'vercel' ? await client.fetchFirewallConfig() : await provider.fetchConfig()
 
+        // Validate the fetched config itself (before adding the backup metadata
+        // wrapper below) — this catches genuine API response corruption rather
+        // than trusting whatever the provider returned. It's validated here,
+        // not after wrapping, because the wrapper's `backup` field isn't part of
+        // the live config schema (additionalProperties: false); see the save
+        // below for why that final write is unvalidated.
+        const validator: ValidationService = ValidationService.getInstance()
+        validator.validateConfig(remoteConfig)
+
         if (!existsSync(backupDir)) {
           mkdirSync(backupDir, { recursive: true })
         }
@@ -191,10 +201,10 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
           },
         }
 
-        // Skip validation — the added `backup` metadata field isn't part of the
-        // live config schema (additionalProperties: false), so validating here
-        // would reject every backup. Restoring already loads backups in 'raw'
-        // mode for the same reason.
+        // The underlying config was already validated above; skip validation
+        // here only because the added `backup` metadata field isn't part of the
+        // live config schema (additionalProperties: false). Restoring already
+        // loads backups in 'raw' mode for the same reason.
         await saveConfig(backupConfig as unknown as FirewallConfig, backupPath, { validate: false })
 
         logger.success(chalk.green(`✅ Backup created: ${backupPath}`))
