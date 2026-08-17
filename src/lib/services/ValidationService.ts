@@ -1,3 +1,4 @@
+import { isIPv6 } from 'net'
 import type { ErrorObject } from 'ajv'
 import Ajv, { Ajv as AjvType } from 'ajv'
 import { z } from 'zod'
@@ -292,12 +293,7 @@ export class ValidationService {
       })
     }
 
-    const isValidIPv6 = (ip: string): boolean => {
-      // Simple IPv6 validation for 8 groups; extended forms are out of scope here
-      const hextets = ip.split(':')
-      if (hextets.length !== 8) return false
-      return hextets.every((h) => /^[0-9a-fA-F]{1,4}$/.test(h))
-    }
+    const isValidIPv6 = (ip: string): boolean => isIPv6(ip)
 
     const isV4 = isValidIPv4(ipPart)
     const isV6 = isValidIPv6(ipPart)
