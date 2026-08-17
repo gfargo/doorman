@@ -1,3 +1,10 @@
+## [3.0.8](https://github.com/gfargo/doorman/compare/v3.0.7...v3.0.8) (2026-08-17)
+
+
+### Bug Fixes
+
+* stop quoting IP values in wirefilter expressions for ip.src ([#139](https://github.com/gfargo/doorman/issues/139)) ([6811e49](https://github.com/gfargo/doorman/commit/6811e49ed70316719c361cf8795aa5762ffa9d92)), closes [#85](https://github.com/gfargo/doorman/issues/85) [#108](https://github.com/gfargo/doorman/issues/108) [#109](https://github.com/gfargo/doorman/issues/109) [#119](https://github.com/gfargo/doorman/issues/119)
+
 ## [3.0.7](https://github.com/gfargo/doorman/compare/v3.0.6...v3.0.7) (2026-08-17)
 
 
