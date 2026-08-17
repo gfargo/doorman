@@ -1,3 +1,10 @@
+## [3.0.2](https://github.com/gfargo/doorman/compare/v3.0.1...v3.0.2) (2026-08-17)
+
+
+### Bug Fixes
+
+* close Wirefilter injection, fix Cloudflare warning handling, add test coverage ([#108](https://github.com/gfargo/doorman/issues/108)) ([88033a8](https://github.com/gfargo/doorman/commit/88033a8684e4cc2ec8c379ab592c56ac8e87b074)), closes [#82](https://github.com/gfargo/doorman/issues/82) [#83](https://github.com/gfargo/doorman/issues/83) [#84](https://github.com/gfargo/doorman/issues/84) [#98](https://github.com/gfargo/doorman/issues/98)
+
 ## [3.0.1](https://github.com/gfargo/doorman/compare/v3.0.0...v3.0.1) (2026-08-17)
 
 
