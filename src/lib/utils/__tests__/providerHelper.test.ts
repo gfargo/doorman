@@ -55,7 +55,7 @@ describe('providerHelper', () => {
       process.env.VERCEL_PROJECT_ID = 'proj'
       process.env.VERCEL_TEAM_ID = 'team'
 
-      const provider = await getProviderInstance({
+      const { provider } = await getProviderInstance({
         provider: 'vercel',
         interactive: false,
       })
@@ -67,7 +67,7 @@ describe('providerHelper', () => {
       process.env.CLOUDFLARE_API_TOKEN = 'token'
       process.env.CLOUDFLARE_ZONE_ID = 'zone'
 
-      const provider = await getProviderInstance({
+      const { provider } = await getProviderInstance({
         provider: 'cloudflare',
         interactive: false,
       })
@@ -85,7 +85,7 @@ describe('providerHelper', () => {
       process.env.VERCEL_PROJECT_ID = 'proj'
       process.env.VERCEL_TEAM_ID = 'team'
 
-      const provider = await getProviderInstance({ interactive: false })
+      const { provider } = await getProviderInstance({ interactive: false })
       expect(provider.name).toBe('vercel')
     })
 
@@ -99,8 +99,34 @@ describe('providerHelper', () => {
       process.env.VERCEL_PROJECT_ID = 'proj'
       process.env.VERCEL_TEAM_ID = 'team'
 
-      const provider = await getProviderInstance({ interactive: false })
+      const { provider } = await getProviderInstance({ interactive: false })
       expect(provider.name).toBe('vercel')
+    })
+
+    it('returns the resolved Vercel credentials so callers do not have to re-prompt (regression test for #93)', async () => {
+      const { provider, vercelCredentials } = await getProviderInstance({
+        provider: 'vercel',
+        token: 'my-token',
+        projectId: 'my-project',
+        teamId: 'my-team',
+        interactive: false,
+      })
+      expect(provider.name).toBe('vercel')
+      expect(vercelCredentials).toEqual({
+        token: 'my-token',
+        projectId: 'my-project',
+        teamId: 'my-team',
+      })
+    })
+
+    it('does not populate vercelCredentials for the Cloudflare provider', async () => {
+      const { vercelCredentials } = await getProviderInstance({
+        provider: 'cloudflare',
+        apiToken: 'cf-token',
+        zoneId: 'cf-zone',
+        interactive: false,
+      })
+      expect(vercelCredentials).toBeUndefined()
     })
 
     it('passes explicit credentials to Vercel provider', async () => {
