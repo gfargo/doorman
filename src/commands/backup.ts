@@ -146,7 +146,14 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
         }
       }
 
-      await saveConfig(backupConfig, outputPath)
+      // Real backups carry a `backup: {createdAt, source, provider, ...}`
+      // metadata field (added when the backup was created — see below) that
+      // isn't part of the live config schema (additionalProperties: false).
+      // Strip it before validating/saving, the same way backup creation keeps
+      // it out of the validated sanitizedConfig.
+      const { backup: _backupMetadata, ...restoredConfig } = backupConfig as FirewallConfig & { backup?: unknown }
+
+      await saveConfig(restoredConfig as FirewallConfig, outputPath)
       logger.success(chalk.green(`✅ Restored configuration from ${restorePath} to ${outputPath}`))
       return
     }
