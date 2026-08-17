@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-- `src/commands/`: CLI subcommands (`list`, `sync`, `download`, `validate`, `template`, `diff`, `status`, `watch`, `backup`, `export`, `init`, `setup`).
+- `src/commands/`: CLI subcommands (`list`, `add`, `remove`, `sync`, `download`, `validate`, `template`, `diff`, `status`, `watch`, `backup`, `export`, `init`, `setup`).
 - `src/lib/`: shared code (`services/`, `utils/`, `templates/`, `types.ts`, `ui/`).
 - `src/lib/providers/`: Multi-provider abstraction layer (`IFirewallProvider`, `ProviderRegistry`, `ProviderDetector`).
 - `src/lib/providers/vercel/`: Vercel provider implementation.

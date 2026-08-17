@@ -15,6 +15,8 @@ Doorman is a CLI tool for managing firewall rules as code across multiple provid
 All commands accept `--provider vercel|cloudflare` (auto-detected if not specified), `--debug`, and `--ci` flags.
 
 - **list:** Display firewall rules - `doorman list [configVersion]`
+- **add:** Add a new firewall rule or IP entry - `doorman add [type]`
+- **remove:** Remove a firewall rule or IP entry - `doorman remove [type]`
 - **sync:** Push local config to provider - `doorman sync`
 - **download:** Import rules from provider - `doorman download [configVersion]`
 - **template:** Add rule templates - `doorman template [templateName]`
@@ -55,7 +57,7 @@ All commands accept `--provider vercel|cloudflare` (auto-detected if not specifi
 - Mock `process.exit` in tests to prevent Jest worker crashes
 
 ## Testing
-- **Test Coverage:** 141+ passing Vercel tests, 26+ passing Cloudflare test suites
+- **Test Coverage:** 1200+ passing tests across 70+ test suites (Vercel and Cloudflare). Run `pnpm test:ci` for the current count — these numbers drift as tests are added.
 - **Test Structure:** Integration tests, edge cases, validation, sync/download
 - **Mocking:** Mock VercelClient, process.exit, and external dependencies
 - **CI/CD:** Lint/test/build run on every PR targeting main or beta (`.github/workflows/ci.yml`); the full release pipeline (lint/test/build/publish) runs again on every push to main or beta (`.github/workflows/release.yml`)
