@@ -1,6 +1,7 @@
 import chalk from 'chalk'
 import { logger } from '../logger'
 import { prompt } from '../ui/prompt'
+import { promptSecret } from '../ui/promptSecret'
 import { ProviderDetector } from '../providers/ProviderDetector'
 import { VercelProvider } from '../providers/vercel'
 import { CloudflareProvider } from '../providers/cloudflare'
@@ -134,11 +135,7 @@ async function getCloudflareProvider(options: ProviderOptions): Promise<IFirewal
     logger.warn('Missing Cloudflare credentials')
     logger.info('Please provide your Cloudflare credentials:')
 
-    const apiTokenInput =
-      apiToken ||
-      (await prompt('Cloudflare API Token:', {
-        type: 'text',
-      }))
+    const apiTokenInput = apiToken || (await promptSecret('Cloudflare API Token: '))
 
     const zoneIdInput =
       zoneId ||

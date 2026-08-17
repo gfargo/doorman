@@ -6,6 +6,10 @@ jest.mock('../../ui/prompt', () => ({
   prompt: jest.fn(),
 }))
 
+jest.mock('../../ui/promptSecret', () => ({
+  promptSecret: jest.fn(),
+}))
+
 // Mock the providers
 jest.mock('../../providers/vercel', () => ({
   VercelProvider: {
@@ -29,6 +33,8 @@ import { getProviderInstance, getProviderDisplayName, verifyProviderCredentials 
 import { VercelProvider } from '../../providers/vercel'
 import { CloudflareProvider } from '../../providers/cloudflare'
 import { ProviderDetector } from '../../providers/ProviderDetector'
+import { prompt } from '../../ui/prompt'
+import { promptSecret } from '../../ui/promptSecret'
 import type { IFirewallProvider } from '../../providers/IFirewallProvider'
 
 describe('providerHelper', () => {
@@ -146,6 +152,23 @@ describe('providerHelper', () => {
     it('throws for Cloudflare when credentials missing and non-interactive', async () => {
       await expect(getProviderInstance({ provider: 'cloudflare', interactive: false })).rejects.toThrow(
         /credentials missing/,
+      )
+    })
+
+    it('prompts for a missing Cloudflare API token via the masked promptSecret, not the plaintext prompt (regression test for #102)', async () => {
+      ;(promptSecret as jest.MockedFunction<typeof promptSecret>).mockResolvedValue('typed-cf-token')
+      ;(prompt as jest.MockedFunction<typeof prompt>).mockImplementation((message: unknown) => {
+        const text = String(message)
+        if (text.includes('Zone ID')) return Promise.resolve('typed-zone')
+        if (text.includes('Account ID')) return Promise.resolve('')
+        throw new Error(`Unexpected prompt: ${text}`)
+      })
+
+      await getProviderInstance({ provider: 'cloudflare', interactive: true })
+
+      expect(promptSecret).toHaveBeenCalledWith(expect.stringContaining('Cloudflare API Token'))
+      expect(CloudflareProvider.fromConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ apiToken: 'typed-cf-token' }),
       )
     })
   })

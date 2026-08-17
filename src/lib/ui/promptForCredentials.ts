@@ -1,4 +1,5 @@
 import { prompt } from './prompt'
+import { promptSecret } from './promptSecret'
 
 export async function promptForCredentials(args: {
   token?: string
@@ -8,9 +9,8 @@ export async function promptForCredentials(args: {
   const token =
     args.token ||
     process.env.VERCEL_TOKEN ||
-    (await prompt(
-      `What is your Vercel API Auth Token? (https://vercel.com/guides/how-do-i-use-a-vercel-api-access-token#creating-an-access-token)`,
-      { type: 'text' },
+    (await promptSecret(
+      `What is your Vercel API Auth Token? (https://vercel.com/guides/how-do-i-use-a-vercel-api-access-token#creating-an-access-token) `,
     ))
 
   const teamId =
