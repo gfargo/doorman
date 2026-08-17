@@ -76,4 +76,5 @@ All commands accept `--provider vercel|cloudflare` (auto-detected if not specifi
   - `chore:`, `docs:`, `ci:`, `test:` → no release
 - **Promoting beta to stable**: Merge `beta` into `main`.
 - **CI workflow**: `.github/workflows/release.yml` triggers on `main` and `beta`.
+- **Lint gating asymmetry**: Lint failures are non-blocking on `beta` (`continue-on-error` set to true only when `github.ref == 'refs/heads/beta'`) but still block the release on `main`. A lint-failing `beta` release can still publish; a lint-failing `main` release cannot.
 - **Husky**: Disabled in CI release step via `HUSKY=0` to prevent pre-commit hooks blocking semantic-release.
