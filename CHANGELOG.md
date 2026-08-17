@@ -1,3 +1,10 @@
+## [3.0.1](https://github.com/gfargo/doorman/compare/v3.0.0...v3.0.1) (2026-08-17)
+
+
+### Bug Fixes
+
+* make Cloudflare provider actually work for sync/status/diff/watch/backup/download/export/list ([#107](https://github.com/gfargo/doorman/issues/107)) ([d6f8e0f](https://github.com/gfargo/doorman/commit/d6f8e0f21cef49d3d7fa6ec56756cbb8add250d6)), closes [#82](https://github.com/gfargo/doorman/issues/82)
+
 # [3.0.0](https://github.com/gfargo/doorman/compare/v2.2.0...v3.0.0) (2026-08-16)
 
 
