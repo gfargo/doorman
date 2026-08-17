@@ -1,3 +1,23 @@
+## [3.0.7](https://github.com/gfargo/doorman/compare/v3.0.6...v3.0.7) (2026-08-17)
+
+
+### Bug Fixes
+
+* accept IPv6 addresses and CIDR ranges in Cloudflare IP validation ([#121](https://github.com/gfargo/doorman/issues/121)) ([a2e1297](https://github.com/gfargo/doorman/commit/a2e12973b5e362744a4dd6389d853e57c4d61ec0)), closes [#87](https://github.com/gfargo/doorman/issues/87)
+* accept standard compressed IPv6 notation in Vercel validation ([#126](https://github.com/gfargo/doorman/issues/126)) ([ce0558f](https://github.com/gfargo/doorman/commit/ce0558f900b59a548147fbdeb4259e81e705847f)), closes [#87](https://github.com/gfargo/doorman/issues/87) [#95](https://github.com/gfargo/doorman/issues/95)
+* allowlist-reconstruct IP rules too when sanitizing a backup ([#137](https://github.com/gfargo/doorman/issues/137)) ([b9068ec](https://github.com/gfargo/doorman/commit/b9068ec8397c142120230b1ba28f070eef34f5b3)), closes [#112](https://github.com/gfargo/doorman/issues/112) [#114](https://github.com/gfargo/doorman/issues/114)
+* cap rate-limit wait derived from X-RateLimit-Reset at 1 minute ([#127](https://github.com/gfargo/doorman/issues/127)) ([5287f9d](https://github.com/gfargo/doorman/commit/5287f9da843a7452657f83896f10aa4d9d5419c0)), closes [#96](https://github.com/gfargo/doorman/issues/96)
+* emit valid wirefilter syntax for negated Cloudflare operators ([#119](https://github.com/gfargo/doorman/issues/119)) ([541b90c](https://github.com/gfargo/doorman/commit/541b90c30e321b93932c0ed26b378a952369a9d6)), closes [#85](https://github.com/gfargo/doorman/issues/85)
+* give Vercel sync the same dry-run/confirmation safety as Cloudflare ([#129](https://github.com/gfargo/doorman/issues/129)) ([aaa4d4b](https://github.com/gfargo/doorman/commit/aaa4d4bf38fcfb3ea574118e786912f1fb224d56)), closes [#104](https://github.com/gfargo/doorman/issues/104)
+* mask API token input instead of echoing it in plaintext ([#133](https://github.com/gfargo/doorman/issues/133)) ([a146644](https://github.com/gfargo/doorman/commit/a14664473ea98713627be254588a0654a4c6b3ea)), closes [#102](https://github.com/gfargo/doorman/issues/102)
+* pin @semantic-release/npm to the OIDC-capable v13 line ([#122](https://github.com/gfargo/doorman/issues/122)) ([ed0a457](https://github.com/gfargo/doorman/commit/ed0a457da4176d01c5bff64ae7598019e9a71bd0)), closes [#88](https://github.com/gfargo/doorman/issues/88)
+* retry() re-throws the original error instead of a generic wrapper ([#125](https://github.com/gfargo/doorman/issues/125)) ([08be4d6](https://github.com/gfargo/doorman/commit/08be4d60c960689ce04612dab24918bc176f7504)), closes [#94](https://github.com/gfargo/doorman/issues/94)
+* stop leaking partial API tokens into debug logs ([#132](https://github.com/gfargo/doorman/issues/132)) ([b762edd](https://github.com/gfargo/doorman/commit/b762edd6a383cf39bd2a8553ba4f24148612637e)), closes [#101](https://github.com/gfargo/doorman/issues/101)
+* stop logging the raw Vercel API token in debug output ([#118](https://github.com/gfargo/doorman/issues/118)) ([c97917f](https://github.com/gfargo/doorman/commit/c97917f6b53136380dcc4ab2c9da7c4e44b635fa)), closes [#100](https://github.com/gfargo/doorman/issues/100)
+* stop prompting for Vercel credentials twice on first run ([#124](https://github.com/gfargo/doorman/issues/124)) ([4f32564](https://github.com/gfargo/doorman/commit/4f325646aa982ae82c782243b0f47245aac7a45d)), closes [#93](https://github.com/gfargo/doorman/issues/93)
+* template command honors --config and warns on duplicate rule names ([#128](https://github.com/gfargo/doorman/issues/128)) ([5a72597](https://github.com/gfargo/doorman/commit/5a725973ae882d527c3147bc5868fb611b7a305f)), closes [#97](https://github.com/gfargo/doorman/issues/97)
+* use wirefilter's in operator for CIDR IP-blocking rules ([#120](https://github.com/gfargo/doorman/issues/120)) ([1e90c7c](https://github.com/gfargo/doorman/commit/1e90c7cf16dd855330f68f3f40ddef053dc0ddeb)), closes [#86](https://github.com/gfargo/doorman/issues/86)
+
 ## [3.0.6](https://github.com/gfargo/doorman/compare/v3.0.5...v3.0.6) (2026-08-17)
 
 
