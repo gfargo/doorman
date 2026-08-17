@@ -263,6 +263,37 @@ describe('ExpressionBuilder', () => {
       })
       expect(result).toBe('http.request.uri.path eq "a\\\\"')
     })
+
+    it('handles cookie conditions with key as http.cookie, not http.request.headers', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'cookie',
+        operator: 'eq',
+        value: 'abc123',
+        key: 'session_id',
+      })
+      expect(result).toBe('http.cookie["session_id"] eq "abc123"')
+    })
+
+    it('escapes quotes in a unified cookie key so it cannot break out of the field reference', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'cookie',
+        operator: 'eq',
+        value: 'x',
+        key: 'a" or true or http.cookie["a',
+      })
+      expect(result).toBe('http.cookie["a\\" or true or http.cookie[\\"a"] eq "x"')
+    })
+
+    it('ignores an unsupported key on a query condition instead of mislabeling it as a header', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'query',
+        operator: 'eq',
+        value: 'abc',
+        key: 'utm_source',
+      })
+      expect(result).toBe('http.request.uri.query eq "abc"')
+      expect(result).not.toContain('headers')
+    })
   })
 
   describe('validate', () => {

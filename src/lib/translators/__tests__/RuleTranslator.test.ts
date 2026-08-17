@@ -633,6 +633,17 @@ describe('RuleTranslator', () => {
       expect(result.description).toContain('IP deny: 10.0.0.1')
       expect(result.description).not.toContain('(')
     })
+
+    it('accepts a valid CIDR range', () => {
+      const ip: UnifiedIPRule = { ip: '203.0.113.0/24', action: 'deny' }
+      const result = RuleTranslator.unifiedIPToCloudflare(ip)
+      expect(result.expression).toBe('ip.src eq 203.0.113.0/24')
+    })
+
+    it('rejects an IP value that would inject additional wirefilter syntax', () => {
+      const ip: UnifiedIPRule = { ip: '1.2.3.4 or (true) or ip.src eq 1.2.3.4', action: 'deny' }
+      expect(() => RuleTranslator.unifiedIPToCloudflare(ip)).toThrow('Invalid IP address or CIDR range')
+    })
   })
 
   describe('window parsing (via vercelToCloudflare rate_limit)', () => {

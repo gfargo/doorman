@@ -2,6 +2,7 @@ import type { VercelCustomRule, VercelIPBlockingRule, VercelConditionGroup } fro
 import type { CloudflareRule } from '../types/cloudflare'
 import type { UnifiedRule, UnifiedIPRule, UnifiedCondition, UnifiedAction } from '../types/unified'
 import { ExpressionBuilder } from './ExpressionBuilder'
+import { ipAddressSchema } from '../schemas/commonSchemas'
 import { logger } from '../logger'
 
 /**
@@ -399,6 +400,16 @@ export class RuleTranslator {
    * Translate Unified IP rule to Cloudflare rule
    */
   public static unifiedIPToCloudflare(ip: UnifiedIPRule): CloudflareRule {
+    // `ip.ip` is interpolated unquoted into the wirefilter expression below (IP
+    // literals aren't string literals in wirefilter, so there are no quotes to
+    // escape). Config-level schema validation already constrains this value in
+    // normal usage, but this function shouldn't trust its input blindly — an
+    // unvalidated value here has no delimiter at all to contain it, making this
+    // a more direct injection primitive than a quoted string field.
+    if (!ipAddressSchema.safeParse(ip.ip).success) {
+      throw new Error(`Invalid IP address or CIDR range: ${ip.ip}`)
+    }
+
     return {
       id: ip.id || crypto.randomUUID(),
       action: ip.action === 'allow' ? 'allow' : 'block',
