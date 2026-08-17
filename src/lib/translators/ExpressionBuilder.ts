@@ -34,10 +34,10 @@ export class ExpressionBuilder {
    */
   public static fromVercelCondition(condition: VercelRuleCondition): string {
     const field = FieldMapper.toCloudflare(condition.type, condition.key)
-    const operator = this.mapVercelOperator(condition.op)
-    const value = this.formatValue(condition.value, condition.op)
-
-    let expression = `${field} ${operator} ${value}`
+    let expression = this.buildExistsOrComparisonExpression(field, condition.op, () => {
+      const operator = this.mapVercelOperator(condition.op)
+      return `${operator} ${this.formatValue(condition.value, condition.op)}`
+    })
 
     // Handle negation
     if (condition.neg) {
@@ -75,10 +75,7 @@ export class ExpressionBuilder {
         ? `${baseField}["${escapeWirefilterString(condition.key)}"]`
         : baseField
 
-    const operator = this.mapUnifiedOperator(condition.operator)
-    const value = this.formatValue(condition.value, operator)
-
-    let expression = `${field} ${operator} ${value}`
+    let expression = this.buildUnifiedExpression(field, condition.operator, condition.value)
 
     if (condition.negated) {
       expression = `not (${expression})`
@@ -88,7 +85,45 @@ export class ExpressionBuilder {
   }
 
   /**
-   * Map Vercel operators to Cloudflare operators
+   * `exists`/`not_exists` (Vercel: `ex`/`nex`) conditions carry no value and
+   * wirefilter has no `not exists` binary operator — negation must wrap the
+   * whole unary `exists` check in `not (...)` instead. Every other operator
+   * falls through to the caller's ordinary `<op> <value>` comparison.
+   */
+  private static buildExistsOrComparisonExpression(field: string, op: string, buildComparison: () => string): string {
+    if (op === 'ex' || op === 'exists') {
+      return `${field} exists`
+    }
+    if (op === 'nex' || op === 'not_exists') {
+      return `not (${field} exists)`
+    }
+    return `${field} ${buildComparison()}`
+  }
+
+  /**
+   * wirefilter also has no `not contains`/`not in` binary operators — like
+   * `not_exists` above, these negated unified operators translate to the
+   * positive comparison (`contains`/`in`) wrapped in `not (...)`.
+   */
+  private static buildUnifiedExpression(field: string, op: UnifiedCondition['operator'], value: unknown): string {
+    if (op === 'not_contains') {
+      return `not (${field} contains ${this.formatValue(value, 'contains')})`
+    }
+    if (op === 'not_in') {
+      return `not (${field} in ${this.formatValue(value, 'in')})`
+    }
+    return this.buildExistsOrComparisonExpression(field, op, () => {
+      const operator = this.mapUnifiedOperator(op)
+      return `${operator} ${this.formatValue(value, operator)}`
+    })
+  }
+
+  /**
+   * Map Vercel operators to Cloudflare operators.
+   * `ex` (and unified `exists`/`not_exists` below) are handled entirely by
+   * `buildExistsOrComparisonExpression` before this is ever called — wirefilter
+   * has no `not exists` binary operator, so `nex` is deliberately omitted here
+   * rather than mapped to that invalid token.
    */
   private static mapVercelOperator(op: string): string {
     const mapping: Record<string, string> = {
@@ -99,32 +134,33 @@ export class ExpressionBuilder {
       sub: 'contains',
       re: 'matches',
       ex: 'exists',
-      nex: 'not exists',
     }
 
     return mapping[op] || op
   }
 
   /**
-   * Map unified operators to Cloudflare operators
+   * Map unified operators to Cloudflare operators.
+   * `exists`/`not_exists`/`not_contains`/`not_in` are handled entirely by
+   * `buildUnifiedExpression` before this is ever called — wirefilter has no
+   * single-token `not exists`/`not contains`/`not in` operator, only
+   * `not (<expr>)` wrapping a positive comparison — so those four are
+   * deliberately omitted here rather than mapped to invalid tokens.
    */
   private static mapUnifiedOperator(op: string): string {
     const mapping: Record<string, string> = {
       eq: 'eq',
       ne: 'ne',
       contains: 'contains',
-      not_contains: 'not contains',
       starts_with: 'starts_with',
       ends_with: 'ends_with',
       matches: 'matches',
       in: 'in',
-      not_in: 'not in',
       gt: 'gt',
       ge: 'ge',
       lt: 'lt',
       le: 'le',
       exists: 'exists',
-      not_exists: 'not exists',
     }
 
     return mapping[op] || op
