@@ -101,6 +101,44 @@ describe('watch command', () => {
     expect(logger.success).toHaveBeenCalledWith(expect.stringContaining('Sync completed'))
   })
 
+  it('surfaces sync warnings from the Cloudflare provider instead of silently dropping them', async () => {
+    mockedGetConfig.mockResolvedValue({
+      version: '2.0',
+      provider: 'cloudflare',
+      providers: { cloudflare: { zoneId: '0123456789abcdef0123456789abcdef' } },
+      rules: [
+        {
+          name: 'Duplicate Rule',
+          enabled: true,
+          conditions: [{ field: 'user_agent', operator: 'contains', value: 'badbot' }],
+          action: { type: 'block' },
+        },
+        {
+          name: 'Duplicate Rule',
+          enabled: true,
+          conditions: [{ field: 'path', operator: 'eq', value: '/admin' }],
+          action: { type: 'block' },
+        },
+      ],
+      ips: [],
+    } as any)
+
+    await handler({
+      config: '.doorman.json',
+      provider: 'cloudflare',
+      apiToken: 'cf-token',
+      zoneId: '0123456789abcdef0123456789abcdef',
+      interval: 50,
+      debug: false,
+      ci: true,
+    } as any)
+
+    await capturedWatchListener!(fakeStats(2000), fakeStats(1000))
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Duplicate rule names found'))
+    expect(logger.success).toHaveBeenCalledWith(expect.stringContaining('Sync completed'))
+  })
+
   it('skips syncing when the file change reports no config differences', async () => {
     mockedGetConfig.mockResolvedValue({ version: 5, rules: [], ips: [] } as any)
 
