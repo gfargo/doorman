@@ -1,3 +1,11 @@
+## [3.0.3](https://github.com/gfargo/doorman/compare/v3.0.2...v3.0.3) (2026-08-17)
+
+
+### Bug Fixes
+
+* harden remaining Wirefilter injection sites in rule translation ([#109](https://github.com/gfargo/doorman/issues/109)) ([d5d68d5](https://github.com/gfargo/doorman/commit/d5d68d52a1db6134e59c529e3e279ab69f42c433)), closes [#84](https://github.com/gfargo/doorman/issues/84)
+* surface sync warnings in watch mode ([#110](https://github.com/gfargo/doorman/issues/110)) ([533eebf](https://github.com/gfargo/doorman/commit/533eebfda0b36adf6132bfad2d4b64226841bd13))
+
 ## [3.0.2](https://github.com/gfargo/doorman/compare/v3.0.1...v3.0.2) (2026-08-17)
 
 
