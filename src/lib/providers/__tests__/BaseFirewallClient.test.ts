@@ -85,6 +85,27 @@ describe('BaseFirewallClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it('caps the rate-limit wait at 1 minute even when X-RateLimit-Reset is an hour out (regression test for #96)', async () => {
+    const delaySpy = jest.spyOn(client as unknown as { delay: (ms: number) => Promise<void> }, 'delay')
+    const now = Math.floor(Date.now() / 1000)
+    jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        makeResponse({
+          ok: false,
+          status: 429,
+          statusText: 'Too Many Requests',
+          jsonBody: { message: 'Rate limit' },
+          headers: { 'X-RateLimit-Reset': String(now + 3600) }, // an hour out
+        }),
+      )
+      .mockResolvedValueOnce(makeResponse({ ok: true, status: 200, jsonBody: { ok: true } }))
+
+    await client.getJson('/retry-far-future', { retries: 1, retryDelay: 1 })
+
+    expect(delaySpy).toHaveBeenCalledWith(60000)
+  })
+
   it('does not retry on 400 and throws formatted error', async () => {
     const fetchMock = jest
       .spyOn(globalThis, 'fetch')

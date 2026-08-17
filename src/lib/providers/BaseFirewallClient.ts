@@ -241,16 +241,20 @@ export abstract class BaseFirewallClient {
    * Calculate wait time for rate limit with exponential backoff
    */
   private calculateRateLimitWait(attempt: number = 0): number {
+    const maxWait = 60000 // Cap at 1 minute
+
     if (this.rateLimitInfo.reset) {
       const now = Math.floor(Date.now() / 1000)
       const waitTime = (this.rateLimitInfo.reset - now) * 1000
-      return Math.max(waitTime, 1000) // Minimum 1 second
+      // A far-future X-RateLimit-Reset (e.g. an hour out) would otherwise
+      // block the command for the full duration on a single retry with no
+      // way to override — cap it the same way the exponential fallback below is.
+      return Math.min(Math.max(waitTime, 1000), maxWait) // Minimum 1 second, capped at 1 minute
     }
 
     // Use exponential backoff for rate limits when reset time is not available
     const baseWait = 5000 // 5 seconds base
     const exponentialWait = baseWait * Math.pow(2, attempt)
-    const maxWait = 60000 // Cap at 1 minute
 
     return Math.min(exponentialWait, maxWait)
   }
