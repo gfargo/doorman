@@ -230,6 +230,7 @@ export class CloudflareFirewallService extends BaseFirewallService {
         ipsAdded: dryRunResult.changes.ipsToAdd?.length || 0,
         ipsUpdated: dryRunResult.changes.ipsToUpdate?.length || 0,
         ipsDeleted: dryRunResult.changes.ipsToDelete?.length || 0,
+        warnings: dryRunResult.warnings,
       }
     }
 
@@ -378,6 +379,7 @@ export class CloudflareFirewallService extends BaseFirewallService {
       ipsUpdated,
       ipsDeleted,
       version: parseInt(updatedRuleset.version, 10),
+      warnings: dryRunResult.warnings?.length ? dryRunResult.warnings : undefined,
     }
 
     this.logSyncStats(result)

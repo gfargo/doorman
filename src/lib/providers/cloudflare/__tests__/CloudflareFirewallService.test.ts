@@ -24,6 +24,7 @@ jest.mock('../../../utils/operationSafety', () => ({
         hasChanges: false,
       },
       issues: [],
+      warnings: [],
     }),
     confirmDestructiveOperation: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
   },

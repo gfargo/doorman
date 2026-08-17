@@ -1,6 +1,7 @@
 import type { VercelRuleCondition, VercelConditionGroup } from '../types/vercel'
 import type { UnifiedCondition } from '../types/unified'
 import { FieldMapper } from './FieldMapper'
+import { escapeWirefilterString } from './wirefilterEscape'
 
 /**
  * Builds Cloudflare wirefilter expressions from structured conditions
@@ -65,7 +66,7 @@ export class ExpressionBuilder {
    */
   public static fromUnifiedCondition(condition: UnifiedCondition): string {
     const field = condition.key
-      ? `http.request.headers["${condition.key}"]`
+      ? `http.request.headers["${escapeWirefilterString(condition.key)}"]`
       : this.mapUnifiedFieldToCloudflare(condition.field)
 
     const operator = this.mapUnifiedOperator(condition.operator)
@@ -166,9 +167,7 @@ export class ExpressionBuilder {
    */
   private static formatSingleValue(value: unknown): string {
     if (typeof value === 'string') {
-      // Escape quotes in string values
-      const escaped = value.replace(/"/g, '\\"')
-      return `"${escaped}"`
+      return `"${escapeWirefilterString(value)}"`
     }
 
     if (typeof value === 'number') {

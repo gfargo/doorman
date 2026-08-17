@@ -1,6 +1,7 @@
 import type { VercelRuleType } from '../types/vercel'
 import type { CloudflareFieldType } from '../types/cloudflare'
 import { logger } from '../logger'
+import { escapeWirefilterString } from './wirefilterEscape'
 
 /**
  * Maps field types between Vercel and Cloudflare
@@ -67,11 +68,11 @@ export class FieldMapper {
 
     // For header and cookie, append the key
     if (vercelType === 'header' && key) {
-      return `${field}["${key.toLowerCase()}"]`
+      return `${field}["${escapeWirefilterString(key.toLowerCase())}"]`
     }
 
     if (vercelType === 'cookie' && key) {
-      return `${field}["${key}"]`
+      return `${field}["${escapeWirefilterString(key)}"]`
     }
 
     return field

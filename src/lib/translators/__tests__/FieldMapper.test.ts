@@ -78,6 +78,17 @@ describe('FieldMapper', () => {
       expect(FieldMapper.toCloudflare('cookie', 'session_id')).toBe('http.cookie["session_id"]')
     })
 
+    it('escapes quotes in a header key so it cannot break out of the field reference', () => {
+      const result = FieldMapper.toCloudflare('header', 'x"] or (true) or http.request.headers["x')
+      expect(result).toBe('http.request.headers["x\\"] or (true) or http.request.headers[\\"x"]')
+      expect(result).not.toMatch(/headers\["[^"\\]*"\] or/)
+    })
+
+    it('escapes quotes in a cookie key so it cannot break out of the field reference', () => {
+      const result = FieldMapper.toCloudflare('cookie', 'a" or true or http.cookie["a')
+      expect(result).toBe('http.cookie["a\\" or true or http.cookie[\\"a"]')
+    })
+
     it('throws for environment (Vercel-specific, no mapping)', () => {
       expect(() => FieldMapper.toCloudflare('environment')).toThrow(/Unsupported Vercel rule type/)
     })
