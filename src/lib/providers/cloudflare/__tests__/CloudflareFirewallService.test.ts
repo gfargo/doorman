@@ -221,6 +221,166 @@ describe('CloudflareFirewallService', () => {
       expect(config.ips?.[0]?.hostname).toBe('example.com')
     })
 
+    it('should recognize a CIDR IP-blocking rule using the `in {...}` set form (regression test)', async () => {
+      const mockRuleset: CloudflareRuleset = {
+        id: 'ruleset-1',
+        name: 'Test Ruleset',
+        description: 'Test',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        rules: [
+          {
+            id: 'rule-1',
+            action: 'block',
+            expression: 'ip.src in {192.168.1.0/24}',
+            description: 'Block IP range (example.com)',
+            enabled: true,
+          },
+        ],
+      }
+
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(mockRuleset)
+      jest.spyOn(mockClient, 'getOrCreateIPBlocklist').mockResolvedValue({
+        id: 'list-1',
+        name: 'Doorman IP Blocklist',
+        description: 'Test',
+        kind: 'ip',
+        num_items: 0,
+        num_referencing_filters: 0,
+        created_on: '2024-01-01T00:00:00Z',
+        modified_on: '2024-01-01T00:00:00Z',
+      })
+      jest.spyOn(mockClient, 'getListItems').mockResolvedValue([])
+
+      const config = await service.fetchConfig()
+
+      // Must round-trip as an IP rule, not a generic custom rule
+      expect(config.rules).toHaveLength(0)
+      expect(config.ips).toHaveLength(1)
+      expect(config.ips?.[0]?.ip).toBe('192.168.1.0/24')
+      expect(config.ips?.[0]?.hostname).toBe('example.com')
+    })
+
+    it('should recognize a plain IPv6 IP-blocking rule (regression test)', async () => {
+      const mockRuleset: CloudflareRuleset = {
+        id: 'ruleset-1',
+        name: 'Test Ruleset',
+        description: 'Test',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        rules: [
+          {
+            id: 'rule-1',
+            action: 'block',
+            expression: 'ip.src eq 2001:db8::1',
+            description: 'Block specific IP (example.com)',
+            enabled: true,
+          },
+        ],
+      }
+
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(mockRuleset)
+      jest.spyOn(mockClient, 'getOrCreateIPBlocklist').mockResolvedValue({
+        id: 'list-1',
+        name: 'Doorman IP Blocklist',
+        description: 'Test',
+        kind: 'ip',
+        num_items: 0,
+        num_referencing_filters: 0,
+        created_on: '2024-01-01T00:00:00Z',
+        modified_on: '2024-01-01T00:00:00Z',
+      })
+      jest.spyOn(mockClient, 'getListItems').mockResolvedValue([])
+
+      const config = await service.fetchConfig()
+
+      expect(config.rules).toHaveLength(0)
+      expect(config.ips).toHaveLength(1)
+      expect(config.ips?.[0]?.ip).toBe('2001:db8::1')
+      expect(config.ips?.[0]?.hostname).toBe('example.com')
+    })
+
+    it('should recognize an IPv6 CIDR IP-blocking rule using the `in {...}` set form (regression test)', async () => {
+      const mockRuleset: CloudflareRuleset = {
+        id: 'ruleset-1',
+        name: 'Test Ruleset',
+        description: 'Test',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        rules: [
+          {
+            id: 'rule-1',
+            action: 'block',
+            expression: 'ip.src in {2001:db8::/32}',
+            description: 'Block IP range',
+            enabled: true,
+          },
+        ],
+      }
+
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(mockRuleset)
+      jest.spyOn(mockClient, 'getOrCreateIPBlocklist').mockResolvedValue({
+        id: 'list-1',
+        name: 'Doorman IP Blocklist',
+        description: 'Test',
+        kind: 'ip',
+        num_items: 0,
+        num_referencing_filters: 0,
+        created_on: '2024-01-01T00:00:00Z',
+        modified_on: '2024-01-01T00:00:00Z',
+      })
+      jest.spyOn(mockClient, 'getListItems').mockResolvedValue([])
+
+      const config = await service.fetchConfig()
+
+      expect(config.rules).toHaveLength(0)
+      expect(config.ips).toHaveLength(1)
+      expect(config.ips?.[0]?.ip).toBe('2001:db8::/32')
+    })
+
+    it('should not misclassify a List-based IP rule as a CIDR set-literal rule', async () => {
+      const mockRuleset: CloudflareRuleset = {
+        id: 'ruleset-1',
+        name: 'Test Ruleset',
+        description: 'Test',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        rules: [
+          {
+            id: 'rule-1',
+            action: 'block',
+            expression: 'ip.src in $doorman_ip_blocklist',
+            description: 'Block IPs in Doorman IP Blocklist',
+            enabled: true,
+          },
+        ],
+      }
+
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(mockRuleset)
+      jest.spyOn(mockClient, 'getOrCreateIPBlocklist').mockResolvedValue({
+        id: 'list-1',
+        name: 'Doorman IP Blocklist',
+        description: 'Test',
+        kind: 'ip',
+        num_items: 0,
+        num_referencing_filters: 1,
+        created_on: '2024-01-01T00:00:00Z',
+        modified_on: '2024-01-01T00:00:00Z',
+      })
+      jest.spyOn(mockClient, 'getListItems').mockResolvedValue([])
+
+      const config = await service.fetchConfig()
+
+      // List-based rules are skipped from both `rules` and inline `ips`
+      // (their IPs are fetched separately from the Cloudflare List)
+      expect(config.rules).toHaveLength(0)
+      expect(config.ips).toHaveLength(0)
+    })
+
     it('should continue if Lists API fails', async () => {
       const mockRuleset: CloudflareRuleset = {
         id: 'ruleset-1',
