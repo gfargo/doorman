@@ -4,13 +4,14 @@ import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
 import { firewallConfigSchema } from '../lib/schemas/firewallSchemas'
 import { TemplateName, getTemplateConfig, templates } from '../lib/templates'
-import { FirewallConfig } from '../lib/types'
+import { CustomRule, FirewallConfig } from '../lib/types'
 import { prompt } from '../lib/ui/prompt'
 import { getConfig, saveConfig } from '../lib/utils/config'
 import { handleCommandError } from '../lib/utils/handleCommandError'
 
 interface TemplateOptions {
   name?: string
+  config?: string
   dryRun?: boolean
   debug?: boolean
 }
@@ -23,6 +24,11 @@ export const builder = {
     type: 'string',
     description: 'Name of the template to add',
   },
+  config: {
+    alias: 'c',
+    type: 'string',
+    description: 'Path to firewall config file (defaults to .doorman.json)',
+  },
   dryRun: {
     alias: 'd',
     type: 'boolean',
@@ -34,6 +40,16 @@ export const builder = {
     description: 'Enable debug logging',
     default: false,
   },
+}
+
+/**
+ * Check the incoming template rules for name collisions with the existing
+ * config, the same way add.ts's checkDuplicates does for a single rule.
+ */
+function findDuplicateNames(existingRules: CustomRule[], newRules: CustomRule[]): string[] {
+  const existingNames = new Set(existingRules.map((r) => r.name.toLowerCase()))
+  const duplicates = newRules.filter((rule) => existingNames.has(rule.name.toLowerCase())).map((rule) => rule.name)
+  return [...new Set(duplicates)]
 }
 
 const getAvailableTemplates = (): TemplateName[] => {
@@ -71,7 +87,8 @@ export const handler = async (argv: Arguments<TemplateOptions>) => {
     // Load config without validation — we're about to modify it,
     // so we validate the result instead of the input.
     logger.start('Loading current configuration...')
-    const config = await getConfig(undefined, 'raw')
+    const config = await getConfig(argv.config, 'raw')
+    const existingRules = config.rules || []
 
     if (argv.dryRun) {
       logger.info(chalk.cyan('\nDry run - The following rules would be added:'))
@@ -79,10 +96,25 @@ export const handler = async (argv: Arguments<TemplateOptions>) => {
       return
     }
 
+    // Check for rules that would collide with existing ones by name —
+    // otherwise re-running the same template silently appends duplicates.
+    const duplicateNames = findDuplicateNames(existingRules, templateConfig.rules)
+    if (duplicateNames.length > 0) {
+      logger.warn(chalk.yellow(`⚠️  Rule name(s) already exist in the configuration: ${duplicateNames.join(', ')}`))
+      const proceed = (await prompt('Proceed anyway?', {
+        type: 'confirm',
+        initial: false,
+      })) as boolean
+      if (!proceed) {
+        logger.info('Cancelled.')
+        return
+      }
+    }
+
     // Append the new rules to the existing configuration
     const updatedConfig: FirewallConfig = {
       ...config,
-      rules: [...config.rules, ...templateConfig.rules],
+      rules: [...existingRules, ...templateConfig.rules],
     }
 
     // Validate the resulting config before saving
@@ -98,7 +130,7 @@ export const handler = async (argv: Arguments<TemplateOptions>) => {
     }
 
     logger.start('Saving updated configuration...')
-    await saveConfig(updatedConfig, undefined, { validate: false })
+    await saveConfig(updatedConfig, argv.config, { validate: false })
     logger.success(chalk.green(`Successfully added template '${templateName}' to configuration`))
   } catch (error) {
     handleCommandError(error, 'adding template')
