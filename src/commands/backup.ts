@@ -191,7 +191,11 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
           },
         }
 
-        await saveConfig(backupConfig as unknown as FirewallConfig, backupPath)
+        // Skip validation — the added `backup` metadata field isn't part of the
+        // live config schema (additionalProperties: false), so validating here
+        // would reject every backup. Restoring already loads backups in 'raw'
+        // mode for the same reason.
+        await saveConfig(backupConfig as unknown as FirewallConfig, backupPath, { validate: false })
 
         logger.success(chalk.green(`✅ Backup created: ${backupPath}`))
         logger.log('')

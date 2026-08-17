@@ -99,16 +99,24 @@ export class OperationSafety {
   }
 
   /**
-   * Perform dry-run validation before actual changes
+   * Perform dry-run validation before actual changes.
+   *
+   * `issues` are structural problems that make the config unsafe to sync at all
+   * (e.g. malformed shape) and always block the operation. `warnings` are risk
+   * signals (large deletion ratio, duplicate names, etc.) that should be surfaced
+   * to the user via the risk-assessment/confirmation flow below, not treated as
+   * unrecoverable failures — otherwise a config that's merely risky (or just has
+   * two rules with the same name) can never be synced, even with --force.
    */
   public static async performDryRunValidation(
     config: UnifiedConfig,
     operation: string,
     validateFn: (config: UnifiedConfig) => Promise<ChangeSet>,
-  ): Promise<{ valid: boolean; changes: ChangeSet; issues: string[] }> {
+  ): Promise<{ valid: boolean; changes: ChangeSet; issues: string[]; warnings: string[] }> {
     logger.info(`🔍 Performing dry-run validation for ${operation}...`)
 
     const issues: string[] = []
+    const warnings: string[] = []
     let changes: ChangeSet = {
       rulesToAdd: [],
       rulesToUpdate: [],
@@ -120,17 +128,15 @@ export class OperationSafety {
     }
 
     try {
-      // Validate configuration structure
+      // Validate configuration structure — real, unrecoverable errors
       this.validateConfigurationStructure(config, issues)
 
       // Perform operation-specific validation
       changes = await validateFn(config)
 
-      // Validate changes
-      this.validateChanges(changes, issues)
-
-      // Check for potential issues
-      this.checkForPotentialIssues(config, changes, issues)
+      // Risk signals — surfaced as warnings, not hard failures
+      this.validateChanges(changes, warnings)
+      this.checkForPotentialIssues(config, changes, warnings)
 
       const valid = issues.length === 0
 
@@ -141,13 +147,18 @@ export class OperationSafety {
         issues.forEach((issue) => logger.warn(`   • ${issue}`))
       }
 
-      return { valid, changes, issues }
+      if (warnings.length > 0) {
+        logger.warn(`⚠️  Dry-run validation found ${warnings.length} warning(s):`)
+        warnings.forEach((warning) => logger.warn(`   • ${warning}`))
+      }
+
+      return { valid, changes, issues, warnings }
     } catch (error) {
       const errorMessage = `Dry-run validation failed: ${error instanceof Error ? error.message : String(error)}`
       issues.push(errorMessage)
       logger.error(errorMessage)
 
-      return { valid: false, changes, issues }
+      return { valid: false, changes, issues, warnings }
     }
   }
 

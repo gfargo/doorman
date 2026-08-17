@@ -122,6 +122,31 @@ describe('ExpressionBuilder', () => {
       )
     })
 
+    it('escapes quotes in a header key so it cannot break out of the field reference', () => {
+      const condition: VercelRuleCondition = {
+        type: 'header',
+        op: 'eq',
+        value: 'x',
+        key: 'x"] or (true) or http.request.headers["x',
+      }
+      const result = ExpressionBuilder.fromVercelCondition(condition)
+      // The escaped key must stay inside a single string literal — no unescaped
+      // `"]` sequence should appear anywhere in the generated field reference.
+      expect(result).toBe('http.request.headers["x\\"] or (true) or http.request.headers[\\"x"] eq "x"')
+      expect(result).not.toMatch(/headers\["[^"\\]*"\] or/)
+    })
+
+    it('escapes quotes in a cookie key so it cannot break out of the field reference', () => {
+      const condition: VercelRuleCondition = {
+        type: 'cookie',
+        op: 'eq',
+        value: 'x',
+        key: 'a" or true or http.cookie["a',
+      }
+      const result = ExpressionBuilder.fromVercelCondition(condition)
+      expect(result).toBe('http.cookie["a\\" or true or http.cookie[\\"a"] eq "x"')
+    })
+
     it('handles numeric values', () => {
       const condition: VercelRuleCondition = { type: 'geo_as_number', op: 'eq', value: 13335 }
       expect(ExpressionBuilder.fromVercelCondition(condition)).toBe('ip.geoip.asnum eq 13335')
@@ -217,6 +242,26 @@ describe('ExpressionBuilder', () => {
         key: 'Authorization',
       })
       expect(result).toBe('http.request.headers["Authorization"] eq "Bearer token"')
+    })
+
+    it('escapes quotes in a unified header key so it cannot break out of the field reference', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'header',
+        operator: 'eq',
+        value: 'x',
+        key: 'x"] or (true) or http.request.headers["x',
+      })
+      expect(result).toBe('http.request.headers["x\\"] or (true) or http.request.headers[\\"x"] eq "x"')
+      expect(result).not.toMatch(/headers\["[^"\\]*"\] or/)
+    })
+
+    it('escapes backslashes in string values so a trailing backslash cannot consume the closing quote', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'path',
+        operator: 'eq',
+        value: 'a\\',
+      })
+      expect(result).toBe('http.request.uri.path eq "a\\\\"')
     })
   })
 

@@ -98,6 +98,42 @@ describe('OperationSafety', () => {
       expect(result.valid).toBe(false)
       expect(result.issues).toContain('Dry-run validation failed: Validation failed')
     })
+
+    it('should surface duplicate rule names as a warning, not a blocking issue', async () => {
+      const configWithDuplicates: UnifiedConfig = {
+        ...mockConfig,
+        rules: [
+          { ...mockConfig.rules[0]!, id: 'rule_1', name: 'Block Bad Bots' },
+          { ...mockConfig.rules[0]!, id: 'rule_2', name: 'Block Bad Bots' },
+        ],
+      }
+      const validateFn = jest.fn().mockResolvedValue(mockChanges)
+
+      const result = await OperationSafety.performDryRunValidation(configWithDuplicates, 'test operation', validateFn)
+
+      expect(result.valid).toBe(true)
+      expect(result.issues).toHaveLength(0)
+      expect(result.warnings.some((w) => w.includes('Duplicate rule names found'))).toBe(true)
+    })
+
+    it('should surface a high deletion ratio as a warning, not a blocking issue', async () => {
+      const deletionHeavyChanges: ChangeSet = {
+        rulesToAdd: [],
+        rulesToUpdate: [],
+        rulesToDelete: [mockConfig.rules[0]!],
+        ipsToAdd: [],
+        ipsToUpdate: [],
+        ipsToDelete: [],
+        hasChanges: true,
+      }
+      const validateFn = jest.fn().mockResolvedValue(deletionHeavyChanges)
+
+      const result = await OperationSafety.performDryRunValidation(mockConfig, 'test operation', validateFn)
+
+      expect(result.valid).toBe(true)
+      expect(result.issues).toHaveLength(0)
+      expect(result.warnings.some((w) => w.includes('High deletion ratio detected'))).toBe(true)
+    })
   })
 
   describe('getBackupRecommendation', () => {
