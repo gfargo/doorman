@@ -4,7 +4,6 @@ import type { IFirewallProvider, ProviderType } from '../providers/IFirewallProv
 import { FirewallService } from '../services/FirewallService'
 import { VercelClient } from '../services/VercelClient'
 import { FirewallConfig } from '../types'
-import { promptForCredentials } from '../ui/promptForCredentials'
 import { getConfig } from './config'
 import { handleCommandError } from './handleCommandError'
 import { getProviderInstance } from './providerHelper'
@@ -100,7 +99,7 @@ export async function withCredentials(
     }
 
     // 2. Get provider instance (handles credential resolution for both providers)
-    const provider = await getProviderInstance({
+    const { provider, vercelCredentials } = await getProviderInstance({
       provider: options.provider,
       config,
       interactive: !options.ci,
@@ -122,16 +121,13 @@ export async function withCredentials(
     let projectId = ''
     let teamId = ''
 
-    if (provider.name === 'vercel') {
-      // Resolve Vercel credentials for the legacy context fields
-      const resolved = await promptForCredentials({
-        token: options.token,
-        projectId: options.projectId || config.projectId,
-        teamId: options.teamId || config.teamId,
-      })
-      token = resolved.token
-      projectId = resolved.projectId
-      teamId = resolved.teamId
+    if (provider.name === 'vercel' && vercelCredentials) {
+      // Reuse the credentials getProviderInstance already resolved above —
+      // re-resolving here via promptForCredentials would ask an interactive
+      // user for the same token/projectId/teamId a second time.
+      token = vercelCredentials.token
+      projectId = vercelCredentials.projectId
+      teamId = vercelCredentials.teamId
       client = new VercelClient(projectId, teamId, token)
       service = new FirewallService(client)
     } else {

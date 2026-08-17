@@ -25,12 +25,25 @@ export interface ProviderOptions {
   accountId?: string
 }
 
+export interface ProviderInstanceResult {
+  provider: IFirewallProvider
+  /**
+   * Resolved Vercel credentials, populated only when `provider.name` is
+   * `'vercel'`. Callers that need the raw token/projectId/teamId (e.g. for
+   * legacy `VercelClient` construction) should use these rather than
+   * re-resolving credentials themselves — resolution here may already have
+   * prompted the user interactively, and prompting again would ask for the
+   * same values a second time.
+   */
+  vercelCredentials?: { token: string; projectId: string; teamId: string }
+}
+
 /**
  * Get provider instance with automatic detection and credential prompting
  * @param options - Provider options including credentials and config
- * @returns IFirewallProvider instance
+ * @returns The resolved provider, plus Vercel credentials when applicable
  */
-export async function getProviderInstance(options: ProviderOptions): Promise<IFirewallProvider> {
+export async function getProviderInstance(options: ProviderOptions): Promise<ProviderInstanceResult> {
   // 1. Determine which provider to use
   let providerType: ProviderType
 
@@ -63,7 +76,8 @@ export async function getProviderInstance(options: ProviderOptions): Promise<IFi
     if (providerType === 'vercel') {
       return await getVercelProvider(options)
     } else if (providerType === 'cloudflare') {
-      return await getCloudflareProvider(options)
+      const provider = await getCloudflareProvider(options)
+      return { provider }
     } else {
       throw new Error(`Unknown provider: ${providerType}`)
     }
@@ -76,7 +90,7 @@ export async function getProviderInstance(options: ProviderOptions): Promise<IFi
 /**
  * Get Vercel provider instance
  */
-async function getVercelProvider(options: ProviderOptions): Promise<IFirewallProvider> {
+async function getVercelProvider(options: ProviderOptions): Promise<ProviderInstanceResult> {
   const token = options.token || process.env.VERCEL_TOKEN
 
   // Type guard for accessing Vercel-specific properties
@@ -104,18 +118,20 @@ async function getVercelProvider(options: ProviderOptions): Promise<IFirewallPro
       teamId,
     })
 
-    return VercelProvider.fromConfig({
+    const provider = VercelProvider.fromConfig({
       token: credentials.token,
       projectId: credentials.projectId,
       teamId: credentials.teamId,
     })
+    return { provider, vercelCredentials: credentials }
   }
 
-  return VercelProvider.fromConfig({
+  const provider = VercelProvider.fromConfig({
     token,
     projectId,
     teamId,
   })
+  return { provider, vercelCredentials: { token, projectId, teamId } }
 }
 
 /**
