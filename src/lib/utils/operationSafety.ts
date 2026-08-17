@@ -395,9 +395,10 @@ export class OperationSafety {
   }
 
   /**
-   * Validate changes for potential issues
+   * Assess changes for risk signals (deletion ratio, changeset size). These are
+   * warnings, not blocking errors — see performDryRunValidation.
    */
-  private static validateChanges(changes: ChangeSet, issues: string[]): void {
+  private static validateChanges(changes: ChangeSet, warnings: string[]): void {
     // Check for excessive deletions
     const totalDeletions = (changes.rulesToDelete?.length || 0) + (changes.ipsToDelete?.length || 0)
     const totalChanges =
@@ -410,23 +411,25 @@ export class OperationSafety {
     if (totalDeletions > 0 && totalChanges > 0) {
       const deletionRatio = totalDeletions / totalChanges
       if (deletionRatio > 0.5) {
-        issues.push(`High deletion ratio detected: ${Math.round(deletionRatio * 100)}% of changes are deletions`)
+        warnings.push(`High deletion ratio detected: ${Math.round(deletionRatio * 100)}% of changes are deletions`)
       }
     }
 
     // Check for large number of changes
     if (totalChanges > 100) {
-      issues.push(`Large number of changes detected: ${totalChanges} total changes`)
+      warnings.push(`Large number of changes detected: ${totalChanges} total changes`)
     }
   }
 
   /**
-   * Check for potential issues in configuration and changes
+   * Check configuration and changes for risk signals (all rules deleted,
+   * potentially traffic-blocking rules, duplicate names, etc). These are
+   * warnings, not blocking errors — see performDryRunValidation.
    */
-  private static checkForPotentialIssues(config: UnifiedConfig, changes: ChangeSet, issues: string[]): void {
+  private static checkForPotentialIssues(config: UnifiedConfig, changes: ChangeSet, warnings: string[]): void {
     // Check if all rules are being deleted
     if (changes.rulesToDelete?.length === config.rules.length && config.rules.length > 0) {
-      issues.push('All existing rules will be deleted - this removes all firewall protection')
+      warnings.push('All existing rules will be deleted - this removes all firewall protection')
     }
 
     // Check for rules that might block all traffic
@@ -439,19 +442,19 @@ export class OperationSafety {
     )
 
     if (potentiallyBlockingRules.length > 0) {
-      issues.push(`Found ${potentiallyBlockingRules.length} rules that may block all traffic`)
+      warnings.push(`Found ${potentiallyBlockingRules.length} rules that may block all traffic`)
     }
 
     // Check for very large IP lists
     if (config.ips && config.ips.length > 1000) {
-      issues.push(`Large IP list detected: ${config.ips.length} IPs may impact performance`)
+      warnings.push(`Large IP list detected: ${config.ips.length} IPs may impact performance`)
     }
 
     // Check for duplicate rule names
     const ruleNames = config.rules.map((rule) => rule.name)
     const duplicateNames = ruleNames.filter((name, index) => ruleNames.indexOf(name) !== index)
     if (duplicateNames.length > 0) {
-      issues.push(`Duplicate rule names found: ${[...new Set(duplicateNames)].join(', ')}`)
+      warnings.push(`Duplicate rule names found: ${[...new Set(duplicateNames)].join(', ')}`)
     }
   }
 }

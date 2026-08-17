@@ -305,6 +305,7 @@ describe('CloudflareFirewallService', () => {
           hasChanges: true,
         },
         issues: [],
+        warnings: [],
       })
 
       const result = await service.syncRules(mockConfig, { dryRun: true })

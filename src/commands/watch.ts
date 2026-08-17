@@ -201,6 +201,6 @@ async function syncChangesWithProvider(provider: IFirewallProvider, updatedConfi
     throw new Error(`Sync failed: ${result.errors?.join(', ') || 'unknown error'}`)
   }
 
-  result.warnings?.forEach((w) => logger.warn(w))
   logger.success(chalk.green(`✅ Sync completed at ${new Date().toLocaleTimeString()}`))
+  result.warnings?.forEach((w) => logger.warn(w))
 }
