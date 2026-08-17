@@ -16,14 +16,26 @@ const MockedCloudflareClient = CloudflareClient as jest.MockedClass<typeof Cloud
 
 // Shaped like the real Vercel API response (VercelConfig), including the
 // fields Vercel returns that aren't part of a Doorman config — id, crs,
-// projectKey, ownerId — to guard against validating/saving the raw response
-// as-is, which would fail schema validation (additionalProperties: false).
+// projectKey, ownerId at the top level, and valid/validationErrors on every
+// rule — to guard against validating/saving the raw response as-is, which
+// would fail schema validation (additionalProperties: false on both
+// FirewallConfig and CustomRule).
 const vercelRemoteConfig = {
   version: 5,
   id: 'config_1',
   firewallEnabled: true,
   crs: {},
-  rules: [],
+  rules: [
+    {
+      id: 'rule_block_admin',
+      name: 'Block Admin',
+      conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/admin' }] }],
+      action: { mitigate: { action: 'deny' } },
+      active: true,
+      valid: true,
+      validationErrors: [],
+    },
+  ],
   ips: [],
   projectKey: 'pk_123',
   ownerId: 'owner_1',
@@ -83,6 +95,11 @@ describe('backup command', () => {
     expect(content.ownerId).toBeUndefined()
     expect(content.version).toBe(5)
     expect(content.firewallEnabled).toBe(true)
+    // Per-rule API-only fields must not leak into the saved backup either.
+    expect(content.rules).toHaveLength(1)
+    expect(content.rules[0].valid).toBeUndefined()
+    expect(content.rules[0].validationErrors).toBeUndefined()
+    expect(content.rules[0].name).toBe('Block Admin')
   })
 
   it('creates a backup file for the Cloudflare provider without crashing (regression test for #82)', async () => {

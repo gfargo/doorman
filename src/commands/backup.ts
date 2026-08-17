@@ -175,14 +175,16 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
         // ownerId) that aren't part of a Doorman config and would fail schema
         // validation (additionalProperties: false) — strip them before
         // validating/saving, the same way download.ts builds its saved config.
-        // Cloudflare's fetchConfig() already returns a clean UnifiedConfig with
-        // no extra fields, so it's used as-is.
+        // The API also attaches valid/validationErrors to every rule object
+        // (download.ts strips these too, for the same reason — CustomRule also
+        // has additionalProperties: false). Cloudflare's fetchConfig() already
+        // returns a clean UnifiedConfig with no extra fields, so it's used as-is.
         const sanitizedConfig =
           provider.name === 'vercel'
             ? {
                 version: remoteConfig.version,
                 firewallEnabled: (remoteConfig as VercelConfig).firewallEnabled,
-                rules: remoteConfig.rules,
+                rules: remoteConfig.rules.map(({ valid, validationErrors, ...rule }: any) => rule),
                 ips: remoteConfig.ips,
                 updatedAt: (remoteConfig as VercelConfig).updatedAt,
               }
