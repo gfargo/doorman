@@ -90,15 +90,22 @@ export const handler = async (argv: Arguments<TemplateOptions>) => {
     const config = await getConfig(argv.config, 'raw')
     const existingRules = config.rules || []
 
+    // Check for rules that would collide with existing ones by name —
+    // otherwise re-running the same template silently appends duplicates.
+    // Computed before the dry-run branch so --dryRun actually previews this
+    // warning too, instead of silently skipping the one thing a preview
+    // most needs to surface.
+    const duplicateNames = findDuplicateNames(existingRules, templateConfig.rules)
+
     if (argv.dryRun) {
       logger.info(chalk.cyan('\nDry run - The following rules would be added:'))
       logger.log(JSON.stringify(templateConfig.rules, null, 2))
+      if (duplicateNames.length > 0) {
+        logger.warn(chalk.yellow(`⚠️  Rule name(s) already exist in the configuration: ${duplicateNames.join(', ')}`))
+      }
       return
     }
 
-    // Check for rules that would collide with existing ones by name —
-    // otherwise re-running the same template silently appends duplicates.
-    const duplicateNames = findDuplicateNames(existingRules, templateConfig.rules)
     if (duplicateNames.length > 0) {
       logger.warn(chalk.yellow(`⚠️  Rule name(s) already exist in the configuration: ${duplicateNames.join(', ')}`))
       const proceed = (await prompt('Proceed anyway?', {
