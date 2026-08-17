@@ -1,3 +1,4 @@
+import { isIPv4, isIPv6 } from 'net'
 import { BaseFirewallService } from '../BaseFirewallService'
 import { CloudflareClient } from './CloudflareClient'
 import { CloudflareOptimizer } from './CloudflareOptimizer'
@@ -562,10 +563,7 @@ export class CloudflareFirewallService extends BaseFirewallService {
       if (config.ips) {
         config.ips.forEach((ip, index) => {
           try {
-            // Enhanced IP/CIDR validation
-            const ipPattern =
-              /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(?:\/(?:[0-9]|[1-2][0-9]|3[0-2]))?$/
-            if (!ipPattern.test(ip.ip)) {
+            if (!CloudflareFirewallService.isValidIPOrCIDR(ip.ip)) {
               const error = cloudflareErrors.invalidIP(ip.ip)
               errors.push({
                 path: `ips[${index}].ip`,
@@ -654,6 +652,36 @@ export class CloudflareFirewallService extends BaseFirewallService {
   public clearCache(): void {
     this.client.clearCache()
     this.optimizer.clearCaches()
+  }
+
+  /**
+   * Validate an IP address or CIDR range, IPv4 or IPv6. Cloudflare's IP
+   * blocking/Lists API supports both address families, so validation here
+   * must too — a plain IPv4-only regex rejects legitimate IPv6 configs
+   * outright.
+   */
+  private static isValidIPOrCIDR(value: string): boolean {
+    const [address, prefix, ...rest] = value.split('/')
+    if (rest.length > 0 || !address) {
+      return false
+    }
+
+    if (prefix === undefined) {
+      return isIPv4(address) || isIPv6(address)
+    }
+
+    if (!/^\d+$/.test(prefix)) {
+      return false
+    }
+    const prefixLength = Number(prefix)
+
+    if (isIPv4(address)) {
+      return prefixLength <= 32
+    }
+    if (isIPv6(address)) {
+      return prefixLength <= 128
+    }
+    return false
   }
 
   /**

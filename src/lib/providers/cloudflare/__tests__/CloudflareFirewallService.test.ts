@@ -940,6 +940,37 @@ describe('CloudflareFirewallService', () => {
       expect(result.errors.some((e) => e.code === 'CF_6013')).toBe(true)
     })
 
+    it('accepts IPv6 addresses and CIDR ranges (regression test for #87)', () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [],
+        ips: [
+          { id: 'ip-1', ip: '2001:db8::1', action: 'deny' },
+          { id: 'ip-2', ip: '2001:db8::/32', action: 'deny' },
+          { id: 'ip-3', ip: '::1', action: 'deny' },
+        ],
+      }
+
+      const result = service.validateConfig(config)
+
+      expect(result.errors.some((e) => e.code === 'CF_6013')).toBe(false)
+    })
+
+    it('rejects an IPv6 CIDR with an out-of-range prefix length', () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [],
+        ips: [{ id: 'ip-1', ip: '2001:db8::/129', action: 'deny' }],
+      }
+
+      const result = service.validateConfig(config)
+
+      expect(result.valid).toBe(false)
+      expect(result.errors.some((e) => e.code === 'CF_6013')).toBe(true)
+    })
+
     it('should warn about large IP lists without account ID', () => {
       const serviceWithoutAccount = new CloudflareFirewallService(API_TOKEN, ZONE_ID)
 
