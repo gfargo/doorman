@@ -151,6 +151,20 @@ describe('ExpressionBuilder', () => {
       const condition: VercelRuleCondition = { type: 'geo_as_number', op: 'eq', value: 13335 }
       expect(ExpressionBuilder.fromVercelCondition(condition)).toBe('ip.geoip.asnum eq 13335')
     })
+
+    it('builds a valueless exists (ex) expression (regression test for #85)', () => {
+      const condition: VercelRuleCondition = { type: 'header', op: 'ex', key: 'x-api-version' }
+      expect(ExpressionBuilder.fromVercelCondition(condition)).toBe('http.request.headers["x-api-version"] exists')
+    })
+
+    it('builds a valueless not-exists (nex) expression wrapped in not(...) (regression test for #85)', () => {
+      const condition: VercelRuleCondition = { type: 'header', op: 'nex', key: 'x-api-version' }
+      expect(ExpressionBuilder.fromVercelCondition(condition)).toBe(
+        'not (http.request.headers["x-api-version"] exists)',
+      )
+      expect(ExpressionBuilder.fromVercelCondition(condition)).not.toContain('undefined')
+      expect(ExpressionBuilder.fromVercelCondition(condition)).not.toContain('not exists')
+    })
   })
 
   describe('fromUnifiedConditions', () => {
@@ -293,6 +307,48 @@ describe('ExpressionBuilder', () => {
       })
       expect(result).toBe('http.request.uri.query eq "abc"')
       expect(result).not.toContain('headers')
+    })
+
+    it('builds a valueless exists expression (regression test for #85)', () => {
+      // `value` is omitted here the same way RuleTranslator's Vercel->unified
+      // conversion leaves it undefined for exists/not_exists conditions.
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'header',
+        operator: 'exists',
+        key: 'x-api-version',
+      } as UnifiedCondition)
+      expect(result).toBe('http.request.headers["x-api-version"] exists')
+    })
+
+    it('builds a valueless not_exists expression wrapped in not(...) (regression test for #85)', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'header',
+        operator: 'not_exists',
+        key: 'x-api-version',
+      } as UnifiedCondition)
+      expect(result).toBe('not (http.request.headers["x-api-version"] exists)')
+      expect(result).not.toContain('undefined')
+      expect(result).not.toContain('not exists')
+    })
+
+    it('builds a not_contains expression as a positive comparison wrapped in not(...) (regression test for #85)', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'path',
+        operator: 'not_contains',
+        value: 'admin',
+      })
+      expect(result).toBe('not (http.request.uri.path contains "admin")')
+      expect(result).not.toContain('not contains')
+    })
+
+    it('builds a not_in expression as a positive comparison wrapped in not(...) (regression test for #85)', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'country',
+        operator: 'not_in',
+        value: ['US', 'CA'],
+      })
+      expect(result).toBe('not (ip.geoip.country in {"US" "CA"})')
+      expect(result).not.toContain('not in')
     })
   })
 

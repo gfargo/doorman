@@ -247,7 +247,11 @@ describe('Rule Translation Accuracy', () => {
       const result = RuleTranslator.unifiedToCloudflare(rule)
       expect(result.result.action).toBe('managed_challenge')
       expect(result.result.expression).toContain('ip.geoip.country')
-      expect(result.result.expression).toContain('not in')
+      // wirefilter has no single-token `not in` operator — `not_in` must
+      // translate to a positive `in` comparison wrapped in `not (...)`
+      // (see #85), not the invalid `not in` token.
+      expect(result.result.expression).toContain('not (ip.geoip.country in')
+      expect(result.result.expression).not.toContain('not in')
     })
 
     it('should translate a rate limit rule with all parameters', () => {
