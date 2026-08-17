@@ -61,7 +61,6 @@ export class VercelProvider {
     logger.debug('Creating Vercel provider with config:', {
       projectId,
       teamId,
-      token: token.substring(0, 10) + '...',
     })
 
     const client = new VercelClient(projectId, teamId, token)

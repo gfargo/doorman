@@ -405,6 +405,27 @@ describe('CloudflareClient', () => {
 
       expect(result).toBe(false)
     })
+
+    it('never leaks a fragment of the real API token into debug logs (regression test for #101)', async () => {
+      const mockResponse: CloudflareAPIResponse<CloudflareRuleset[]> = {
+        success: true,
+        errors: [],
+        messages: [],
+        result: [],
+      }
+      fetchMock.mockResolvedValueOnce(makeResponse({ ok: true, status: 200, jsonBody: mockResponse }))
+
+      await client.verifyCredentials()
+      // Second call hits the cache, which logs the cache key — the exact
+      // path where a raw token substring used to leak (see #101).
+      await client.verifyCredentials()
+
+      const debugMock = require('../../../logger').logger.debug as jest.Mock
+      const loggedText = debugMock.mock.calls.map((call: unknown[]) => String(call[0])).join('\n')
+      // The cache key is derived from the token — assert it's not just the
+      // token's own last 8 characters (the old "safe hash").
+      expect(loggedText).not.toContain(API_TOKEN.slice(-8))
+    })
   })
 
   describe('getZoneInfo', () => {

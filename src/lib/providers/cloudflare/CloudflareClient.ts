@@ -1,3 +1,4 @@
+import { createHash } from 'crypto'
 import { BaseFirewallClient } from '../BaseFirewallClient'
 import { logger } from '../../logger'
 import { providerErrors, cloudflareErrors } from '../../errors'
@@ -423,7 +424,10 @@ export class CloudflareClient extends BaseFirewallClient {
    */
   public async verifyCredentials(): Promise<boolean> {
     // Check cache for recent successful validation
-    const tokenHash = this.apiToken.slice(-8) // Use last 8 chars as a safe hash
+    // A real hash, not a raw token substring — cache.ts logs this key verbatim
+    // under --debug (`Cache set: cred:<hash> ...`), and a substring of the
+    // actual token would leak a fragment of the secret into those logs.
+    const tokenHash = createHash('sha256').update(this.apiToken).digest('hex').slice(0, 8)
     const cacheKey = CacheKeys.credentialValidation(tokenHash)
     const cached = this.cache.get<boolean>(cacheKey)
     if (cached !== undefined) {
