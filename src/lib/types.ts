@@ -122,4 +122,4 @@ export interface FirewallConfig extends ProjectConfig {
 
 // Re-export unified types for multi-provider support
 export type { UnifiedConfig, UnifiedRule, UnifiedIPRule } from './types/unified'
-export { isUnifiedConfig, isUnifiedRule, isUnifiedIPRule } from './types/unified'
+export { isUnifiedConfig, isUnifiedRule, isUnifiedIPRule, hasProviderMetadata } from './types/unified'

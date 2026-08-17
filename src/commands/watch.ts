@@ -2,6 +2,8 @@ import chalk from 'chalk'
 import { Stats, watchFile, unwatchFile } from 'fs'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
+import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
+import type { UnifiedConfig } from '../lib/types/unified'
 import { getConfig, saveConfig } from '../lib/utils/config'
 import { withCredentials } from '../lib/utils/withCredentials'
 
@@ -77,7 +79,7 @@ export const handler = async (argv: Arguments<WatchOptions>) => {
       ci: argv.ci,
       errorContext: 'setting up watch mode',
     },
-    async ({ service }) => {
+    async ({ service, provider }) => {
       let isProcessing = false
       let lastModified = 0
 
@@ -98,6 +100,12 @@ export const handler = async (argv: Arguments<WatchOptions>) => {
           logger.start('Validating and syncing changes...')
 
           const updatedConfig = await getConfig(configPath)
+
+          if (provider.name !== 'vercel') {
+            await syncChangesWithProvider(provider, updatedConfig as unknown as UnifiedConfig)
+            logger.log(chalk.dim('Watching for more changes...'))
+            return
+          }
 
           const { toAdd, toUpdate, toDelete, ipsToAdd, ipsToUpdate, ipsToDelete, version } =
             await service.getChanges(updatedConfig)
@@ -162,4 +170,36 @@ export const handler = async (argv: Arguments<WatchOptions>) => {
       keepAlive()
     },
   )
+}
+
+/**
+ * Mirrors the Vercel branch above but via the generic IFirewallProvider interface.
+ * Always applies changes without prompting (force: true) — same as the Vercel path,
+ * which goes straight from diff to sync without a confirmation prompt, since watch
+ * mode is opt-in unattended auto-sync.
+ */
+async function syncChangesWithProvider(provider: IFirewallProvider, updatedConfig: UnifiedConfig): Promise<void> {
+  const changes = await provider.getChanges(updatedConfig)
+
+  if (!changes.hasChanges) {
+    logger.info(chalk.blue('No changes detected, skipping sync'))
+    return
+  }
+
+  const totalChanges =
+    changes.rulesToAdd.length +
+    changes.rulesToUpdate.length +
+    changes.rulesToDelete.length +
+    (changes.ipsToAdd?.length ?? 0) +
+    (changes.ipsToUpdate?.length ?? 0) +
+    (changes.ipsToDelete?.length ?? 0)
+  logger.log(chalk.cyan(`Syncing ${totalChanges} changes...`))
+
+  const result = await provider.syncRules(updatedConfig, { force: true })
+
+  if (!result.success) {
+    throw new Error(`Sync failed: ${result.errors?.join(', ') || 'unknown error'}`)
+  }
+
+  logger.success(chalk.green(`✅ Sync completed at ${new Date().toLocaleTimeString()}`))
 }

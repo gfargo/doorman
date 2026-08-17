@@ -2,7 +2,7 @@ import chalk from 'chalk'
 import { writeFileSync } from 'fs'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
-import { CustomRule, FirewallConfig, IPBlockingRule } from '../lib/types'
+import { CustomRule, FirewallConfig, IPBlockingRule, hasProviderMetadata } from '../lib/types'
 import { getConfig } from '../lib/utils/config'
 import { handleCommandError } from '../lib/utils/handleCommandError'
 import { withCredentials } from '../lib/utils/withCredentials'
@@ -181,9 +181,12 @@ export const handler = async (argv: Arguments<ExportOptions>) => {
           ci: argv.ci,
           errorContext: 'exporting configuration',
         },
-        async ({ client }) => {
+        async ({ client, provider }) => {
           logger.start('Fetching remote configuration...')
-          config = await client.fetchFirewallConfig()
+          config =
+            provider.name === 'vercel'
+              ? await client.fetchFirewallConfig()
+              : ((await provider.fetchConfig()) as unknown as FirewallConfig)
         },
       )
     } else {
@@ -191,6 +194,17 @@ export const handler = async (argv: Arguments<ExportOptions>) => {
     }
 
     logger.start(`Exporting configuration in ${argv.format} format...`)
+
+    // The yaml/terraform/markdown generators below assume the legacy Vercel rule
+    // shape (conditionGroup/action.mitigate). A multi-provider (Cloudflare) config
+    // uses a different rule shape and would otherwise silently produce garbage
+    // output, so only json export is supported for those until dedicated generators
+    // exist.
+    if (argv.format !== 'json' && hasProviderMetadata(config!)) {
+      throw new Error(
+        `The '${argv.format}' export format is currently only supported for Vercel configurations. Use --format json instead.`,
+      )
+    }
 
     let output: string
     let defaultExtension: string

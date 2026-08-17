@@ -164,9 +164,10 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
         ci: argv.ci,
         errorContext: 'creating backup',
       },
-      async ({ client, projectId, teamId }) => {
+      async ({ client, provider, projectId, teamId }) => {
         logger.start('Fetching current remote configuration...')
-        const remoteConfig = await client.fetchFirewallConfig()
+        const remoteConfig =
+          provider.name === 'vercel' ? await client.fetchFirewallConfig() : await provider.fetchConfig()
 
         if (!existsSync(backupDir)) {
           mkdirSync(backupDir, { recursive: true })
@@ -179,32 +180,26 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
         const backupFilename = `firewall-backup-${timestamp}.json`
         const backupPath = join(backupDir, backupFilename)
 
-        const backupConfig: FirewallConfig & {
-          backup: {
-            createdAt: string
-            source: string
-            projectId: string
-            teamId: string
-            originalVersion: number
-          }
-        } = {
+        const backupConfig = {
           ...remoteConfig,
           backup: {
             createdAt: new Date().toISOString(),
             source: 'remote',
-            projectId,
-            teamId,
+            provider: provider.name,
+            ...(provider.name === 'vercel' ? { projectId, teamId } : {}),
             originalVersion: remoteConfig.version,
           },
         }
 
-        await saveConfig(backupConfig, backupPath)
+        await saveConfig(backupConfig as unknown as FirewallConfig, backupPath)
 
         logger.success(chalk.green(`✅ Backup created: ${backupPath}`))
         logger.log('')
         logger.log(chalk.bold('Backup Details:'))
         logger.log(`${chalk.dim('Version:')} ${remoteConfig.version}`)
-        logger.log(`${chalk.dim('Rules:')} ${remoteConfig.rules.length} custom, ${remoteConfig.ips.length} IP blocking`)
+        logger.log(
+          `${chalk.dim('Rules:')} ${remoteConfig.rules.length} custom, ${remoteConfig.ips?.length ?? 0} IP blocking`,
+        )
         logger.log(`${chalk.dim('Created:')} ${new Date().toLocaleString()}`)
         logger.log('')
         logger.log(chalk.dim('To restore this backup later, run:'))

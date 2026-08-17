@@ -77,6 +77,7 @@ export {
   isUnifiedConfig,
   isUnifiedRule,
   isUnifiedIPRule,
+  hasProviderMetadata,
   createUnifiedCondition,
   createUnifiedAction,
   createUnifiedRule,

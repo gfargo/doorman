@@ -3,7 +3,9 @@ import chalk from 'chalk'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
 import { firewallConfigSchema } from '../lib/schemas/firewallSchemas'
+import { unifiedConfigSchema } from '../lib/schemas/unifiedSchemas'
 import { ValidationError, ValidationService } from '../lib/services/ValidationService'
+import { hasProviderMetadata } from '../lib/types'
 import { getConfig } from '../lib/utils/config'
 import { handleCommandError } from '../lib/utils/handleCommandError'
 
@@ -34,13 +36,19 @@ export const handler = async (argv: Arguments<ValidateOptions>) => {
     // Load config without validation since we'll do that ourselves
     const configJson = await getConfig(argv.config, 'raw')
     const validator: ValidationService = ValidationService.getInstance()
+    // Multi-provider (Unified) configs — e.g. Cloudflare — use a different rule
+    // shape than the legacy Vercel-only schema, so validate against the matching
+    // schema (mirrors the routing in ValidationService.validateConfig).
+    const isMultiProviderConfig = hasProviderMetadata(configJson)
 
     if (argv.verbose) {
       logger.start('Validating configuration file...\n')
     }
 
     // Run Zod validation first
-    const zodResult = firewallConfigSchema.safeParse(configJson)
+    const zodResult = isMultiProviderConfig
+      ? unifiedConfigSchema.safeParse(configJson)
+      : firewallConfigSchema.safeParse(configJson)
     if (argv.verbose) {
       logger.log(chalk.bold.underline('Zod Schema Validation:'))
       if (zodResult.success) {
