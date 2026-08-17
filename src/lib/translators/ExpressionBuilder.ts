@@ -2,6 +2,14 @@ import type { VercelRuleCondition, VercelConditionGroup } from '../types/vercel'
 import type { UnifiedCondition } from '../types/unified'
 import { FieldMapper } from './FieldMapper'
 import { escapeWirefilterString } from './wirefilterEscape'
+import { ipAddressSchema } from '../schemas/commonSchemas'
+
+/**
+ * wirefilter fields this codebase's field mappers ever produce that hold a
+ * native `Ip` type rather than `String` — comparing one against a quoted
+ * string literal is a type mismatch Cloudflare's ruleset API rejects.
+ */
+const UNQUOTED_IP_FIELDS = new Set(['ip.src'])
 
 /**
  * Builds Cloudflare wirefilter expressions from structured conditions
@@ -36,7 +44,7 @@ export class ExpressionBuilder {
     const field = FieldMapper.toCloudflare(condition.type, condition.key)
     let expression = this.buildExistsOrComparisonExpression(field, condition.op, () => {
       const operator = this.mapVercelOperator(condition.op)
-      return `${operator} ${this.formatValue(condition.value, condition.op)}`
+      return `${operator} ${this.formatValue(field, condition.value)}`
     })
 
     // Handle negation
@@ -107,14 +115,14 @@ export class ExpressionBuilder {
    */
   private static buildUnifiedExpression(field: string, op: UnifiedCondition['operator'], value: unknown): string {
     if (op === 'not_contains') {
-      return `not (${field} contains ${this.formatValue(value, 'contains')})`
+      return `not (${field} contains ${this.formatValue(field, value)})`
     }
     if (op === 'not_in') {
-      return `not (${field} in ${this.formatValue(value, 'in')})`
+      return `not (${field} in ${this.formatValue(field, value)})`
     }
     return this.buildExistsOrComparisonExpression(field, op, () => {
       const operator = this.mapUnifiedOperator(op)
-      return `${operator} ${this.formatValue(value, operator)}`
+      return `${operator} ${this.formatValue(field, value)}`
     })
   }
 
@@ -194,21 +202,33 @@ export class ExpressionBuilder {
   /**
    * Format value for wirefilter expression
    */
-  private static formatValue(value: unknown, _operator?: string): string {
+  private static formatValue(field: string, value: unknown): string {
     // Handle arrays (for 'in' operator)
     if (Array.isArray(value)) {
-      const formattedValues = value.map((v) => this.formatSingleValue(v)).join(' ')
+      const formattedValues = value.map((v) => this.formatSingleValue(field, v)).join(' ')
       return `{${formattedValues}}`
     }
 
-    return this.formatSingleValue(value)
+    return this.formatSingleValue(field, value)
   }
 
   /**
-   * Format a single value
+   * Format a single value. IP-typed fields (ip.src) are wirefilter's native
+   * `Ip` type, not `String` — comparing one against a quoted string literal
+   * is a type mismatch Cloudflare's ruleset API rejects, so those values are
+   * interpolated unquoted instead (mirrors RuleTranslator.unifiedIPToCloudflare's
+   * dedicated IP-blocking-rule path). An unquoted value has no delimiter to
+   * contain it — a more direct wirefilter-injection primitive than a quoted
+   * string — so it's validated as a real IP/CIDR first and rejected otherwise.
    */
-  private static formatSingleValue(value: unknown): string {
+  private static formatSingleValue(field: string, value: unknown): string {
     if (typeof value === 'string') {
+      if (UNQUOTED_IP_FIELDS.has(field)) {
+        if (!ipAddressSchema.safeParse(value).success) {
+          throw new Error(`Invalid IP address or CIDR range: ${value}`)
+        }
+        return value
+      }
       return `"${escapeWirefilterString(value)}"`
     }
 

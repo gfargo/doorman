@@ -105,9 +105,18 @@ describe('ExpressionBuilder', () => {
       expect(ExpressionBuilder.fromVercelCondition(condition)).toBe('not (http.request.uri.path eq "/public")')
     })
 
-    it('handles ip_address field', () => {
+    it('handles ip_address field, unquoted since ip.src is a native Ip type in wirefilter (regression test for the quoting bug found post-#85/#119)', () => {
       const condition: VercelRuleCondition = { type: 'ip_address', op: 'eq', value: '192.168.1.1' }
-      expect(ExpressionBuilder.fromVercelCondition(condition)).toBe('ip.src eq "192.168.1.1"')
+      expect(ExpressionBuilder.fromVercelCondition(condition)).toBe('ip.src eq 192.168.1.1')
+    })
+
+    it('rejects a non-IP value for the ip_address field instead of interpolating it unquoted', () => {
+      const condition: VercelRuleCondition = {
+        type: 'ip_address',
+        op: 'eq',
+        value: '1.2.3.4 or (true) or ip.src eq 1.2.3.4',
+      }
+      expect(() => ExpressionBuilder.fromVercelCondition(condition)).toThrow('Invalid IP address or CIDR range')
     })
 
     it('handles header with key', () => {
@@ -198,8 +207,11 @@ describe('ExpressionBuilder', () => {
 
   describe('fromUnifiedCondition', () => {
     it('maps unified field types to Cloudflare fields', () => {
+      // ip.src is a native Ip type in wirefilter, unlike every other field
+      // here — its value is interpolated unquoted (regression test for the
+      // quoting bug found post-#85/#119).
       expect(ExpressionBuilder.fromUnifiedCondition({ field: 'ip', operator: 'eq', value: '1.2.3.4' })).toBe(
-        'ip.src eq "1.2.3.4"',
+        'ip.src eq 1.2.3.4',
       )
 
       expect(ExpressionBuilder.fromUnifiedCondition({ field: 'country', operator: 'eq', value: 'US' })).toBe(
@@ -209,6 +221,22 @@ describe('ExpressionBuilder', () => {
       expect(ExpressionBuilder.fromUnifiedCondition({ field: 'host', operator: 'eq', value: 'example.com' })).toBe(
         'http.host eq "example.com"',
       )
+    })
+
+    it('handles an ip field with a CIDR value, still unquoted', () => {
+      expect(ExpressionBuilder.fromUnifiedCondition({ field: 'ip', operator: 'in', value: ['1.2.3.0/24'] })).toBe(
+        'ip.src in {1.2.3.0/24}',
+      )
+    })
+
+    it('rejects a non-IP value for an ip field instead of interpolating it unquoted', () => {
+      expect(() =>
+        ExpressionBuilder.fromUnifiedCondition({
+          field: 'ip',
+          operator: 'eq',
+          value: '1.2.3.4 or (true) or ip.src eq 1.2.3.4',
+        }),
+      ).toThrow('Invalid IP address or CIDR range')
     })
 
     it('maps unified operators to Cloudflare operators', () => {
