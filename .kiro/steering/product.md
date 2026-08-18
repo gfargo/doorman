@@ -3,10 +3,12 @@
 Doorman is a CLI tool for managing firewall rules as code across multiple providers. It enables Infrastructure as Code (IaC) approach for security configuration, allowing teams to version control, validate, and automate deployment of firewall rules.
 
 ## Supported Providers
+
 - **Vercel Firewall** (stable) — full CRUD, sync, validation, templates
 - **Cloudflare WAF** (beta) — rulesets, rules, Lists API, rule translation
 
 ## Core Features
+
 - **Multi-Provider Support**: Manage Vercel and Cloudflare firewalls through a unified CLI
 - **Rule Management**: Create, update, delete, and sync firewall rules
 - **Configuration as Code**: JSON-based configuration with schema validation
@@ -17,6 +19,7 @@ Doorman is a CLI tool for managing firewall rules as code across multiple provid
 - **Rule Translation**: Bidirectional translation between Vercel and Cloudflare rule formats
 
 ## Target Users
+
 - DevOps engineers managing Vercel or Cloudflare deployments
 - Security teams implementing firewall policies across providers
 - Development teams needing automated security rule deployment

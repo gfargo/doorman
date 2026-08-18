@@ -8,14 +8,14 @@ The rename is motivated by Doorman's evolution into a multi-provider tool (Verce
 
 ## Key Decisions
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Package name | `@gfargo/doorman` | Scoped under existing npm user, binary stays `doorman` |
-| Version bump | Major (breaking) | New install command, new binary name signals a clear migration point |
-| Deprecation window | 6 months | Patch-only support on `vercel-doorman`, gives users time to update |
-| Dual binary period | 2 releases | `vercel-doorman` prints warning and delegates to `doorman` |
-| Config file migration | Warn + read both | Non-breaking; remove legacy `vercel-firewall.config.json` in 3.0 |
-| GitHub repo name | `gfargo/doorman` | GitHub auto-redirects from old URL |
+| Decision              | Choice            | Rationale                                                            |
+| --------------------- | ----------------- | -------------------------------------------------------------------- |
+| Package name          | `@gfargo/doorman` | Scoped under existing npm user, binary stays `doorman`               |
+| Version bump          | Major (breaking)  | New install command, new binary name signals a clear migration point |
+| Deprecation window    | 6 months          | Patch-only support on `vercel-doorman`, gives users time to update   |
+| Dual binary period    | 2 releases        | `vercel-doorman` prints warning and delegates to `doorman`           |
+| Config file migration | Warn + read both  | Non-breaking; remove legacy `vercel-firewall.config.json` in 3.0     |
+| GitHub repo name      | `gfargo/doorman`  | GitHub auto-redirects from old URL                                   |
 
 ## Migration Architecture
 
@@ -47,6 +47,7 @@ During the transition period, the package ships two binaries:
 ```
 
 `bin/run-deprecated` is a thin wrapper:
+
 ```typescript
 #!/usr/bin/env node
 console.warn('⚠️  vercel-doorman is deprecated. Use "doorman" instead.')
@@ -59,11 +60,13 @@ After the deprecation window (6 months / ~2 releases), the `vercel-doorman` entr
 ### Config Discovery Order
 
 The config finder checks in this order:
+
 1. `.doorman.json` (primary, new name)
 2. `vercel-firewall.config.json` (legacy, with deprecation warning)
 3. `vercel-firewall[project-name].config.json` (legacy project-specific)
 
 When a legacy file is found, a one-time warning is printed:
+
 ```
 ⚠️  Found legacy config 'vercel-firewall.config.json'. Please rename to '.doorman.json'.
     Legacy config support will be removed in v3.0.
