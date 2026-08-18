@@ -1,17 +1,20 @@
 # Technology Stack
 
 ## Core Technologies
+
 - **TypeScript**: Primary language with strict type checking
 - **Node.js 20**: Runtime environment (extends @tsconfig/node20)
 - **Zod**: Runtime schema validation and type inference
 - **Yargs**: CLI argument parsing and command structure
 
 ## Build System
+
 - **tsup**: Modern TypeScript bundler for both CJS and ESM outputs
 - **pnpm**: Package manager with lock file
 - **TypeScript**: Compilation with declaration files and source maps
 
 ## Testing & Quality
+
 - **Jest**: Testing framework with ts-jest preset
 - **ESLint**: Linting with TypeScript, Prettier, and Jest plugins
 - **Prettier**: Code formatting
@@ -19,6 +22,7 @@
 - **Commitlint**: Conventional commit message validation
 
 ## Key Dependencies
+
 - **chalk**: Terminal styling and colors
 - **consola**: Structured logging
 - **cli-table3**: Terminal table formatting
@@ -29,6 +33,7 @@
 ## Common Commands
 
 ### Development
+
 ```bash
 pnpm start              # Run CLI in development mode
 pnpm build              # Build for production
@@ -37,6 +42,7 @@ pnpm clean              # Clean dist directory
 ```
 
 ### Testing & Quality
+
 ```bash
 pnpm test               # Run full test suite (55 suites, 1100+ tests)
 pnpm test:watch         # Run tests in watch mode
@@ -48,12 +54,14 @@ pnpm format:fix         # Fix formatting
 ```
 
 ### Schema & Release
+
 ```bash
 pnpm build:schema       # Generate JSON schema from TypeScript types
 pnpm release            # Semantic release
 ```
 
 ## Architecture Patterns
+
 - **Provider Abstraction**: `IFirewallProvider` interface with `ProviderRegistry` for multi-provider support (Vercel stable, Cloudflare beta)
 - **Shared Middleware**: `withCredentials()` handles config loading, provider detection, credential resolution, and error handling for all commands
 - **Centralized Error Handling**: `handleCommandError()` provides consistent error formatting; `DoormanError` for structured errors with codes
@@ -68,6 +76,7 @@ pnpm release            # Semantic release
 - **Sanitize before validating/saving live API responses**: Vercel's real API attaches fields the schema doesn't allow (`additionalProperties: false`) — `id`/`crs`/`projectKey`/`ownerId` at the config level, `valid`/`validationErrors` on every rule. Any code that builds a config to validate or persist from a live `fetchFirewallConfig()` response must strip these first (see `download.ts`'s `rules.map(({ valid, validationErrors, ...rule }) => rule)` pattern, and `backup.ts`'s `sanitizedConfig`). This bug class has recurred multiple times (#108/#112) — when adding new code that touches a raw provider API response, sanitize proactively rather than waiting for it to surface again.
 
 ## Branching & Release Strategy
+
 - **`main`**: Stable releases (e.g., `1.5.11`). Pushes trigger semantic-release → npm publish.
 - **`beta`**: Prerelease channel (e.g., `1.6.0-beta.1`). Pushes trigger semantic-release → npm publish with `beta` dist-tag. Install with `npm install @gfargo/doorman@beta`.
 - **Feature branches**: Branch from target (`main` or `beta`), PR back.
