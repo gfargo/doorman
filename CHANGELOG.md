@@ -1,3 +1,10 @@
+# [3.2.0](https://github.com/gfargo/doorman/compare/v3.1.0...v3.2.0) (2026-08-18)
+
+
+### Features
+
+* restructure skill to Agent Skills spec with progressive disclosure ([7ffeba6](https://github.com/gfargo/doorman/commit/7ffeba60c0eb0b0fdadaddcd1387613da943704a))
+
 # [3.1.0](https://github.com/gfargo/doorman/compare/v3.0.9...v3.1.0) (2026-08-18)
 
 
