@@ -1,0 +1,39 @@
+{
+  "version": 4,
+  "updatedAt": "2026-06-02T14:12:00.000Z",
+  "rules": [
+    {
+      "id": "rule_block_bad_bots",
+      "name": "Block Bad Bots",
+      "description": "Deny requests from known scraper/bot user agents",
+      "conditionGroup": [{ "conditions": [{ "type": "user_agent", "op": "sub", "value": "bot" }] }],
+      "action": { "mitigate": { "action": "deny" } },
+      "active": true
+    },
+    {
+      "id": "rule_restrict_admin",
+      "name": "Restrict Admin Routes",
+      "description": "Block direct access to admin paths",
+      "conditionGroup": [{ "conditions": [{ "type": "path", "op": "pre", "value": "/admin" }] }],
+      "action": { "mitigate": { "action": "deny" } },
+      "active": true
+    },
+    {
+      "id": "rule_rate_limit_auth",
+      "name": "Rate Limit Auth Endpoint",
+      "description": "Throttle repeated hits to the login API",
+      "conditionGroup": [{ "conditions": [{ "type": "path", "op": "pre", "value": "/api/auth" }] }],
+      "action": { "mitigate": { "action": "deny", "rateLimit": { "requests": 20, "window": "1m" } } },
+      "active": true
+    }
+  ],
+  "ips": [
+    {
+      "id": "ip_block_known_bad_actor",
+      "ip": "203.0.113.42",
+      "hostname": "*",
+      "notes": "Repeated brute-force attempts",
+      "action": "deny"
+    }
+  ]
+}
