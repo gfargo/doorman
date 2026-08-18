@@ -22,18 +22,18 @@ Show
 # A team member already configured these rules by hand in the Vercel
 # dashboard — no doorman config exists locally yet.
 Type "doorman download" Enter
-Sleep 2500ms
+Sleep 1800ms
 Enter
-Sleep 2200ms
+Sleep 1500ms
 
 Type "doorman validate --verbose" Enter
-Sleep 2500ms
+Sleep 1800ms
 
 Type "git add .doorman.json && git commit -q -m 'Import existing Vercel Firewall rules'" Enter
-Sleep 1000ms
+Sleep 800ms
 
 Type "git log --oneline -1" Enter
-Sleep 2000ms
+Sleep 1200ms
 
 Hide
 Type "kill $MOCKPID 2>/dev/null" Enter
