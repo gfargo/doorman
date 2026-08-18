@@ -1,0 +1,80 @@
+name: Sync doorman skill from source
+
+on:
+  schedule:
+    - cron: '17 14 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+env:
+  SOURCE_REPO: gfargo/doorman
+  SOURCE_SKILL_PATH: skills/doorman
+  DEST_SKILL_PATH: plugins/security/skills/doorman
+  PLUGIN_JSON: plugins/security/.claude-plugin/plugin.json
+  MARKETPLACE_JSON: .claude-plugin/marketplace.json
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check latest doorman release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest=$(gh api "repos/${SOURCE_REPO}/releases/latest" --jq '.tag_name')
+          current=$(cat "${DEST_SKILL_PATH}/.source-version" 2>/dev/null || echo "none")
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          if [ "$latest" = "$current" ]; then
+            echo "up_to_date=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "up_to_date=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch source at latest tag
+        if: steps.check.outputs.up_to_date == 'false'
+        run: |
+          git clone --depth 1 --branch "${{ steps.check.outputs.latest }}" \
+            "https://github.com/${SOURCE_REPO}.git" /tmp/source
+
+      - name: Mirror skill content
+        if: steps.check.outputs.up_to_date == 'false'
+        run: |
+          rsync -a --delete --exclude='sync/' "/tmp/source/${SOURCE_SKILL_PATH}/" "${DEST_SKILL_PATH}/"
+          echo "${{ steps.check.outputs.latest }}" > "${DEST_SKILL_PATH}/.source-version"
+
+      - name: Bump security plugin version
+        if: steps.check.outputs.up_to_date == 'false'
+        id: bump
+        run: |
+          old=$(jq -r '.version' "${PLUGIN_JSON}")
+          IFS='.' read -r major minor patch <<< "$old"
+          new="${major}.${minor}.$((patch + 1))"
+          jq --arg v "$new" '.version = $v' "${PLUGIN_JSON}" > "${PLUGIN_JSON}.tmp" && mv "${PLUGIN_JSON}.tmp" "${PLUGIN_JSON}"
+          jq --arg v "$new" '(.plugins[] | select(.name == "security") | .version) = $v' "${MARKETPLACE_JSON}" > "${MARKETPLACE_JSON}.tmp" && mv "${MARKETPLACE_JSON}.tmp" "${MARKETPLACE_JSON}"
+          echo "new_version=$new" >> "$GITHUB_OUTPUT"
+
+      - name: Commit and tag
+        if: steps.check.outputs.up_to_date == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${DEST_SKILL_PATH}" "${PLUGIN_JSON}" "${MARKETPLACE_JSON}"
+          git commit -m "sync: doorman ${{ steps.check.outputs.latest }} (security v${{ steps.bump.outputs.new_version }})"
+          git tag "v${{ steps.bump.outputs.new_version }}"
+          git push origin HEAD:main
+          git push origin "v${{ steps.bump.outputs.new_version }}"
+
+      - name: Create release
+        if: steps.check.outputs.up_to_date == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.bump.outputs.new_version }}" \
+            --title "security v${{ steps.bump.outputs.new_version }} — doorman ${{ steps.check.outputs.latest }}" \
+            --notes "Synced security:doorman to [gfargo/doorman@${{ steps.check.outputs.latest }}](https://github.com/${SOURCE_REPO}/releases/tag/${{ steps.check.outputs.latest }})"
