@@ -1,3 +1,10 @@
+# [3.1.0](https://github.com/gfargo/doorman/compare/v3.0.9...v3.1.0) (2026-08-18)
+
+
+### Features
+
+* add import-existing demo tape ([#142](https://github.com/gfargo/doorman/issues/142)) ([6e990ba](https://github.com/gfargo/doorman/commit/6e990ba6566ce276fb4e719be17320304aef6e05))
+
 ## [3.0.9](https://github.com/gfargo/doorman/compare/v3.0.8...v3.0.9) (2026-08-17)
 
 
