@@ -315,19 +315,24 @@ export class CloudflareFirewallService extends BaseFirewallService {
           logger.info(`Removed ${ipsDeleted} IPs from List`)
         }
 
-        // Add a rule to block IPs in the list (if not already present)
+        // Ensure a rule blocking IPs in the list is present in this sync's
+        // ruleset payload. `cloudflareRules` is rebuilt from scratch every
+        // sync (the whole ruleset is replaced in one PUT below), so checking
+        // the *previous* ruleset's rules for this — `ruleset.rules.some(...)`
+        // — was wrong: once sync #1 added the list rule, sync #2 would see it
+        // "already there" in that stale pre-sync snapshot and omit it from
+        // the new array, silently overwriting the ruleset without it. The
+        // List itself stayed populated, so IP blocking went dark with no
+        // error. There's nothing to append to here — `cloudflareRules` is a
+        // fresh array — so always including it once has no duplication risk.
         const listRuleExpression = `ip.src in $${ipList.name.replace(/\s+/g, '_').toLowerCase()}`
-        const hasListRule = ruleset.rules.some((r) => r.expression.includes('in $'))
-
-        if (!hasListRule && config.ips.length > 0) {
-          cloudflareRules.push({
-            id: `rule_doorman_ip_list`,
-            action: 'block',
-            expression: listRuleExpression,
-            description: 'Block IPs in Doorman IP Blocklist',
-            enabled: true,
-          })
-        }
+        cloudflareRules.push({
+          id: `rule_doorman_ip_list`,
+          action: 'block',
+          expression: listRuleExpression,
+          description: 'Block IPs in Doorman IP Blocklist',
+          enabled: true,
+        })
       } catch (error) {
         // Enhanced fallback handling with detailed messaging
         this.handleListsAPIFallback(error, 'syncing IPs via List')
@@ -374,9 +379,17 @@ export class CloudflareFirewallService extends BaseFirewallService {
 
     const result: SyncResult = {
       success: true,
-      rulesAdded: config.rules.length,
-      rulesUpdated: 0,
-      rulesDeleted: 0,
+      // The actual write below is a full-ruleset replace, not incremental
+      // add/update/delete calls — these counts come from the pre-sync diff
+      // (now accurate, see getChanges) rather than reflecting the mechanics
+      // of the write itself. Previously this always reported
+      // `rulesAdded: config.rules.length, rulesUpdated: 0, rulesDeleted: 0`
+      // regardless of what actually changed, which could flatly contradict
+      // the "Proposed Changes" preview shown moments earlier from the same
+      // diff.
+      rulesAdded: dryRunResult.changes.rulesToAdd.length,
+      rulesUpdated: dryRunResult.changes.rulesToUpdate.length,
+      rulesDeleted: dryRunResult.changes.rulesToDelete.length,
       ipsAdded,
       ipsUpdated,
       ipsDeleted,
@@ -389,39 +402,102 @@ export class CloudflareFirewallService extends BaseFirewallService {
   }
 
   /**
-   * Get changes between local and remote configurations
+   * Get changes between local and remote configurations.
+   *
+   * Diffs rules in Cloudflare's *native* space (real wirefilter expressions)
+   * rather than going through `fetchConfig()`'s lossy Unified translation —
+   * `cloudflareToUnified` always returns `conditions: []` (expression
+   * parsing isn't implemented), so a remote rule with real conditions could
+   * never diff-equal its local counterpart: every synced rule showed as
+   * `toUpdate` forever, even on a no-op sync. See
+   * `CloudflareOptimizer.diffCloudflareRules`.
    */
   public async getChanges(config: UnifiedConfig): Promise<ChangeSet> {
-    const remoteConfig = await this.fetchConfig()
+    const ruleset = await this.client.getOrCreateFirewallRuleset()
 
-    // Use optimizer's hash-based diff for better performance with large rule sets
-    const ruleDiff = this.optimizer.diffRules(config.rules, remoteConfig.rules)
+    const remoteCloudflareRules = ruleset.rules.filter(
+      (r) => r && r.id && r.expression && r.action && !this.isListBasedIPRule(r) && !this.isIPBlockingRule(r),
+    )
 
-    // Compare IPs using optimizer's diff
+    const localTranslations = config.rules.map((rule) => ({
+      rule,
+      translated: RuleTranslator.unifiedToCloudflare(rule).result,
+    }))
+
+    const ruleDiff = this.optimizer.diffCloudflareRules(localTranslations, remoteCloudflareRules)
+    // No local counterpart for a remote-only rule — best-effort translation
+    // back to Unified (still lossy on conditions) is fine for a delete
+    // preview, which only needs to identify *what* is being removed.
+    const rulesToDelete = ruleDiff.toDelete.map((r) => RuleTranslator.cloudflareToUnified(r).result)
+
+    // IP diffing is unaffected by the above: it round-trips losslessly
+    // already (only `ip`/`action` are ever compared).
     let ipDiff: { toAdd: UnifiedIPRule[]; toUpdate: UnifiedIPRule[]; toDelete: UnifiedIPRule[] } = {
       toAdd: [],
       toUpdate: [],
       toDelete: [],
     }
-    if (config.ips && remoteConfig.ips) {
-      ipDiff = this.optimizer.diffIPRules(config.ips, remoteConfig.ips)
+    if (config.ips) {
+      const remoteIPs = await this.fetchRemoteIPRulesForDiff(ruleset.rules)
+      ipDiff = this.optimizer.diffIPRules(config.ips, remoteIPs)
     }
 
     return {
       rulesToAdd: ruleDiff.toAdd,
       rulesToUpdate: ruleDiff.toUpdate,
-      rulesToDelete: ruleDiff.toDelete,
+      rulesToDelete,
       ipsToAdd: ipDiff.toAdd,
       ipsToUpdate: ipDiff.toUpdate,
       ipsToDelete: ipDiff.toDelete,
       hasChanges:
         ruleDiff.toAdd.length > 0 ||
         ruleDiff.toUpdate.length > 0 ||
-        ruleDiff.toDelete.length > 0 ||
+        rulesToDelete.length > 0 ||
         ipDiff.toAdd.length > 0 ||
         ipDiff.toUpdate.length > 0 ||
         ipDiff.toDelete.length > 0,
     }
+  }
+
+  /**
+   * Fetch the current IP blocking state directly from the ruleset's simple
+   * IP rules plus (if enabled) the Lists API, without going through
+   * `fetchConfig()`'s full Unified rule translation — `getChanges()` only
+   * needs IP state, and reusing `fetchConfig()` here would redo the very
+   * rule translation this method exists to avoid. IP rules round-trip
+   * losslessly already (only `ip`/`action` matter), so this duplicates a
+   * small amount of `fetchConfig()`'s IP-gathering logic rather than sharing
+   * it, to avoid touching that well-covered method's rule-processing loop.
+   */
+  private async fetchRemoteIPRulesForDiff(rulesetRules: CloudflareRule[]): Promise<UnifiedIPRule[]> {
+    const ips: UnifiedIPRule[] = []
+
+    for (const rule of rulesetRules) {
+      if (rule && rule.id && rule.expression && rule.action && this.isIPBlockingRule(rule)) {
+        ips.push(this.cloudflareRuleToIPRule(rule))
+      }
+    }
+
+    if (this.useListsForIPs) {
+      try {
+        const ipList = await this.client.getOrCreateIPBlocklist()
+        const listItems = await this.client.getListItems(ipList.id)
+        for (const item of listItems) {
+          if (item.ip) {
+            ips.push({
+              id: item.id,
+              ip: item.ip,
+              notes: item.comment,
+              action: 'deny',
+            })
+          }
+        }
+      } catch (error) {
+        this.handleListsAPIFallback(error, 'fetching IPs from List')
+      }
+    }
+
+    return ips
   }
 
   /**
