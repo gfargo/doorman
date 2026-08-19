@@ -1,3 +1,10 @@
+## [3.2.3](https://github.com/gfargo/doorman/compare/v3.2.2...v3.2.3) (2026-08-19)
+
+
+### Bug Fixes
+
+* harden Cloudflare Lists API and IP-rule handling ([90c2e12](https://github.com/gfargo/doorman/commit/90c2e121c7dcea6697f37f7f6e66e0b8eee5e76e)), closes [#146](https://github.com/gfargo/doorman/issues/146) [#147](https://github.com/gfargo/doorman/issues/147) [#148](https://github.com/gfargo/doorman/issues/148) [#149](https://github.com/gfargo/doorman/issues/149)
+
 ## [3.2.2](https://github.com/gfargo/doorman/compare/v3.2.1...v3.2.2) (2026-08-19)
 
 
