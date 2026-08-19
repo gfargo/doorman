@@ -1,3 +1,10 @@
+## [3.2.4](https://github.com/gfargo/doorman/compare/v3.2.3...v3.2.4) (2026-08-19)
+
+
+### Bug Fixes
+
+* clean up notes clearing, referer key, duplicate ids, redundant retry ([f7e611f](https://github.com/gfargo/doorman/commit/f7e611f12d7409aa6a97fbfbaef7e2ed891b10d6)), closes [#150](https://github.com/gfargo/doorman/issues/150) [#151](https://github.com/gfargo/doorman/issues/151) [#152](https://github.com/gfargo/doorman/issues/152) [#154](https://github.com/gfargo/doorman/issues/154)
+
 ## [3.2.3](https://github.com/gfargo/doorman/compare/v3.2.2...v3.2.3) (2026-08-19)
 
 
