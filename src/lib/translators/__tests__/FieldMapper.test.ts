@@ -147,8 +147,13 @@ describe('FieldMapper', () => {
       expect(FieldMapper.toVercel('http.user_agent')).toEqual({ type: 'user_agent' })
     })
 
-    it('maps http.referer to header', () => {
-      expect(FieldMapper.toVercel('http.referer')).toEqual({ type: 'header' })
+    // Regression test: Vercel has no dedicated referer condition type — it's
+    // a header condition keyed on 'referer'. The key was previously dropped
+    // (the field mapped to a bare `{ type: 'header' }` with no key), which
+    // would translate into a header condition matching *any* header rather
+    // than specifically Referer.
+    it('maps http.referer to a header condition keyed on referer', () => {
+      expect(FieldMapper.toVercel('http.referer')).toEqual({ type: 'header', key: 'referer' })
     })
 
     it('maps ip.geoip.continent to geo_continent', () => {

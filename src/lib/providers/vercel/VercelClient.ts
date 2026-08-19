@@ -234,7 +234,14 @@ export class VercelClient extends BaseFirewallClient {
         action: rule.action,
         hostname: rule.hostname,
         ip: rule.ip,
-        ...(rule.notes && { notes: rule.notes }),
+        // Always send `notes`, even when falsy. This is a partial-update-
+        // style action (`ip.update`), so omitting the key when a user
+        // clears their local note (leaving `rule.notes` undefined) reads
+        // to Vercel's API as "leave the existing note alone" rather than
+        // "clear it" — the note would silently persist remotely after a
+        // sync that was supposed to remove it. An explicit `null` is
+        // unambiguous either way.
+        notes: rule.notes ?? null,
       },
     }
 

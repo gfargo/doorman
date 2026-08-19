@@ -75,6 +75,36 @@ export abstract class BaseFirewallService implements IFirewallProvider {
       })
     }
 
+    // Both providers' diffing keys rules by `rule.id || rule.name`
+    // (CloudflareOptimizer.diffCloudflareRules, VercelFirewallService's
+    // diffRules/diffIPRules) — two rules that produce the same key collide
+    // in that lookup, and one becomes invisible to the diff (silently never
+    // correctly added/updated/deleted) rather than erroring. This is most
+    // likely to happen for two id-less rules sharing a name, since
+    // RuleTranslator freely generates rules without ids.
+    if (config && Array.isArray(config.rules)) {
+      const firstIndexByKey = new Map<string, number>()
+      config.rules.forEach((rule, index) => {
+        const key = rule.id || rule.name
+        if (!key) return
+
+        const firstIndex = firstIndexByKey.get(key)
+        if (firstIndex === undefined) {
+          firstIndexByKey.set(key, index)
+          return
+        }
+
+        const firstRule = config.rules[firstIndex]
+        warnings.push({
+          path: `rules[${index}]`,
+          message: rule.id
+            ? `Rule "${rule.name}" has the same id ("${rule.id}") as rules[${firstIndex}] ("${firstRule?.name}") — they will collide during sync diffing and one may be silently skipped.`
+            : `Rule "${rule.name}" has the same name as rules[${firstIndex}] and neither has an explicit id — they will collide during sync diffing and one may be silently skipped. Add unique ids to disambiguate.`,
+          code: 'DUPLICATE_RULE_IDENTIFIER',
+        })
+      })
+    }
+
     return {
       valid: errors.length === 0,
       errors,

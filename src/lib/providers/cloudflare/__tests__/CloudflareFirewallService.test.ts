@@ -1290,6 +1290,66 @@ describe('CloudflareFirewallService', () => {
       expect(result.errors).toHaveLength(0)
     })
 
+    // Regression test for shared base-class logic (BaseFirewallService):
+    // both providers' diffing keys rules by `rule.id || rule.name`, so two
+    // id-less rules sharing a name collide during sync diffing and one
+    // silently becomes invisible to it. This must be a warning, not a hard
+    // error, since it's real risk a user can knowingly accept, but they
+    // should be told about it.
+    it('warns when two id-less rules share the same name', () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [
+          {
+            name: 'Duplicate Name',
+            enabled: true,
+            action: { type: 'deny' },
+            conditions: [{ field: 'path', operator: 'eq', value: '/a' }],
+          },
+          {
+            name: 'Duplicate Name',
+            enabled: true,
+            action: { type: 'deny' },
+            conditions: [{ field: 'path', operator: 'eq', value: '/b' }],
+          },
+        ],
+        ips: [],
+      }
+
+      const result = service.validateConfig(config)
+
+      expect(result.warnings.some((w) => w.code === 'DUPLICATE_RULE_IDENTIFIER')).toBe(true)
+    })
+
+    it('does not warn about duplicate identifiers when rules have distinct explicit ids', () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [
+          {
+            id: 'rule-a',
+            name: 'Same Name',
+            enabled: true,
+            action: { type: 'deny' },
+            conditions: [{ field: 'path', operator: 'eq', value: '/a' }],
+          },
+          {
+            id: 'rule-b',
+            name: 'Same Name',
+            enabled: true,
+            action: { type: 'deny' },
+            conditions: [{ field: 'path', operator: 'eq', value: '/b' }],
+          },
+        ],
+        ips: [],
+      }
+
+      const result = service.validateConfig(config)
+
+      expect(result.warnings.some((w) => w.code === 'DUPLICATE_RULE_IDENTIFIER')).toBe(false)
+    })
+
     it('should detect rule count exceeding limit', () => {
       const rules: UnifiedRule[] = Array.from({ length: 130 }, (_, i) => ({
         id: `rule-${i}`,
