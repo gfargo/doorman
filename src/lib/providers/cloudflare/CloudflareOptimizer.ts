@@ -1,5 +1,18 @@
 import { logger } from '../../logger'
 import type { UnifiedRule, UnifiedIPRule } from '../../types/unified'
+import type { CloudflareRule } from '../../types/cloudflare'
+
+/**
+ * Result of diffing native Cloudflare rules against their translated local
+ * counterparts. `toAdd`/`toUpdate` are the *original* `UnifiedRule`s (not the
+ * translated `CloudflareRule`s) so callers keep the lossless local data;
+ * `toDelete` has no local counterpart, so it stays in Cloudflare's native form.
+ */
+export interface CloudflareRuleDiffResult {
+  toAdd: UnifiedRule[]
+  toUpdate: UnifiedRule[]
+  toDelete: CloudflareRule[]
+}
 
 /**
  * Result of an optimized rule diff operation
@@ -203,6 +216,71 @@ export class CloudflareOptimizer {
     )
 
     return { toAdd, toUpdate, toDelete, unchanged, duration }
+  }
+
+  /**
+   * Diff local rules against remote rules in Cloudflare's *native* space
+   * (comparing real wirefilter expressions) instead of `diffRules`'s unified
+   * space. `RuleTranslator.cloudflareToUnified` always returns
+   * `conditions: []` (expression parsing isn't implemented), so a hash keyed
+   * on `conditions` — `diffRules`'s approach, fed a remote array translated
+   * through `cloudflareToUnified` — could never hash-equal a local rule with
+   * real conditions: every synced rule showed as `toUpdate` forever, even
+   * with nothing to sync. Comparing the real `expression` string on both
+   * sides (translating local rules to Cloudflare's format, never translating
+   * remote rules to unified) sidesteps that entirely.
+   *
+   * Keying matches `diffRules`'s existing semantics exactly (local
+   * `rule.id || rule.name` against remote `CloudflareRule.id`, which is
+   * always what `cloudflareToUnified` sets as the unified rule's own `id`) —
+   * this method changes what counts as "equal" for a matched pair, not how
+   * pairs are matched.
+   */
+  public diffCloudflareRules(
+    local: Array<{ rule: UnifiedRule; translated: CloudflareRule }>,
+    remote: CloudflareRule[],
+  ): CloudflareRuleDiffResult {
+    const remoteById = new Map(remote.map((r) => [r.id, r]))
+    const localKeys = new Set<string>()
+    const toAdd: UnifiedRule[] = []
+    const toUpdate: UnifiedRule[] = []
+
+    for (const { rule, translated } of local) {
+      const key = rule.id || rule.name
+      localKeys.add(key)
+      const remoteRule = remoteById.get(key)
+      if (!remoteRule) {
+        toAdd.push(rule)
+      } else if (!this.cloudflareRulesEqual(translated, remoteRule)) {
+        toUpdate.push(rule)
+      }
+    }
+
+    const toDelete: CloudflareRule[] = []
+    for (const [key, remoteRule] of remoteById) {
+      if (!localKeys.has(key)) {
+        toDelete.push(remoteRule)
+      }
+    }
+
+    return { toAdd, toUpdate, toDelete }
+  }
+
+  /**
+   * Compare two native Cloudflare rules on the fields that actually
+   * determine wire behavior. `id`/`last_updated`/`version`/`ref`/`categories`
+   * are deliberately excluded — they're either identity (already used for
+   * matching, not equality) or metadata Cloudflare manages itself.
+   */
+  private cloudflareRulesEqual(a: CloudflareRule, b: CloudflareRule): boolean {
+    return (
+      a.action === b.action &&
+      a.expression === b.expression &&
+      (a.enabled ?? true) === (b.enabled ?? true) &&
+      (a.description || '') === (b.description || '') &&
+      JSON.stringify(a.ratelimit ?? null) === JSON.stringify(b.ratelimit ?? null) &&
+      JSON.stringify(a.action_parameters ?? null) === JSON.stringify(b.action_parameters ?? null)
+    )
   }
 
   /**

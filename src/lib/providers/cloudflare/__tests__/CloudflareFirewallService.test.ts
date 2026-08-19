@@ -9,23 +9,22 @@ jest.mock('../../../logger', () => ({
   logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }))
 
-// Mock OperationSafety for syncRules tests
+// Mock OperationSafety for syncRules tests. `performDryRunValidation` delegates
+// to the real `validateFn` (i.e. the real `getChanges`) instead of returning a
+// canned empty `changes` object — a fixed stub here would silently decouple
+// `rulesAdded`/`rulesUpdated`/`rulesDeleted` assertions below from the actual
+// diff logic, which is exactly the gap that previously let `syncRules` report
+// `rulesAdded: config.rules.length` unconditionally without any test catching it.
 jest.mock('../../../utils/operationSafety', () => ({
   OperationSafety: {
-    performDryRunValidation: jest.fn<() => Promise<any>>().mockResolvedValue({
-      valid: true,
-      changes: {
-        rulesToAdd: [],
-        rulesToUpdate: [],
-        rulesToDelete: [],
-        ipsToAdd: [],
-        ipsToUpdate: [],
-        ipsToDelete: [],
-        hasChanges: false,
-      },
-      issues: [],
-      warnings: [],
-    }),
+    performDryRunValidation: jest
+      .fn<(config: any, operation: string, validateFn: (c: any) => Promise<any>) => Promise<any>>()
+      .mockImplementation(async (config, _operation, validateFn) => ({
+        valid: true,
+        changes: await validateFn(config),
+        issues: [],
+        warnings: [],
+      })),
     confirmDestructiveOperation: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
     // assessOperationRisk moved here from a CloudflareFirewallService-private
     // method (shared with VercelFirewallService — see #104); tests don't
@@ -51,6 +50,23 @@ describe('CloudflareFirewallService', () => {
 
     // Get the client instance to mock its methods
     mockClient = service['client']
+
+    // Default Lists-API mocks so getChanges()'s IP-diffing path (now
+    // genuinely exercised, since performDryRunValidation above delegates to
+    // the real getChanges instead of skipping it) doesn't fall through to a
+    // real, hanging network call in tests that don't care about IP state.
+    // Tests that do care override these with their own jest.spyOn(...) calls.
+    jest.spyOn(mockClient, 'getOrCreateIPBlocklist').mockResolvedValue({
+      id: 'list-1',
+      name: 'Doorman IP Blocklist',
+      description: 'Test',
+      kind: 'ip',
+      num_items: 0,
+      num_referencing_filters: 0,
+      created_on: '2024-01-01T00:00:00Z',
+      modified_on: '2024-01-01T00:00:00Z',
+    })
+    jest.spyOn(mockClient, 'getListItems').mockResolvedValue([])
   })
 
   afterEach(() => {
@@ -528,6 +544,148 @@ describe('CloudflareFirewallService', () => {
       expect(mockClient.updateRuleset).toHaveBeenCalledTimes(1)
     })
 
+    // Regression test: syncRules previously reported `rulesAdded:
+    // config.rules.length, rulesUpdated: 0, rulesDeleted: 0` unconditionally —
+    // the actual write is a full-ruleset replace, but the *reported* stats
+    // must reflect the real pre-sync diff, not just echo the local rule count.
+    it('reports accurate add/update/delete counts from the actual diff, not config.rules.length', async () => {
+      const mockConfig: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [
+          {
+            id: 'rule-unchanged',
+            name: 'Unchanged Rule',
+            description: 'Unchanged',
+            enabled: true,
+            action: { type: 'deny' },
+            conditions: [{ field: 'path', operator: 'eq', value: '/unchanged' }],
+          },
+          {
+            id: 'rule-changed',
+            name: 'Changed Rule',
+            description: 'Changed',
+            enabled: true,
+            action: { type: 'deny' },
+            conditions: [{ field: 'path', operator: 'eq', value: '/new-path' }],
+          },
+          {
+            id: 'rule-new',
+            name: 'New Rule',
+            description: 'New',
+            enabled: true,
+            action: { type: 'deny' },
+            conditions: [{ field: 'path', operator: 'eq', value: '/new' }],
+          },
+        ],
+        ips: [],
+      }
+
+      const mockRuleset: CloudflareRuleset = {
+        id: 'ruleset-1',
+        name: 'Test Ruleset',
+        description: 'Test',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        rules: [
+          {
+            id: 'rule-unchanged',
+            action: 'block',
+            expression: 'http.request.uri.path eq "/unchanged"',
+            description: 'Unchanged',
+            enabled: true,
+          },
+          {
+            id: 'rule-changed',
+            action: 'block',
+            expression: 'http.request.uri.path eq "/old-path"',
+            description: 'Changed',
+            enabled: true,
+          },
+          {
+            id: 'rule-to-delete',
+            action: 'block',
+            expression: 'http.request.uri.path eq "/gone"',
+            description: 'Will be deleted',
+            enabled: true,
+          },
+        ],
+      }
+
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(mockRuleset)
+      jest.spyOn(mockClient, 'updateRuleset').mockResolvedValue({ ...mockRuleset, version: '2' })
+
+      const result = await service.syncRules(mockConfig)
+
+      expect(result.success).toBe(true)
+      expect(result.rulesAdded).toBe(1)
+      expect(result.rulesUpdated).toBe(1)
+      expect(result.rulesDeleted).toBe(1)
+    })
+
+    // Regression test: the rule blocking IPs in the List
+    // (`ip.src in $doorman_ip_blocklist`) was only added to the ruleset when
+    // it appeared *absent* from the ruleset fetched *before* this sync. Since
+    // the sync writes a brand-new `rules` array (full replace) rather than
+    // appending to the existing one, that check against stale pre-sync state
+    // meant sync #2 would see the rule "already there" from sync #1's
+    // snapshot and omit it from the new array — silently dropping IP
+    // blocking on the very next sync after it started working.
+    it('keeps the IP-list block rule present across repeated syncs', async () => {
+      const mockConfig: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [],
+        ips: [{ id: 'ip-1', ip: '203.0.113.5', action: 'deny' }],
+      }
+
+      const listBlockRuleset: CloudflareRuleset = {
+        id: 'ruleset-1',
+        name: 'Test Ruleset',
+        description: 'Test',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        rules: [
+          {
+            id: 'rule_doorman_ip_list',
+            action: 'block',
+            expression: 'ip.src in $doorman_ip_blocklist',
+            description: 'Block IPs in Doorman IP Blocklist',
+            enabled: true,
+          },
+        ],
+      }
+
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(listBlockRuleset)
+      jest.spyOn(mockClient, 'getOrCreateIPBlocklist').mockResolvedValue({
+        id: 'list-1',
+        name: 'Doorman IP Blocklist',
+        description: 'Test',
+        kind: 'ip',
+        num_items: 1,
+        num_referencing_filters: 0,
+        created_on: '2024-01-01T00:00:00Z',
+        modified_on: '2024-01-01T00:00:00Z',
+      })
+      jest
+        .spyOn(mockClient, 'getListItems')
+        .mockResolvedValue([
+          { id: 'item-1', ip: '203.0.113.5', created_on: '2024-01-01T00:00:00Z', modified_on: '2024-01-01T00:00:00Z' },
+        ])
+      const updateRulesetSpy = jest
+        .spyOn(mockClient, 'updateRuleset')
+        .mockResolvedValue({ ...listBlockRuleset, version: '2' })
+
+      // Simulates the *second* sync: the ruleset the mock returns already
+      // contains the list-block rule from a prior sync.
+      await service.syncRules(mockConfig)
+
+      const [, payload] = updateRulesetSpy.mock.calls[0]!
+      expect(payload.rules?.some((r) => r.expression.includes('ip.src in $'))).toBe(true)
+    })
+
     it('should sync IPs using Lists when account ID is provided', async () => {
       const mockConfig: UnifiedConfig = {
         version: '2.0',
@@ -879,6 +1037,102 @@ describe('CloudflareFirewallService', () => {
       expect(changes.rulesToUpdate).toHaveLength(0)
       expect(changes.rulesToDelete).toHaveLength(0)
       expect(changes.hasChanges).toBe(false)
+    })
+
+    // Regression test: cloudflareToUnified always returns `conditions: []`
+    // (expression parsing isn't implemented), so diffing in Unified space —
+    // the old approach — meant a local rule with real conditions could never
+    // match its remote counterpart: it showed as `toUpdate` forever, even
+    // with nothing to sync. getChanges() now diffs in Cloudflare's native
+    // space (comparing real wirefilter expressions) instead.
+    it('detects no changes for a rule with real conditions that matches its remote Cloudflare counterpart', async () => {
+      const localConfig: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [
+          {
+            id: 'rule-1',
+            name: 'Existing Rule',
+            description: 'Existing rule',
+            enabled: true,
+            action: { type: 'deny' },
+            conditions: [{ field: 'path', operator: 'eq', value: '/test' }],
+          },
+        ],
+        ips: [],
+      }
+
+      const mockRuleset: CloudflareRuleset = {
+        id: 'ruleset-1',
+        name: 'Test Ruleset',
+        description: 'Test',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        rules: [
+          {
+            id: 'rule-1',
+            action: 'block',
+            expression: 'http.request.uri.path eq "/test"',
+            description: 'Existing rule',
+            enabled: true,
+          },
+        ],
+      }
+
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(mockRuleset)
+
+      const changes = await service.getChanges(localConfig)
+
+      expect(changes.rulesToAdd).toHaveLength(0)
+      expect(changes.rulesToUpdate).toHaveLength(0)
+      expect(changes.rulesToDelete).toHaveLength(0)
+      expect(changes.hasChanges).toBe(false)
+    })
+
+    it('detects an update when the locally-translated expression differs from the remote rule', async () => {
+      const localConfig: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [
+          {
+            id: 'rule-1',
+            name: 'Existing Rule',
+            description: 'Existing rule',
+            enabled: true,
+            action: { type: 'deny' },
+            conditions: [{ field: 'path', operator: 'eq', value: '/new-path' }],
+          },
+        ],
+        ips: [],
+      }
+
+      const mockRuleset: CloudflareRuleset = {
+        id: 'ruleset-1',
+        name: 'Test Ruleset',
+        description: 'Test',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        rules: [
+          {
+            id: 'rule-1',
+            action: 'block',
+            expression: 'http.request.uri.path eq "/old-path"',
+            description: 'Existing rule',
+            enabled: true,
+          },
+        ],
+      }
+
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(mockRuleset)
+
+      const changes = await service.getChanges(localConfig)
+
+      expect(changes.rulesToAdd).toHaveLength(0)
+      expect(changes.rulesToUpdate).toHaveLength(1)
+      expect(changes.rulesToDelete).toHaveLength(0)
+      expect(changes.hasChanges).toBe(true)
     })
   })
 

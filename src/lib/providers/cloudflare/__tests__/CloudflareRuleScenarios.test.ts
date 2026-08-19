@@ -10,21 +10,19 @@ jest.mock('../../../logger', () => ({
 }))
 
 // Mock OperationSafety for syncRules tests
+// `performDryRunValidation` delegates to the real `validateFn` (the real
+// `getChanges`) rather than a canned empty `changes` object — see the longer
+// comment in CloudflareFirewallService.test.ts for why a fixed stub here
+// would decouple `rulesAdded` assertions below from the actual diff logic.
 jest.mock('../../../utils/operationSafety', () => ({
   OperationSafety: {
-    performDryRunValidation: jest.fn<() => Promise<any>>().mockResolvedValue({
-      valid: true,
-      changes: {
-        rulesToAdd: [],
-        rulesToUpdate: [],
-        rulesToDelete: [],
-        ipsToAdd: [],
-        ipsToUpdate: [],
-        ipsToDelete: [],
-        hasChanges: false,
-      },
-      issues: [],
-    }),
+    performDryRunValidation: jest
+      .fn<(config: any, operation: string, validateFn: (c: any) => Promise<any>) => Promise<any>>()
+      .mockImplementation(async (config, _operation, validateFn) => ({
+        valid: true,
+        changes: await validateFn(config),
+        issues: [],
+      })),
     confirmDestructiveOperation: jest.fn<() => Promise<boolean>>().mockResolvedValue(true),
     assessOperationRisk: jest.fn<() => 'low' | 'medium' | 'high'>().mockReturnValue('low'),
   },
@@ -42,6 +40,22 @@ describe('Cloudflare Rule Scenarios', () => {
     jest.clearAllMocks()
     service = new CloudflareFirewallService(API_TOKEN, ZONE_ID, ACCOUNT_ID)
     mockClient = service['client']
+
+    // Default Lists-API mocks so getChanges()'s IP-diffing path (now
+    // genuinely exercised, since performDryRunValidation above delegates to
+    // the real getChanges instead of skipping it) doesn't fall through to a
+    // real, hanging network call in tests that don't care about IP state.
+    jest.spyOn(mockClient, 'getOrCreateIPBlocklist').mockResolvedValue({
+      id: 'list-1',
+      name: 'Doorman IP Blocklist',
+      description: 'Test',
+      kind: 'ip',
+      num_items: 0,
+      num_referencing_filters: 0,
+      created_on: '2024-01-01T00:00:00Z',
+      modified_on: '2024-01-01T00:00:00Z',
+    })
+    jest.spyOn(mockClient, 'getListItems').mockResolvedValue([])
   })
 
   afterEach(() => {
