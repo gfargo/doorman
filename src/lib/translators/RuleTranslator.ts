@@ -1,4 +1,4 @@
-import type { VercelCustomRule, VercelIPBlockingRule, VercelConditionGroup } from '../types/vercel'
+import type { VercelCustomRule, VercelIPBlockingRule, VercelConditionGroup, VercelRuleCondition } from '../types/vercel'
 import type { CloudflareRule } from '../types/cloudflare'
 import type { UnifiedRule, UnifiedIPRule, UnifiedCondition, UnifiedAction } from '../types/unified'
 import { ExpressionBuilder } from './ExpressionBuilder'
@@ -340,14 +340,42 @@ export class RuleTranslator {
     const warnings: TranslationWarning[] = []
     const conditionGroups: VercelConditionGroup[] = []
 
-    // Convert unified conditions to Vercel condition groups
-    const conditions = rule.conditions.map((condition) => ({
-      op: this.mapUnifiedOperatorToVercel(condition.operator),
-      neg: condition.negated,
-      type: this.mapUnifiedTypeToVercel(condition.field),
-      key: condition.key,
-      value: condition.value,
-    }))
+    // Convert unified conditions to Vercel condition groups. A condition whose
+    // field has no Vercel equivalent (e.g. Cloudflare-only `referer`/`port`) is
+    // dropped with a critical warning rather than mistranslated — silently
+    // relabeling it (the previous behavior defaulted to `path`) rewrote what
+    // the rule actually matches with no indication anything was wrong.
+    const conditions: VercelRuleCondition[] = []
+    for (const condition of rule.conditions) {
+      const type = this.mapUnifiedTypeToVercel(condition.field)
+      if (!type) {
+        const { TranslationWarningSystem } = require('./TranslationWarningSystem')
+        warnings.push(
+          TranslationWarningSystem.createUnsupportedFeatureWarning(
+            `condition field '${condition.field}'`,
+            'unified config',
+            'Vercel',
+            rule.id,
+            condition.field,
+          ),
+        )
+        continue
+      }
+      conditions.push({
+        op: this.mapUnifiedOperatorToVercel(condition.operator),
+        neg: condition.negated,
+        type,
+        key: condition.key,
+        value: condition.value,
+      })
+    }
+
+    if (conditions.length === 0) {
+      throw new Error(
+        `Rule "${rule.name}" has no conditions Vercel can represent — every condition field is unsupported ` +
+          'by Vercel (e.g. Cloudflare-only fields like referer/port). Cannot sync this rule to Vercel.',
+      )
+    }
 
     conditionGroups.push({ conditions })
 
@@ -488,6 +516,14 @@ export class RuleTranslator {
     return mapping[op] || 'eq'
   }
 
+  /**
+   * Vercel types with no entry here (e.g. `target_path`, `region`, `protocol`,
+   * `environment`, `geo_continent`, `geo_country_region`, `ja4_digest`,
+   * `ja3_digest`, `rate_limit_api_id`) fall through to `mapping[type] || type`
+   * below and are preserved as-is as the unified field name. `mapUnifiedTypeToVercel`
+   * (the reverse direction) has an explicit entry for every one of those
+   * pass-through fields so the round trip is lossless — keep the two in sync.
+   */
   private static mapVercelTypeToUnified(type: string): string {
     const mapping: Record<string, string> = {
       host: 'host',
@@ -507,23 +543,49 @@ export class RuleTranslator {
     return mapping[type] || type
   }
 
-  private static mapUnifiedTypeToVercel(type: string): import('../types/vercel').VercelRuleType {
-    const mapping: Record<string, import('../types/vercel').VercelRuleType> = {
-      host: 'host',
-      path: 'path',
-      method: 'method',
-      header: 'header',
-      query: 'query',
-      cookie: 'cookie',
-      ip: 'ip_address',
-      user_agent: 'user_agent',
-      country: 'geo_country',
-      city: 'geo_city',
-      asn: 'geo_as_number',
-      scheme: 'scheme',
-    }
+  /**
+   * Unified condition fields with a Vercel condition-type equivalent. Covers
+   * both the renamed unified fields (e.g. `ip` -> `ip_address`) and every
+   * Vercel-native type `mapVercelTypeToUnified` passes through unchanged
+   * (`region`, `protocol`, `environment`, `geo_continent`, `geo_country_region`,
+   * `ja4_digest`, `ja3_digest`, `rate_limit_api_id`, `target_path`) — those must
+   * map back to themselves, not fall through to a default.
+   */
+  private static readonly UNIFIED_TO_VERCEL_TYPE_MAP: Record<string, import('../types/vercel').VercelRuleType> = {
+    host: 'host',
+    path: 'path',
+    method: 'method',
+    header: 'header',
+    query: 'query',
+    cookie: 'cookie',
+    ip: 'ip_address',
+    user_agent: 'user_agent',
+    country: 'geo_country',
+    city: 'geo_city',
+    asn: 'geo_as_number',
+    scheme: 'scheme',
+    target_path: 'target_path',
+    region: 'region',
+    protocol: 'protocol',
+    environment: 'environment',
+    geo_continent: 'geo_continent',
+    geo_country_region: 'geo_country_region',
+    ja4_digest: 'ja4_digest',
+    ja3_digest: 'ja3_digest',
+    rate_limit_api_id: 'rate_limit_api_id',
+  }
 
-    return mapping[type] || 'path'
+  /**
+   * Map a unified condition field to its Vercel condition type, or `null` if
+   * Vercel has no equivalent (e.g. unified `referer`/`port`, which only
+   * Cloudflare supports). Previously this defaulted unmapped fields to `'path'`,
+   * which silently rewrote the *meaning* of a condition into a bogus path
+   * match — with no warning — corrupting a live rule on every routine sync,
+   * not just a cross-provider migration. Returning `null` lets the caller
+   * (`unifiedToVercel`) drop the condition and warn instead.
+   */
+  private static mapUnifiedTypeToVercel(type: string): import('../types/vercel').VercelRuleType | null {
+    return this.UNIFIED_TO_VERCEL_TYPE_MAP[type] ?? null
   }
 
   private static mapCloudflareActionToUnified(action: CloudflareRule['action']): import('../types/common').ActionType {

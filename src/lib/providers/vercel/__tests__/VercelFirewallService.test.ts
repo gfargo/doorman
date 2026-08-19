@@ -17,7 +17,14 @@ jest.mock('../../../utils/retry', () => ({
   retry: (fn: () => Promise<unknown>) => fn(),
 }))
 
+// Mock the prompt module — used to assert the create-firewall-config prompt
+// is never triggered during a dry run (regression coverage, see below).
+jest.mock('../../../ui/prompt', () => ({
+  prompt: jest.fn(),
+}))
+
 import { OperationSafety } from '../../../utils/operationSafety'
+import { prompt } from '../../../ui/prompt'
 
 describe('VercelFirewallService', () => {
   let service: VercelFirewallService
@@ -259,6 +266,136 @@ describe('VercelFirewallService', () => {
       jest.spyOn(client, 'fetchFirewallConfig').mockRejectedValue(new Error('API error'))
 
       await expect(service.syncRules(unifiedConfig)).rejects.toThrow('Failed to synchronize firewall rules')
+    })
+
+    describe('dry-run side effects (regression: --dry-run must never prompt or mutate)', () => {
+      it('computes changes without allowing the remote config to be auto-created during a dry run', async () => {
+        const spy = jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+          ...mockVercelConfig,
+          rules: [],
+          ips: [],
+        })
+
+        await service.syncRules(unifiedConfig, { dryRun: true })
+
+        expect(spy).toHaveBeenCalledWith(undefined, { allowCreate: false })
+      })
+
+      it('still allows the remote config to be auto-created for a real (non-dry-run) sync', async () => {
+        const spy = jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+          ...mockVercelConfig,
+          rules: [],
+          ips: [],
+        })
+        jest.spyOn(client, 'createFirewallRule').mockResolvedValue({
+          id: 'new_rule_1',
+          name: 'Block bots',
+          active: true,
+          conditionGroup: [],
+          action: { mitigate: { action: 'deny', rateLimit: null, redirect: null, actionDuration: null } },
+        })
+        jest.spyOn(client, 'createIPBlockingRule').mockResolvedValue({
+          id: 'new_ip_1',
+          ip: '1.2.3.4',
+          hostname: 'example.com',
+          action: 'deny',
+        })
+
+        await service.syncRules(unifiedConfig)
+
+        expect(spy).toHaveBeenCalledWith(undefined, { allowCreate: true })
+      })
+
+      it('never prompts to create a firewall config, or performs the mutating create, during a dry run against an unconfigured project (end-to-end through the real VercelClient)', async () => {
+        // Uses the real VercelClient (not a stubbed fetchFirewallConfig) so this
+        // exercises the fix all the way down to the HTTP layer: a project with
+        // no active firewall config yet must never trigger the interactive
+        // "Would you like to create one?" prompt during --dry-run, since that
+        // prompt (a) hangs with no TTY in CI/non-interactive runs and (b) is
+        // followed by a real mutating PUT if confirmed.
+        const realClient = new VercelClient('proj_123', 'team_456', 'test-token')
+        const realService = new VercelFirewallService(realClient)
+
+        const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+          ok: true,
+          status: 200,
+          statusText: 'OK',
+          headers: new Headers(),
+          json: jest.fn().mockResolvedValue({ active: null }),
+          text: jest.fn().mockResolvedValue(JSON.stringify({ active: null })),
+          clone: jest.fn(),
+        } as unknown as Response)
+        const putEmptyConfigSpy = jest.spyOn(realClient, 'putEmptyConfig')
+
+        const result = await realService.syncRules(unifiedConfig, { dryRun: true })
+
+        expect(prompt).not.toHaveBeenCalled()
+        expect(putEmptyConfigSpy).not.toHaveBeenCalled()
+        expect(result.success).toBe(true)
+
+        fetchSpy.mockRestore()
+      })
+    })
+
+    describe('partial failure handling (regression: a single failing operation used to abort the whole sync and discard the real error)', () => {
+      it('preserves the real underlying error message and cause when sync fails outside the per-item loops', async () => {
+        jest.spyOn(client, 'fetchFirewallConfig').mockRejectedValue(new Error('Vercel API unavailable'))
+
+        await expect(service.syncRules(unifiedConfig)).rejects.toThrow(
+          /Failed to synchronize firewall rules:.*Failed to fetch existing firewall configuration/,
+        )
+
+        const error: unknown = await service.syncRules(unifiedConfig).catch((e) => e)
+        expect(error).toBeInstanceOf(Error)
+        expect((error as Error).cause).toBeInstanceOf(Error)
+      })
+
+      it('returns a partial SyncResult (success: false, errors populated) when one operation in the middle of a loop fails, without discarding what succeeded', async () => {
+        const config: UnifiedConfig = {
+          version: '2.0',
+          provider: 'vercel',
+          rules: [
+            {
+              name: 'Rule A',
+              enabled: true,
+              conditions: [{ field: 'path', operator: 'eq', value: '/a' }],
+              action: { type: 'deny' },
+            },
+            {
+              name: 'Rule B',
+              enabled: true,
+              conditions: [{ field: 'path', operator: 'eq', value: '/b' }],
+              action: { type: 'deny' },
+            },
+          ],
+          ips: [],
+        }
+
+        jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+          ...mockVercelConfig,
+          rules: [],
+          ips: [],
+        })
+
+        const createFirewallRuleSpy = jest.spyOn(client, 'createFirewallRule')
+        createFirewallRuleSpy.mockResolvedValueOnce({
+          id: 'new_rule_a',
+          name: 'Rule A',
+          active: true,
+          conditionGroup: [],
+          action: { mitigate: { action: 'deny', rateLimit: null, redirect: null, actionDuration: null } },
+        })
+        createFirewallRuleSpy.mockRejectedValueOnce(new Error('Vercel API 500'))
+
+        const result = await service.syncRules(config)
+
+        expect(createFirewallRuleSpy).toHaveBeenCalledTimes(2)
+        expect(result.success).toBe(false)
+        expect(result.rulesAdded).toBe(1)
+        expect(result.errors).toBeDefined()
+        expect(result.errors!.some((e) => e.includes('Rule B'))).toBe(true)
+        expect(result.errors!.some((e) => e.includes('Vercel API 500'))).toBe(true)
+      })
     })
   })
 

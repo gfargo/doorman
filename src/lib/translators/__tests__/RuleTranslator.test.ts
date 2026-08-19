@@ -244,6 +244,59 @@ describe('RuleTranslator', () => {
       }
     })
 
+    // Regression test: Vercel-native fields not covered by the renamed-field
+    // table above (e.g. `region`, `ja3_digest`) must map back to themselves,
+    // not silently collapse to `path` — see mapUnifiedTypeToVercel.
+    it('round-trips Vercel-native field types that have no renamed unified counterpart', () => {
+      const vercelNativeFields = [
+        'target_path',
+        'region',
+        'protocol',
+        'environment',
+        'geo_continent',
+        'geo_country_region',
+        'ja4_digest',
+        'ja3_digest',
+        'rate_limit_api_id',
+      ] as const
+
+      for (const field of vercelNativeFields) {
+        const rule = makeUnifiedRule({
+          conditions: [{ field, operator: 'eq', value: 'test' }],
+        })
+        const { result } = RuleTranslator.unifiedToVercel(rule)
+        expect(result.conditionGroup[0]!.conditions[0]!.type).toBe(field)
+      }
+    })
+
+    // Regression test: a condition field with no Vercel equivalent (e.g.
+    // Cloudflare-only `referer`/`port`) must be dropped with a warning, never
+    // silently mislabeled as `path`.
+    it('drops a condition with no Vercel equivalent and warns instead of defaulting to path', () => {
+      const rule = makeUnifiedRule({
+        conditions: [
+          { field: 'referer', operator: 'eq', value: 'https://example.com' },
+          { field: 'path', operator: 'eq', value: '/api' },
+        ],
+      })
+      const { result, warnings } = RuleTranslator.unifiedToVercel(rule)
+
+      expect(result.conditionGroup[0]!.conditions).toHaveLength(1)
+      expect(result.conditionGroup[0]!.conditions[0]!.type).toBe('path')
+      expect(warnings.some((w) => w.severity === 'critical' && w.field === 'referer')).toBe(true)
+    })
+
+    // Regression test: if every condition on a rule is unsupported by Vercel,
+    // there's nothing safe to drop down to — this must fail loudly rather
+    // than sync a rule with zero conditions (which would match everything).
+    it('throws when no condition on the rule has a Vercel equivalent', () => {
+      const rule = makeUnifiedRule({
+        conditions: [{ field: 'referer', operator: 'eq', value: 'https://example.com' }],
+      })
+
+      expect(() => RuleTranslator.unifiedToVercel(rule)).toThrow(/no conditions Vercel can represent/)
+    })
+
     it('translates rate_limit action', () => {
       const rule = makeUnifiedRule({
         action: {

@@ -16,6 +16,8 @@ jest.mock('../../../ui/prompt', () => ({
   prompt: jest.fn().mockResolvedValue(false),
 }))
 
+import { prompt } from '../../../ui/prompt'
+
 describe('VercelClient', () => {
   const projectId = 'proj_123'
   const teamId = 'team_456'
@@ -131,6 +133,45 @@ describe('VercelClient', () => {
       fetchSpy.mockResolvedValue(createMockResponse({ error: 'Unauthorized' }, 401, 'Unauthorized'))
 
       await expect(client.fetchFirewallConfig()).rejects.toThrow()
+    })
+
+    describe('when no firewall configuration exists yet (active: null)', () => {
+      it('prompts to create one by default (allowCreate defaults to true)', async () => {
+        fetchSpy.mockResolvedValue(createMockResponse({ active: null }))
+        ;(prompt as jest.Mock).mockResolvedValueOnce(false)
+
+        const result = await client.fetchFirewallConfig()
+
+        expect(prompt).toHaveBeenCalledWith('Would you like to create one?', { type: 'confirm' })
+        expect(result).toBeNull()
+      })
+
+      it('creates an empty config when the user confirms the prompt (allowCreate defaults to true)', async () => {
+        fetchSpy
+          .mockResolvedValueOnce(createMockResponse({ active: null }))
+          .mockResolvedValueOnce(createMockResponse(mockVercelConfig))
+        ;(prompt as jest.Mock).mockResolvedValueOnce(true)
+
+        const result = await client.fetchFirewallConfig()
+
+        expect(prompt).toHaveBeenCalled()
+        // putEmptyConfig() issues the mutating PUT — verify it actually fired.
+        expect(fetchSpy).toHaveBeenCalledTimes(2)
+        expect(fetchSpy.mock.calls[1]![1]).toEqual(expect.objectContaining({ method: 'PUT' }))
+        expect(result).toEqual(mockVercelConfig.active)
+      })
+
+      it('never prompts or mutates when allowCreate is false, and returns a synthetic empty config instead', async () => {
+        fetchSpy.mockResolvedValue(createMockResponse({ active: null }))
+
+        const result = await client.fetchFirewallConfig(undefined, { allowCreate: false })
+
+        expect(prompt).not.toHaveBeenCalled()
+        // Only the initial GET should have fired — no follow-up PUT.
+        expect(fetchSpy).toHaveBeenCalledTimes(1)
+        expect(result.rules).toEqual([])
+        expect(result.ips).toEqual([])
+      })
     })
   })
 
