@@ -1,3 +1,10 @@
+# [3.3.0](https://github.com/gfargo/doorman/compare/v3.2.5...v3.3.0) (2026-08-19)
+
+
+### Features
+
+* lay foundation for migrating Vercel CLI onto IFirewallProvider ([43cdf19](https://github.com/gfargo/doorman/commit/43cdf192bb5665518aad3e4282e284e01fb02778))
+
 ## [3.2.5](https://github.com/gfargo/doorman/compare/v3.2.4...v3.2.5) (2026-08-19)
 
 
