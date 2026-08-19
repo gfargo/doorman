@@ -14,7 +14,16 @@ export type ProviderType = 'vercel' | 'cloudflare'
 export interface SyncOptions {
   dryRun?: boolean
   skipBackup?: boolean
+  /** Run non-interactively (no confirmation prompt). Does NOT by itself authorize
+   * deleting existing rules — see `allowDeletions`. */
   force?: boolean
+  /** Required, in addition to `force`, to let a non-interactive sync delete
+   * existing rules/IPs. Doorman has no state file, so a rule that exists
+   * remotely but not in the local config could be one the user genuinely
+   * removed, or a pre-existing rule (created by another tool, or found on
+   * doorman's very first sync against an already-configured zone/project)
+   * that's about to be silently destroyed with no one watching CI logs. */
+  allowDeletions?: boolean
 }
 
 /**

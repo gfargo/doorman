@@ -246,6 +246,7 @@ export class CloudflareFirewallService extends BaseFirewallService {
       riskLevel,
       skipConfirmation: options?.force || false,
       dryRun: options?.dryRun || false,
+      allowDeletions: options?.allowDeletions || false,
     })
 
     if (!confirmed) {

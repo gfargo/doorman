@@ -20,6 +20,7 @@ interface SyncOptions {
   accountId?: string
   debug?: boolean
   ci?: boolean
+  allowDeletions?: boolean
 }
 
 export const command = 'sync'
@@ -55,6 +56,12 @@ export const builder = {
     default: false,
   },
   ci: { type: 'boolean', description: 'Run in CI mode (non-interactive)', default: false },
+  allowDeletions: {
+    type: 'boolean',
+    description:
+      'Required together with --ci to let a non-interactive sync delete existing rules/IPs. Without it, a --ci sync that would delete anything is refused rather than applied silently.',
+    default: false,
+  },
 }
 
 export const handler = async (argv: Arguments<SyncOptions>) => {
@@ -246,8 +253,9 @@ async function syncWithProvider(
 
   logger.start('Starting firewall rules sync...')
   // Non-vercel providers prompt for confirmation internally (unless --ci); no need
-  // to prompt again here.
-  const result = await provider.syncRules(unifiedConfig, { force: argv.ci })
+  // to prompt again here. In --ci mode, a sync that would delete anything still
+  // requires --allow-deletions — see OperationSafety.confirmDestructiveOperation.
+  const result = await provider.syncRules(unifiedConfig, { force: argv.ci, allowDeletions: argv.allowDeletions })
 
   if (!result.success) {
     throw new Error(`Sync failed: ${result.errors?.join(', ') || 'unknown error'}`)

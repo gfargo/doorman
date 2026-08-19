@@ -13,6 +13,10 @@ export interface SafetyConfirmationOptions {
   riskLevel: 'low' | 'medium' | 'high'
   skipConfirmation?: boolean
   dryRun?: boolean
+  /** Required, in addition to `skipConfirmation`, to let a non-interactive
+   * operation proceed when it would delete existing rules/IPs — see
+   * `confirmDestructiveOperation`. */
+  allowDeletions?: boolean
 }
 
 /**
@@ -43,12 +47,44 @@ export class OperationSafety {
    * Confirm destructive operations with user
    */
   public static async confirmDestructiveOperation(options: SafetyConfirmationOptions): Promise<boolean> {
-    const { operation, target, changes, riskLevel, skipConfirmation = false, dryRun = false } = options
+    const {
+      operation,
+      target,
+      changes,
+      riskLevel,
+      skipConfirmation = false,
+      dryRun = false,
+      allowDeletions = false,
+    } = options
 
-    // Skip confirmation if explicitly requested or in dry-run mode
-    if (skipConfirmation || dryRun) {
-      if (dryRun) {
-        logger.info(`🔍 Dry run mode: Would perform ${operation} on ${target}`)
+    if (dryRun) {
+      logger.info(`🔍 Dry run mode: Would perform ${operation} on ${target}`)
+      return true
+    }
+
+    const deletionCount = (changes?.rulesToDelete?.length || 0) + (changes?.ipsToDelete?.length || 0)
+
+    if (skipConfirmation) {
+      // `skipConfirmation` (--force/--ci) authorizes running non-interactively,
+      // but never by itself authorizes deleting rules. Doorman has no state
+      // file, so a rule present remotely but absent from the local config
+      // could be one the user genuinely removed — or a pre-existing rule
+      // that's about to be silently destroyed with nobody watching CI logs
+      // to catch it (e.g. Cloudflare's full-ruleset-replace adopting and
+      // then overwriting whatever was already in the zone's custom rules
+      // list on the very first sync). Deletions always require the separate
+      // `allowDeletions` opt-in when running unattended.
+      if (deletionCount > 0 && !allowDeletions) {
+        logger.error(
+          `\n🚨 Refusing to run ${operation} non-interactively: this would delete ${deletionCount} existing rule(s)/IP(s), and there is no confirmation prompt to catch a mistake.`,
+        )
+        if (changes) {
+          this.displayChangeSummary(changes)
+        }
+        logger.error(
+          `\nIf this is intended, re-run with --allow-deletions. Run "doorman diff" first if you're not sure what would be removed.`,
+        )
+        return false
       }
       return true
     }

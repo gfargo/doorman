@@ -226,6 +226,80 @@ describe('OperationSafety', () => {
     })
   })
 
+  describe('confirmDestructiveOperation', () => {
+    // Regression coverage for the CI-deletion safety gate: `skipConfirmation`
+    // (--force/--ci) authorizes running non-interactively, but must never by
+    // itself authorize deleting rules — see the comment in operationSafety.ts.
+    const changesWithDeletions: ChangeSet = {
+      rulesToAdd: [],
+      rulesToUpdate: [],
+      rulesToDelete: [{}] as UnifiedConfig['rules'],
+      ipsToAdd: [],
+      ipsToUpdate: [],
+      ipsToDelete: [],
+      hasChanges: true,
+    }
+
+    const changesWithoutDeletions: ChangeSet = {
+      rulesToAdd: [{}] as UnifiedConfig['rules'],
+      rulesToUpdate: [],
+      rulesToDelete: [],
+      ipsToAdd: [],
+      ipsToUpdate: [],
+      ipsToDelete: [],
+      hasChanges: true,
+    }
+
+    it('refuses a non-interactive operation that would delete rules without allowDeletions', async () => {
+      const confirmed = await OperationSafety.confirmDestructiveOperation({
+        operation: 'sync rules',
+        target: 'Cloudflare zone test',
+        changes: changesWithDeletions,
+        riskLevel: 'high',
+        skipConfirmation: true,
+      })
+
+      expect(confirmed).toBe(false)
+    })
+
+    it('allows a non-interactive operation that would delete rules when allowDeletions is set', async () => {
+      const confirmed = await OperationSafety.confirmDestructiveOperation({
+        operation: 'sync rules',
+        target: 'Cloudflare zone test',
+        changes: changesWithDeletions,
+        riskLevel: 'high',
+        skipConfirmation: true,
+        allowDeletions: true,
+      })
+
+      expect(confirmed).toBe(true)
+    })
+
+    it('allows a non-interactive operation with no deletions without needing allowDeletions', async () => {
+      const confirmed = await OperationSafety.confirmDestructiveOperation({
+        operation: 'sync rules',
+        target: 'Cloudflare zone test',
+        changes: changesWithoutDeletions,
+        riskLevel: 'low',
+        skipConfirmation: true,
+      })
+
+      expect(confirmed).toBe(true)
+    })
+
+    it('short-circuits true for dry runs regardless of deletions or allowDeletions', async () => {
+      const confirmed = await OperationSafety.confirmDestructiveOperation({
+        operation: 'sync rules',
+        target: 'Cloudflare zone test',
+        changes: changesWithDeletions,
+        riskLevel: 'high',
+        dryRun: true,
+      })
+
+      expect(confirmed).toBe(true)
+    })
+  })
+
   describe('getBackupRecommendation', () => {
     it('should recommend backup for high-risk operations', () => {
       const recommendation = OperationSafety.getBackupRecommendation('delete ruleset', 'high')
