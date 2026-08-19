@@ -1,3 +1,10 @@
+## [3.2.5](https://github.com/gfargo/doorman/compare/v3.2.4...v3.2.5) (2026-08-19)
+
+
+### Bug Fixes
+
+* preserve condition-group fidelity in Vercel<->Unified translation ([f02e929](https://github.com/gfargo/doorman/commit/f02e9294104bf3e3d2c9292ba98e9c7f2b1ffc42))
+
 ## [3.2.4](https://github.com/gfargo/doorman/compare/v3.2.3...v3.2.4) (2026-08-19)
 
 
