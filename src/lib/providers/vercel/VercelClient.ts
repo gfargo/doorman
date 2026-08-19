@@ -28,6 +28,22 @@ export interface VercelConfig {
 
 export const VERCEL_API_BASE_URL = 'https://api.vercel.com/v1/security/firewall/config'
 
+export interface FetchFirewallConfigOptions {
+  /**
+   * Whether a missing firewall configuration may be created on the caller's
+   * behalf — i.e. whether it's OK to prompt "Would you like to create one?"
+   * and, if confirmed, issue the mutating PUT that creates an empty config.
+   *
+   * Defaults to `true`, preserving the original create-on-first-use
+   * behavior for real syncs. Read-only callers (e.g. dry-run validation)
+   * MUST pass `false` so a project with no firewall config yet never
+   * triggers an interactive prompt (which hangs with no TTY, e.g. in CI)
+   * or a real write during what's supposed to be a side-effect-free
+   * operation.
+   */
+  allowCreate?: boolean
+}
+
 /**
  * A client for interacting with the Vercel API to manage firewall rules.
  */
@@ -75,7 +91,8 @@ export class VercelClient extends BaseFirewallClient {
    * @returns A promise that resolves to the firewall config.
    * @throws An error if the fetch request fails.
    */
-  async fetchFirewallConfig(configVersion?: number): Promise<VercelConfig> {
+  async fetchFirewallConfig(configVersion?: number, options?: FetchFirewallConfigOptions): Promise<VercelConfig> {
+    const { allowCreate = true } = options ?? {}
     const response = await this.get<ApiResponse>(this.getUrl(configVersion))
 
     logger.debug('Config Version:', configVersion ?? 'latest')
@@ -87,6 +104,15 @@ export class VercelClient extends BaseFirewallClient {
 
     if (!response || ('active' in response && response.active === null)) {
       logger.warn(chalk.bold('No firewall configuration found.'))
+
+      if (!allowCreate) {
+        // Read-only fetch (e.g. dry-run validation) — never prompt or
+        // mutate remote state. Return a synthetic empty config so diffing
+        // logic still has something to compare against.
+        logger.debug('Skipping create-configuration prompt for read-only fetch.')
+        return this.emptyConfigPlaceholder()
+      }
+
       const createEmptyFirstVersion = await prompt('Would you like to create one?', {
         type: 'confirm',
       })
@@ -104,6 +130,26 @@ export class VercelClient extends BaseFirewallClient {
     }
 
     return (response as LatestConfigResponse).active
+  }
+
+  /**
+   * A synthetic, never-persisted empty config used when a read-only caller
+   * (e.g. dry-run validation) asks for the firewall config of a project
+   * that doesn't have one yet, and creation is disallowed. Never sent to
+   * the Vercel API.
+   */
+  private emptyConfigPlaceholder(): VercelConfig {
+    return {
+      version: 0,
+      id: '',
+      firewallEnabled: true,
+      crs: null,
+      rules: [],
+      ips: [],
+      projectKey: '',
+      ownerId: '',
+      updatedAt: new Date(0).toISOString(),
+    }
   }
 
   async putEmptyConfig(): Promise<VercelConfig> {

@@ -86,10 +86,14 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       // with no dry-run check and no confirmation prompt.
       const { OperationSafety } = require('../../utils/operationSafety')
 
+      // Compute changes without allowing a missing remote config to be
+      // created — that create-prompt/mutating-PUT path (in
+      // VercelClient.fetchFirewallConfig) must not run before we know
+      // whether this is a dry run. See getChanges' `allowCreate` option.
       const dryRunResult = await OperationSafety.performDryRunValidation(
         config,
         'sync rules',
-        async (cfg: UnifiedConfig) => await this.getChanges(cfg),
+        async (cfg: UnifiedConfig) => await this.getChanges(cfg, { allowCreate: !dryRun }),
       )
 
       if (!dryRunResult.valid) {
@@ -172,56 +176,96 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       const updatedIPRules: IPBlockingRule[] = []
       const deletedIPRules: IPBlockingRule[] = []
 
+      // Collected per-item failures across all six sub-loops below. A
+      // single item exhausting its retries no longer aborts the whole sync
+      // (and every independent operation still queued) — it's recorded
+      // here, the loop moves on, and the final SyncResult reports exactly
+      // what succeeded and what didn't via `errors`/`success`, instead of
+      // throwing away all progress information.
+      const errors: string[] = []
+      const describeError = (context: string, error: unknown): string =>
+        `${context}: ${error instanceof Error ? error.message : String(error)}`
+
       // Delete custom rules
       for (const rule of toDelete) {
-        logger.debug(`Deleting custom rule: ${rule.id}`)
-        await retry(() => this.client.deleteFirewallRule(rule), { maxAttempts: 3 })
-        deletedRules.push(rule)
-        logger.debug(`Custom rule deleted: ${rule.id}`)
+        try {
+          logger.debug(`Deleting custom rule: ${rule.id}`)
+          await retry(() => this.client.deleteFirewallRule(rule), { maxAttempts: 3 })
+          deletedRules.push(rule)
+          logger.debug(`Custom rule deleted: ${rule.id}`)
+        } catch (error) {
+          logger.error(`Failed to delete custom rule ${rule.id}:`, error)
+          errors.push(describeError(`Failed to delete custom rule ${rule.id}`, error))
+        }
       }
 
       // Delete IP blocking rules
       for (const rule of ipRulesToDelete) {
-        logger.debug(`Deleting IP blocking rule: ${rule.id}`)
-        await retry(() => this.client.deleteIPBlockingRule(rule), { maxAttempts: 3 })
-        deletedIPRules.push(rule)
-        logger.debug(`IP blocking rule deleted: ${rule.id}`)
+        try {
+          logger.debug(`Deleting IP blocking rule: ${rule.id}`)
+          await retry(() => this.client.deleteIPBlockingRule(rule), { maxAttempts: 3 })
+          deletedIPRules.push(rule)
+          logger.debug(`IP blocking rule deleted: ${rule.id}`)
+        } catch (error) {
+          logger.error(`Failed to delete IP blocking rule ${rule.id}:`, error)
+          errors.push(describeError(`Failed to delete IP blocking rule ${rule.id}`, error))
+        }
       }
 
       // Add new custom rules
       for (const rule of toAdd) {
-        logger.debug(`Adding new custom rule: ${rule.name}`)
-        const newRule = await retry(() => this.client.createFirewallRule(rule), {
-          maxAttempts: 3,
-        })
-        addedRules.push(newRule)
-        logger.debug(`New custom rule added: ${newRule.id}`)
+        try {
+          logger.debug(`Adding new custom rule: ${rule.name}`)
+          const newRule = await retry(() => this.client.createFirewallRule(rule), {
+            maxAttempts: 3,
+          })
+          addedRules.push(newRule)
+          logger.debug(`New custom rule added: ${newRule.id}`)
+        } catch (error) {
+          logger.error(`Failed to add custom rule "${rule.name}":`, error)
+          errors.push(describeError(`Failed to add custom rule "${rule.name}"`, error))
+        }
       }
 
       // Add new IP blocking rules
       for (const rule of ipRulesToAdd) {
-        logger.debug(`Adding new IP blocking rule: ${rule.ip}`)
-        const newIPRule = await retry(() => this.client.createIPBlockingRule(rule), {
-          maxAttempts: 3,
-        })
-        addedIPRules.push(newIPRule)
-        logger.debug(`New IP blocking rule added: (hostname): ${newIPRule.hostname} (ip): ${newIPRule.ip}`)
+        try {
+          logger.debug(`Adding new IP blocking rule: ${rule.ip}`)
+          const newIPRule = await retry(() => this.client.createIPBlockingRule(rule), {
+            maxAttempts: 3,
+          })
+          addedIPRules.push(newIPRule)
+          logger.debug(`New IP blocking rule added: (hostname): ${newIPRule.hostname} (ip): ${newIPRule.ip}`)
+        } catch (error) {
+          logger.error(`Failed to add IP blocking rule ${rule.ip}:`, error)
+          errors.push(describeError(`Failed to add IP blocking rule ${rule.ip}`, error))
+        }
       }
 
       // Update existing custom rules
       for (const rule of toUpdate) {
-        logger.debug(`Updating custom rule: ${rule.id}`)
-        const updatedRule = await retry(() => this.client.updateFirewallRule(rule), { maxAttempts: 3 })
-        updatedRules.push(updatedRule)
-        logger.debug(`Custom rule updated: ${updatedRule.id}`)
+        try {
+          logger.debug(`Updating custom rule: ${rule.id}`)
+          const updatedRule = await retry(() => this.client.updateFirewallRule(rule), { maxAttempts: 3 })
+          updatedRules.push(updatedRule)
+          logger.debug(`Custom rule updated: ${updatedRule.id}`)
+        } catch (error) {
+          logger.error(`Failed to update custom rule ${rule.id}:`, error)
+          errors.push(describeError(`Failed to update custom rule ${rule.id}`, error))
+        }
       }
 
       // Update existing IP blocking rules
       for (const rule of ipRulesToUpdate) {
-        logger.debug(`Updating IP blocking rule: ${rule.id}`)
-        const updatedRule = await retry(() => this.client.updateIPBlockingRule(rule), { maxAttempts: 3 })
-        updatedIPRules.push(updatedRule)
-        logger.debug(`IP blocking rule updated: ${updatedRule.id}`)
+        try {
+          logger.debug(`Updating IP blocking rule: ${rule.id}`)
+          const updatedRule = await retry(() => this.client.updateIPBlockingRule(rule), { maxAttempts: 3 })
+          updatedIPRules.push(updatedRule)
+          logger.debug(`IP blocking rule updated: ${updatedRule.id}`)
+        } catch (error) {
+          logger.error(`Failed to update IP blocking rule ${rule.id}:`, error)
+          errors.push(describeError(`Failed to update IP blocking rule ${rule.id}`, error))
+        }
       }
 
       logger.debug(
@@ -233,32 +277,58 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
           `${chalk.cyan('Updated:')} ${chalk.cyan(updatedIPRules.length)}, ${chalk.red('Deleted:')} ${chalk.red(deletedIPRules.length)}`,
       )
 
-      // Fetch updated version
-      const activeConfig = await this.client.fetchFirewallConfig()
+      // Fetch updated version. Best-effort: a failure here shouldn't
+      // discard the sync results already collected above. Falls back to
+      // the pre-sync version (captured before any mutations) if it fails.
+      let finalVersion: number = version
+      try {
+        const activeConfig = await this.client.fetchFirewallConfig()
+        finalVersion = activeConfig.version
+      } catch (error) {
+        logger.error('Failed to fetch updated firewall configuration version after sync:', error)
+        errors.push(describeError('Failed to fetch updated configuration version after sync', error))
+      }
 
       return {
-        success: true,
+        success: errors.length === 0,
         rulesAdded: addedRules.length,
         rulesUpdated: updatedRules.length,
         rulesDeleted: deletedRules.length,
         ipsAdded: addedIPRules.length,
         ipsUpdated: updatedIPRules.length,
         ipsDeleted: deletedIPRules.length,
-        version: activeConfig.version,
+        version: finalVersion,
+        errors: errors.length > 0 ? errors : undefined,
       }
     } catch (error) {
       logger.error('Error during sync:', error)
-      throw new Error('Failed to synchronize firewall rules')
+      // Preserve the real error instead of discarding it behind a generic
+      // message — callers (and anyone debugging a failed sync) need to
+      // know *why* it failed, not just that it did.
+      throw new Error(
+        `Failed to synchronize firewall rules: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      )
     }
   }
 
   /**
    * Get changes between local and remote configuration
    */
-  async getChanges(config: UnifiedConfig): Promise<ChangeSet & { version: number }> {
+  async getChanges(
+    config: UnifiedConfig,
+    options?: { allowCreate?: boolean },
+  ): Promise<ChangeSet & { version: number }> {
     try {
       logger.debug('Fetching existing firewall configuration')
-      const activeConfig = await this.client.fetchFirewallConfig()
+      // `allowCreate: false` is threaded down from syncRules' dry-run path
+      // so a project without a firewall config yet never triggers the
+      // interactive create-prompt (or the mutating PUT behind it) while
+      // we're only computing what a sync *would* do. Real (non-dry-run)
+      // syncs keep the default `true`, preserving create-on-first-use.
+      const activeConfig = await this.client.fetchFirewallConfig(undefined, {
+        allowCreate: options?.allowCreate ?? true,
+      })
       logger.debug(`Fetched ${activeConfig.rules.length} custom rules and ${activeConfig.ips.length} IP blocking rules`)
 
       // Convert unified rules back to Vercel format for comparison
