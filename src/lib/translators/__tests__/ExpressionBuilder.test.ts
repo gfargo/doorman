@@ -203,6 +203,33 @@ describe('ExpressionBuilder', () => {
     it('throws when conditions array is empty', () => {
       expect(() => ExpressionBuilder.fromUnifiedConditions([])).toThrow('At least one condition is required')
     })
+
+    // Regression test: conditions carrying a `group` index (set by
+    // RuleTranslator.vercelToUnified for a rule with 2+ Vercel condition
+    // groups) must be AND'd within a group and OR'd across groups, not
+    // flattened by the flat `logic` join — which would silently turn
+    // "(path=/api AND method=POST) OR (header=x)" into a single
+    // all-AND'd (or all-OR'd) expression matching different traffic.
+    it('AND-within/OR-across when conditions carry a group index', () => {
+      const conditions: UnifiedCondition[] = [
+        { field: 'path', operator: 'eq', value: '/api', group: 0 },
+        { field: 'method', operator: 'eq', value: 'POST', group: 0 },
+        { field: 'host', operator: 'eq', value: 'example.com', group: 1 },
+      ]
+      const result = ExpressionBuilder.fromUnifiedConditions(conditions)
+      expect(result).toBe(
+        '((http.request.uri.path eq "/api" and http.request.method eq "POST") or http.host eq "example.com")',
+      )
+    })
+
+    it('collapses to a single AND group when all conditions share the same group index', () => {
+      const conditions: UnifiedCondition[] = [
+        { field: 'path', operator: 'eq', value: '/api', group: 0 },
+        { field: 'method', operator: 'eq', value: 'POST', group: 0 },
+      ]
+      const result = ExpressionBuilder.fromUnifiedConditions(conditions)
+      expect(result).toBe('(http.request.uri.path eq "/api" and http.request.method eq "POST")')
+    })
   })
 
   describe('fromUnifiedCondition', () => {

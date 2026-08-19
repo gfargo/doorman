@@ -56,17 +56,47 @@ export class ExpressionBuilder {
   }
 
   /**
-   * Build expression from unified conditions
+   * Build expression from unified conditions.
+   *
+   * Conditions may carry a `group` index — set when translated from a
+   * provider with a two-level AND-within/OR-across condition model (e.g.
+   * Vercel's `conditionGroup[]`, via RuleTranslator.vercelToUnified).
+   * wirefilter fully supports arbitrary nesting, so conditions sharing a
+   * `group` are AND'd, and each group's sub-expression is OR'd against the
+   * others — without this, a rule with 2+ Vercel-originated groups would
+   * flatten into one big AND/OR block and stop matching what it used to.
+   * Ungrouped conditions (no `group` set on any of them, e.g. a
+   * hand-authored config) fall back to the flat `logic`-joined behavior
+   * this function has always had.
    */
   public static fromUnifiedConditions(conditions: UnifiedCondition[], logic: 'AND' | 'OR' = 'AND'): string {
     if (!conditions || conditions.length === 0) {
       throw new Error('At least one condition is required')
     }
 
-    const expressions = conditions.map((condition) => this.fromUnifiedCondition(condition))
+    const hasGroups = conditions.some((c) => c.group !== undefined)
+    if (!hasGroups) {
+      const expressions = conditions.map((condition) => this.fromUnifiedCondition(condition))
+      const connector = logic === 'AND' ? ' and ' : ' or '
+      return expressions.length > 1 ? `(${expressions.join(connector)})` : expressions[0]!
+    }
 
-    const connector = logic === 'AND' ? ' and ' : ' or '
-    return expressions.length > 1 ? `(${expressions.join(connector)})` : expressions[0]!
+    const groupedConditions = new Map<number, UnifiedCondition[]>()
+    for (const condition of conditions) {
+      const groupIndex = condition.group ?? 0
+      const bucket = groupedConditions.get(groupIndex)
+      if (bucket) {
+        bucket.push(condition)
+      } else {
+        groupedConditions.set(groupIndex, [condition])
+      }
+    }
+
+    const groupExpressions = Array.from(groupedConditions.values()).map((groupConditions) =>
+      this.combineWithAnd(groupConditions.map((c) => this.fromUnifiedCondition(c))),
+    )
+
+    return groupExpressions.length > 1 ? this.combineWithOr(groupExpressions) : groupExpressions[0]!
   }
 
   /**
