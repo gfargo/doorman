@@ -465,6 +465,7 @@ export class CloudflareFirewallService extends BaseFirewallService {
       ipsToAdd: ipDiff.toAdd,
       ipsToUpdate: ipDiff.toUpdate,
       ipsToDelete: ipDiff.toDelete,
+      version: parseInt(ruleset.version, 10),
       hasChanges:
         ruleDiff.toAdd.length > 0 ||
         ruleDiff.toUpdate.length > 0 ||

@@ -57,6 +57,16 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       return {
         version: '2.0',
         provider: 'vercel',
+        // CloudflareFirewallService.fetchConfig already sets providers.cloudflare
+        // — this must match, or downstream ValidationService checks (which
+        // require providers.<provider> to be present whenever `provider` is
+        // set) throw, and ProviderDetector's round-trip auto-detection breaks.
+        providers: {
+          vercel: {
+            projectId: this.client['projectId'],
+            teamId: this.client['teamId'],
+          },
+        },
         rules,
         ips,
         metadata: {
@@ -185,6 +195,14 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       const describeError = (context: string, error: unknown): string =>
         `${context}: ${error instanceof Error ? error.message : String(error)}`
 
+      // Vercel always assigns its own id on create (createFirewallRule sends
+      // `id: null` regardless of what the local rule had, if anything) — so
+      // the local config's rule id is essentially always stale for a newly
+      // created rule. This is real reconciliation data, not a naming-
+      // convention guess: `oldId` is the local rule's id if it had one (a
+      // caller should match on it), otherwise omitted (match on `name`).
+      const idRemappings: NonNullable<SyncResult['idRemappings']> = []
+
       // Delete custom rules
       for (const rule of toDelete) {
         try {
@@ -217,6 +235,9 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
           logger.debug(`Adding new custom rule: ${rule.name}`)
           const newRule = await this.client.createFirewallRule(rule)
           addedRules.push(newRule)
+          if (newRule.id && newRule.id !== rule.id) {
+            idRemappings.push({ oldId: rule.id || undefined, newId: newRule.id, name: rule.name })
+          }
           logger.debug(`New custom rule added: ${newRule.id}`)
         } catch (error) {
           logger.error(`Failed to add custom rule "${rule.name}":`, error)
@@ -272,13 +293,17 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
           `${chalk.cyan('Updated:')} ${chalk.cyan(updatedIPRules.length)}, ${chalk.red('Deleted:')} ${chalk.red(deletedIPRules.length)}`,
       )
 
-      // Fetch updated version. Best-effort: a failure here shouldn't
-      // discard the sync results already collected above. Falls back to
-      // the pre-sync version (captured before any mutations) if it fails.
+      // Fetch updated version/timestamp. Best-effort: a failure here
+      // shouldn't discard the sync results already collected above. Falls
+      // back to the pre-sync version (captured before any mutations) if it
+      // fails — updatedAt has no equivalent pre-sync fallback, so it's left
+      // undefined in that case rather than reporting a stale timestamp.
       let finalVersion: number = version
+      let finalUpdatedAt: string | undefined
       try {
         const activeConfig = await this.client.fetchFirewallConfig()
         finalVersion = activeConfig.version
+        finalUpdatedAt = activeConfig.updatedAt
       } catch (error) {
         logger.error('Failed to fetch updated firewall configuration version after sync:', error)
         errors.push(describeError('Failed to fetch updated configuration version after sync', error))
@@ -293,6 +318,8 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
         ipsUpdated: updatedIPRules.length,
         ipsDeleted: deletedIPRules.length,
         version: finalVersion,
+        updatedAt: finalUpdatedAt,
+        idRemappings: idRemappings.length > 0 ? idRemappings : undefined,
         errors: errors.length > 0 ? errors : undefined,
       }
     } catch (error) {

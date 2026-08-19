@@ -115,6 +115,22 @@ describe('VercelFirewallService', () => {
       expect(result.metadata!.updatedAt).toBe('2024-01-01T00:00:00Z')
     })
 
+    // Regression test: fetchConfig previously set `provider: 'vercel'` with
+    // no matching `providers.vercel` block — CloudflareFirewallService
+    // already sets `providers.cloudflare` alongside `provider: 'cloudflare'`.
+    // Without it, anything running the result through ValidationService
+    // (e.g. `backup`'s config validation, `saveConfig`'s default validation)
+    // throws "Provider 'vercel' specified but no configuration found in
+    // providers section", and ProviderDetector's round-trip auto-detection
+    // (which looks for providers.vercel.projectId) silently breaks.
+    it('should set providers.vercel alongside provider', async () => {
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue(mockVercelConfig)
+
+      const result = await service.fetchConfig()
+
+      expect(result.providers?.vercel).toEqual({ projectId: 'proj_123', teamId: 'team_456' })
+    })
+
     it('should pass version parameter to client', async () => {
       const spy = jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue(mockVercelConfig)
 
@@ -438,6 +454,88 @@ describe('VercelFirewallService', () => {
 
       expect(deleteFirewallRuleSpy).toHaveBeenCalledTimes(1)
       expect(result.success).toBe(false)
+    })
+  })
+
+  describe('idRemappings (regression: local-config write-back needs the real server-assigned id, not a naming-convention guess)', () => {
+    it('reports an id remapping when the server assigns a different id than the local rule had', async () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'stale_local_id',
+            name: 'My Rule',
+            enabled: true,
+            conditions: [{ field: 'path', operator: 'eq', value: '/a' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({ ...mockVercelConfig, rules: [], ips: [] })
+      jest.spyOn(client, 'createFirewallRule').mockResolvedValue({
+        id: 'rule_server_assigned',
+        name: 'My Rule',
+        active: true,
+        conditionGroup: [],
+        action: { mitigate: { action: 'deny', rateLimit: null, redirect: null, actionDuration: null } },
+      })
+
+      const result = await service.syncRules(config)
+
+      expect(result.idRemappings).toEqual([{ oldId: 'stale_local_id', newId: 'rule_server_assigned', name: 'My Rule' }])
+    })
+
+    it('omits oldId when the local rule had no id at all', async () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            name: 'Brand New Rule',
+            enabled: true,
+            conditions: [{ field: 'path', operator: 'eq', value: '/a' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({ ...mockVercelConfig, rules: [], ips: [] })
+      jest.spyOn(client, 'createFirewallRule').mockResolvedValue({
+        id: 'rule_server_assigned',
+        name: 'Brand New Rule',
+        active: true,
+        conditionGroup: [],
+        action: { mitigate: { action: 'deny', rateLimit: null, redirect: null, actionDuration: null } },
+      })
+
+      const result = await service.syncRules(config)
+
+      expect(result.idRemappings).toEqual([{ newId: 'rule_server_assigned', name: 'Brand New Rule' }])
+    })
+
+    it('leaves idRemappings undefined when no rules were created', async () => {
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue(mockVercelConfig)
+
+      const result = await service.syncRules({
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'rule_1',
+            name: 'Block bots',
+            enabled: true,
+            conditions: [{ field: 'user_agent', operator: 'contains', value: 'BadBot' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      })
+
+      expect(result.idRemappings).toBeUndefined()
     })
   })
 
