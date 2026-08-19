@@ -35,7 +35,20 @@ export class FieldMapper {
   }
 
   /**
-   * Cloudflare field → Vercel type mapping (reverse)
+   * Cloudflare field → Vercel type mapping (reverse).
+   *
+   * Three forward-mapping entries collapse two distinct Vercel types onto
+   * one Cloudflare field, so the reverse direction is necessarily lossy —
+   * this table picks one canonical Vercel type per Cloudflare field rather
+   * than trying to recover which of the two the value originally was:
+   *   - `region` and `geo_country_region` both -> `ip.geoip.subdivision_1`;
+   *     resolves back to `region`.
+   *   - `scheme` and `protocol` both -> `ssl`; resolves back to `protocol`.
+   *   - `path` and `target_path` both -> `http.request.uri.path`; resolves
+   *     back to `path` (no entry recovers `target_path`).
+   * `http.referer` is handled separately in `toVercel()`, not here — it
+   * needs `key: 'referer'` set on the returned condition, which a flat
+   * type->type table can't express.
    */
   private static readonly cloudflareToVercel: Record<string, VercelRuleType> = {
     'http.host': 'host',
@@ -48,7 +61,6 @@ export class FieldMapper {
     'ip.geoip.subdivision_1': 'region',
     ssl: 'protocol',
     'http.user_agent': 'user_agent',
-    'http.referer': 'header', // Map to header with key 'referer'
     'ip.geoip.continent': 'geo_continent',
     'ip.geoip.country': 'geo_country',
     'ip.geoip.city': 'geo_city',
@@ -93,6 +105,14 @@ export class FieldMapper {
       return { type: 'cookie', key: cookieMatch[1] }
     }
 
+    // Vercel has no dedicated referer condition type — it's just a header
+    // condition keyed on 'referer'. Handled here rather than in the flat
+    // cloudflareToVercel table below because it needs `key` set, which that
+    // table (type -> type only) can't express.
+    if (cloudflareField === 'http.referer') {
+      return { type: 'header', key: 'referer' }
+    }
+
     // Direct mapping
     const vercelType = this.cloudflareToVercel[cloudflareField]
     if (vercelType) {
@@ -117,6 +137,13 @@ export class FieldMapper {
   public static isVercelSupported(cloudflareField: string): boolean {
     // Check direct mapping
     if (this.cloudflareToVercel[cloudflareField]) {
+      return true
+    }
+
+    // http.referer is handled specially in toVercel() (see there), not via
+    // the direct mapping table above — must be checked here too, or this
+    // would report `false` for a field toVercel() can actually translate.
+    if (cloudflareField === 'http.referer') {
       return true
     }
 

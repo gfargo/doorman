@@ -5,7 +5,6 @@ import { VercelClient } from './VercelClient'
 import { RuleTranslator } from '../../translators'
 import { isDeepEqual } from '../../utils/isDeepEqual'
 import { omitId } from '../../utils/omitId'
-import { retry } from '../../utils/retry'
 import { firewallConfigSchema } from '../../schemas/firewallSchemas'
 import type {
   IFirewallProvider,
@@ -190,7 +189,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       for (const rule of toDelete) {
         try {
           logger.debug(`Deleting custom rule: ${rule.id}`)
-          await retry(() => this.client.deleteFirewallRule(rule), { maxAttempts: 3 })
+          await this.client.deleteFirewallRule(rule)
           deletedRules.push(rule)
           logger.debug(`Custom rule deleted: ${rule.id}`)
         } catch (error) {
@@ -203,7 +202,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       for (const rule of ipRulesToDelete) {
         try {
           logger.debug(`Deleting IP blocking rule: ${rule.id}`)
-          await retry(() => this.client.deleteIPBlockingRule(rule), { maxAttempts: 3 })
+          await this.client.deleteIPBlockingRule(rule)
           deletedIPRules.push(rule)
           logger.debug(`IP blocking rule deleted: ${rule.id}`)
         } catch (error) {
@@ -216,9 +215,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       for (const rule of toAdd) {
         try {
           logger.debug(`Adding new custom rule: ${rule.name}`)
-          const newRule = await retry(() => this.client.createFirewallRule(rule), {
-            maxAttempts: 3,
-          })
+          const newRule = await this.client.createFirewallRule(rule)
           addedRules.push(newRule)
           logger.debug(`New custom rule added: ${newRule.id}`)
         } catch (error) {
@@ -231,9 +228,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       for (const rule of ipRulesToAdd) {
         try {
           logger.debug(`Adding new IP blocking rule: ${rule.ip}`)
-          const newIPRule = await retry(() => this.client.createIPBlockingRule(rule), {
-            maxAttempts: 3,
-          })
+          const newIPRule = await this.client.createIPBlockingRule(rule)
           addedIPRules.push(newIPRule)
           logger.debug(`New IP blocking rule added: (hostname): ${newIPRule.hostname} (ip): ${newIPRule.ip}`)
         } catch (error) {
@@ -246,7 +241,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       for (const rule of toUpdate) {
         try {
           logger.debug(`Updating custom rule: ${rule.id}`)
-          const updatedRule = await retry(() => this.client.updateFirewallRule(rule), { maxAttempts: 3 })
+          const updatedRule = await this.client.updateFirewallRule(rule)
           updatedRules.push(updatedRule)
           logger.debug(`Custom rule updated: ${updatedRule.id}`)
         } catch (error) {
@@ -259,7 +254,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       for (const rule of ipRulesToUpdate) {
         try {
           logger.debug(`Updating IP blocking rule: ${rule.id}`)
-          const updatedRule = await retry(() => this.client.updateIPBlockingRule(rule), { maxAttempts: 3 })
+          const updatedRule = await this.client.updateIPBlockingRule(rule)
           updatedIPRules.push(updatedRule)
           logger.debug(`IP blocking rule updated: ${updatedRule.id}`)
         } catch (error) {

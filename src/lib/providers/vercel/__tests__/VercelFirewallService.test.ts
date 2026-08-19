@@ -12,11 +12,6 @@ jest.mock('../../../logger', () => ({
   },
 }))
 
-// Mock the retry utility to execute immediately
-jest.mock('../../../utils/retry', () => ({
-  retry: (fn: () => Promise<unknown>) => fn(),
-}))
-
 // Mock the prompt module — used to assert the create-firewall-config prompt
 // is never triggered during a dry run (regression coverage, see below).
 jest.mock('../../../ui/prompt', () => ({
@@ -396,6 +391,53 @@ describe('VercelFirewallService', () => {
         expect(result.errors!.some((e) => e.includes('Rule B'))).toBe(true)
         expect(result.errors!.some((e) => e.includes('Vercel API 500'))).toBe(true)
       })
+    })
+
+    // Regression test: each client call was previously wrapped in an
+    // additional `retry(fn, { maxAttempts: 3 })` on top of the retry/backoff
+    // BaseFirewallClient (which VercelClient extends) already performs
+    // internally — up to 3x the intended retry budget per operation, and
+    // 3x the wait time before a failure surfaces. VercelFirewallService
+    // should call the client exactly once per item and let the client's own
+    // retry logic (invisible at this mocked-client level) handle failures.
+    it('does not wrap client calls in an additional outer retry layer', async () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'rule-to-delete',
+            name: 'Stale Rule',
+            enabled: true,
+            conditions: [{ field: 'path', operator: 'eq', value: '/stale' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+        ...mockVercelConfig,
+        rules: [
+          {
+            id: 'rule-to-delete',
+            name: 'Stale Rule',
+            active: true,
+            conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/stale' }] }],
+            action: { mitigate: { action: 'deny', rateLimit: null, redirect: null, actionDuration: null } },
+          },
+        ],
+        ips: [],
+      })
+
+      const deleteFirewallRuleSpy = jest
+        .spyOn(client, 'deleteFirewallRule')
+        .mockRejectedValue(new Error('Vercel API 500'))
+
+      const result = await service.syncRules({ ...config, rules: [] })
+
+      expect(deleteFirewallRuleSpy).toHaveBeenCalledTimes(1)
+      expect(result.success).toBe(false)
     })
   })
 

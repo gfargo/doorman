@@ -286,6 +286,23 @@ describe('VercelClient', () => {
       expect(body.id).toBe('ip_1')
     })
 
+    // Regression test: `notes` was previously omitted from the PATCH body
+    // entirely when falsy (`...(rule.notes && { notes: rule.notes })`),
+    // which — since ip.update is a partial-update action — reads to Vercel's
+    // API as "leave the existing note alone" rather than "clear it". A user
+    // who removed their local note would see it silently persist remotely.
+    it('sends an explicit null for notes when the local note was cleared, rather than omitting the key', async () => {
+      const ruleWithoutNotes = { ...ipRule, notes: undefined }
+      fetchSpy.mockResolvedValue(createMockResponse(ipRule))
+
+      await client.updateIPBlockingRule(ruleWithoutNotes)
+
+      const calledOptions = fetchSpy.mock.calls[0]![1] as RequestInit
+      const body = JSON.parse(calledOptions.body as string)
+      expect(body.value).toHaveProperty('notes')
+      expect(body.value.notes).toBeNull()
+    })
+
     it('should create a new IP blocking rule when id is "-"', async () => {
       const newIpRule = { ...ipRule, id: '-' }
       fetchSpy.mockResolvedValue(createMockResponse({ ...ipRule, id: 'new_ip_1' }))
