@@ -10,6 +10,10 @@ jest.mock('../../ui/promptSecret', () => ({
   promptSecret: jest.fn(),
 }))
 
+jest.mock('../../ui/promptForCredentials', () => ({
+  promptForCredentials: jest.fn(),
+}))
+
 // Mock the providers
 jest.mock('../../providers/vercel', () => ({
   VercelProvider: {
@@ -35,6 +39,7 @@ import { CloudflareProvider } from '../../providers/cloudflare'
 import { ProviderDetector } from '../../providers/ProviderDetector'
 import { prompt } from '../../ui/prompt'
 import { promptSecret } from '../../ui/promptSecret'
+import { promptForCredentials } from '../../ui/promptForCredentials'
 import type { IFirewallProvider } from '../../providers/IFirewallProvider'
 
 describe('providerHelper', () => {
@@ -167,6 +172,60 @@ describe('providerHelper', () => {
           accountId: 'cf-account',
         }),
       )
+    })
+
+    it('resolves projectId/teamId from a legacy config file without prompting (regression test)', async () => {
+      const legacyConfig = {
+        rules: [],
+        projectId: 'legacy-project',
+        teamId: 'legacy-team',
+      }
+
+      const { provider } = await getProviderInstance({
+        provider: 'vercel',
+        token: 'my-token',
+        config: legacyConfig,
+        interactive: true,
+      })
+
+      expect(provider.name).toBe('vercel')
+      expect(VercelProvider.fromConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          token: 'my-token',
+          projectId: 'legacy-project',
+          teamId: 'legacy-team',
+        }),
+      )
+      expect(promptForCredentials).not.toHaveBeenCalled()
+    })
+
+    it('resolves projectId/teamId from a unified config file without prompting (regression test)', async () => {
+      const unifiedConfig = {
+        rules: [],
+        providers: {
+          vercel: {
+            projectId: 'unified-project',
+            teamId: 'unified-team',
+          },
+        },
+      }
+
+      const { provider } = await getProviderInstance({
+        provider: 'vercel',
+        token: 'my-token',
+        config: unifiedConfig,
+        interactive: true,
+      })
+
+      expect(provider.name).toBe('vercel')
+      expect(VercelProvider.fromConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          token: 'my-token',
+          projectId: 'unified-project',
+          teamId: 'unified-team',
+        }),
+      )
+      expect(promptForCredentials).not.toHaveBeenCalled()
     })
 
     it('throws for Vercel when credentials missing and non-interactive', async () => {
