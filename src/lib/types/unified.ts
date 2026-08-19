@@ -16,6 +16,15 @@ export interface UnifiedCondition {
   value: string | number | string[] | number[]
   negated?: boolean
   key?: string // For header, query, cookie conditions
+  /**
+   * Index of the AND-group this condition belongs to, for providers with a
+   * two-level condition model (AND within a group, OR across groups) — e.g.
+   * Vercel's `conditionGroup[]`. Conditions sharing a `group` index are
+   * AND'd together; distinct `group` values are OR'd against each other.
+   * Omitted (or all conditions sharing the same/no value) means a single
+   * implicit group — the flat, single-level model most providers use.
+   */
+  group?: number
 }
 
 /**

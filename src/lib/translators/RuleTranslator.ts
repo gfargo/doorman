@@ -173,8 +173,14 @@ export class RuleTranslator {
     const warnings: TranslationWarning[] = []
     const conditions: UnifiedCondition[] = []
 
-    // Flatten condition groups into unified conditions
-    for (const group of rule.conditionGroup) {
+    // Flatten condition groups into a single array, but tag each condition
+    // with its source group index (`group`) so unifiedToVercel can rebuild
+    // the original AND-within/OR-across structure later. Previously this
+    // discarded which conditions were AND'd together within a group —
+    // even a single-group, multi-condition rule (meant to be AND'd) was
+    // mistranslated, since `conditionLogic` below was hardcoded to 'OR'
+    // unconditionally rather than reflecting whether groups.length > 1.
+    rule.conditionGroup.forEach((group, groupIndex) => {
       for (const condition of group.conditions) {
         const operator = this.mapVercelOperatorToUnified(condition.op)
 
@@ -198,9 +204,10 @@ export class RuleTranslator {
           value: condition.value as string | number | string[] | number[],
           negated: condition.neg,
           key: condition.key,
+          group: groupIndex,
         })
       }
-    }
+    })
 
     // Warn about complex rules with many conditions
     if (conditions.length > 10) {
@@ -242,7 +249,12 @@ export class RuleTranslator {
       description: rule.description,
       enabled: rule.active,
       conditions,
-      conditionLogic: 'OR', // Vercel uses OR between groups
+      // Informational only once `group` is set above — real join semantics
+      // for translation come from the per-condition `group` index (AND
+      // within a group, OR across groups), which a flat 'AND'|'OR' can't
+      // express for a multi-group rule. Kept accurate for any caller that
+      // still reads this field without being group-aware.
+      conditionLogic: rule.conditionGroup.length > 1 ? 'OR' : 'AND',
       action,
     }
 
@@ -338,46 +350,68 @@ export class RuleTranslator {
    */
   public static unifiedToVercel(rule: UnifiedRule): TranslationResult<VercelCustomRule> {
     const warnings: TranslationWarning[] = []
-    const conditionGroups: VercelConditionGroup[] = []
 
-    // Convert unified conditions to Vercel condition groups. A condition whose
-    // field has no Vercel equivalent (e.g. Cloudflare-only `referer`/`port`) is
-    // dropped with a critical warning rather than mistranslated — silently
-    // relabeling it (the previous behavior defaulted to `path`) rewrote what
-    // the rule actually matches with no indication anything was wrong.
-    const conditions: VercelRuleCondition[] = []
+    // Group conditions by their `group` index (set by vercelToUnified when
+    // the rule originated from Vercel's own conditionGroup[] structure) so a
+    // multi-group rule round-trips correctly instead of collapsing into one
+    // group and changing what the rule matches (AND-within/OR-across ->
+    // everything AND'd together). Conditions with no `group` (e.g. a
+    // hand-authored config) all fall into one implicit group — the same
+    // single-group behavior this function has always had.
+    const groupedConditions = new Map<number, UnifiedCondition[]>()
     for (const condition of rule.conditions) {
-      const type = this.mapUnifiedTypeToVercel(condition.field)
-      if (!type) {
-        const { TranslationWarningSystem } = require('./TranslationWarningSystem')
-        warnings.push(
-          TranslationWarningSystem.createUnsupportedFeatureWarning(
-            `condition field '${condition.field}'`,
-            'unified config',
-            'Vercel',
-            rule.id,
-            condition.field,
-          ),
-        )
-        continue
+      const groupIndex = condition.group ?? 0
+      const bucket = groupedConditions.get(groupIndex)
+      if (bucket) {
+        bucket.push(condition)
+      } else {
+        groupedConditions.set(groupIndex, [condition])
       }
-      conditions.push({
-        op: this.mapUnifiedOperatorToVercel(condition.operator),
-        neg: condition.negated,
-        type,
-        key: condition.key,
-        value: condition.value,
-      })
     }
 
-    if (conditions.length === 0) {
+    // A condition whose field has no Vercel equivalent (e.g. Cloudflare-only
+    // `referer`/`port`) is dropped with a critical warning rather than
+    // mistranslated — silently relabeling it (the previous behavior defaulted
+    // to `path`) rewrote what the rule actually matches with no indication
+    // anything was wrong. A group that ends up fully empty is dropped too —
+    // that OR-branch simply doesn't exist in the output.
+    const conditionGroups: VercelConditionGroup[] = []
+    for (const groupConditions of groupedConditions.values()) {
+      const mapped: VercelRuleCondition[] = []
+      for (const condition of groupConditions) {
+        const type = this.mapUnifiedTypeToVercel(condition.field)
+        if (!type) {
+          const { TranslationWarningSystem } = require('./TranslationWarningSystem')
+          warnings.push(
+            TranslationWarningSystem.createUnsupportedFeatureWarning(
+              `condition field '${condition.field}'`,
+              'unified config',
+              'Vercel',
+              rule.id,
+              condition.field,
+            ),
+          )
+          continue
+        }
+        mapped.push({
+          op: this.mapUnifiedOperatorToVercel(condition.operator),
+          neg: condition.negated,
+          type,
+          key: condition.key,
+          value: condition.value,
+        })
+      }
+      if (mapped.length > 0) {
+        conditionGroups.push({ conditions: mapped })
+      }
+    }
+
+    if (conditionGroups.length === 0) {
       throw new Error(
         `Rule "${rule.name}" has no conditions Vercel can represent — every condition field is unsupported ` +
           'by Vercel (e.g. Cloudflare-only fields like referer/port). Cannot sync this rule to Vercel.',
       )
     }
-
-    conditionGroups.push({ conditions })
 
     const vercelRule: VercelCustomRule = {
       id: rule.id,

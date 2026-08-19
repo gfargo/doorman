@@ -65,8 +65,11 @@ describe('RuleTranslator', () => {
         field: 'path',
         operator: 'eq',
         value: '/api',
+        group: 0,
       })
-      expect(result.conditionLogic).toBe('OR')
+      // Regression test: a single-group rule is AND semantics (there's
+      // nothing to OR against), not the previously-hardcoded 'OR'.
+      expect(result.conditionLogic).toBe('AND')
     })
 
     it('translates all Vercel operators to unified operators', () => {
@@ -186,6 +189,34 @@ describe('RuleTranslator', () => {
       const { result } = RuleTranslator.vercelToUnified(rule)
       expect(result.conditions).toHaveLength(2)
     })
+
+    // Regression test: multi-group rules are a real, documented pattern
+    // (used throughout examples/*.json) — vercelToUnified previously
+    // flattened all conditions into one array with no way to tell which
+    // came from which group, and hardcoded conditionLogic: 'OR' regardless
+    // of actual structure (wrongly applying OR-semantics even within what
+    // should be an AND'd group). Each condition must carry its source
+    // group index so unifiedToVercel can reconstruct the original
+    // AND-within/OR-across structure.
+    it('tags each condition with its source group index', () => {
+      const rule = makeVercelRule({
+        conditionGroup: [
+          {
+            conditions: [
+              { type: 'path', op: 'eq', value: '/api' },
+              { type: 'method', op: 'eq', value: 'POST' },
+            ],
+          },
+          { conditions: [{ type: 'header', op: 'eq', value: 'x', key: 'X-Custom' }] },
+        ],
+      })
+      const { result } = RuleTranslator.vercelToUnified(rule)
+
+      expect(result.conditions[0]?.group).toBe(0)
+      expect(result.conditions[1]?.group).toBe(0)
+      expect(result.conditions[2]?.group).toBe(1)
+      expect(result.conditionLogic).toBe('OR')
+    })
   })
 
   describe('unifiedToVercel', () => {
@@ -295,6 +326,48 @@ describe('RuleTranslator', () => {
       })
 
       expect(() => RuleTranslator.unifiedToVercel(rule)).toThrow(/no conditions Vercel can represent/)
+    })
+
+    // Regression test: multi-group round-trip fidelity. A rule translated
+    // from Vercel with 2 groups (group 0: path AND method; group 1: a
+    // single header condition) must come back out as 2 distinct Vercel
+    // condition groups, not one flattened group — flattening would turn
+    // "(path=/api AND method=POST) OR (header=x)" into
+    // "path=/api AND method=POST AND header=x", a different rule.
+    it('rebuilds multiple Vercel condition groups from the group index', () => {
+      const rule = makeUnifiedRule({
+        conditions: [
+          { field: 'path', operator: 'eq', value: '/api', group: 0 },
+          { field: 'method', operator: 'eq', value: 'POST', group: 0 },
+          { field: 'header', operator: 'eq', value: 'x', key: 'X-Custom', group: 1 },
+        ],
+      })
+
+      const { result } = RuleTranslator.unifiedToVercel(rule)
+
+      expect(result.conditionGroup).toHaveLength(2)
+      expect(result.conditionGroup[0]!.conditions).toHaveLength(2)
+      expect(result.conditionGroup[1]!.conditions).toHaveLength(1)
+      expect(result.conditionGroup[1]!.conditions[0]!.key).toBe('X-Custom')
+    })
+
+    // Regression test: if every condition in one group is unmappable but
+    // another group has representable conditions, only the empty group is
+    // dropped (that OR-branch just doesn't exist in the output) — the rule
+    // as a whole still syncs rather than throwing.
+    it('drops only the group whose conditions are all unmappable, keeping the rest', () => {
+      const rule = makeUnifiedRule({
+        conditions: [
+          { field: 'referer', operator: 'eq', value: 'https://example.com', group: 0 },
+          { field: 'path', operator: 'eq', value: '/api', group: 1 },
+        ],
+      })
+
+      const { result, warnings } = RuleTranslator.unifiedToVercel(rule)
+
+      expect(result.conditionGroup).toHaveLength(1)
+      expect(result.conditionGroup[0]!.conditions[0]!.type).toBe('path')
+      expect(warnings.some((w) => w.field === 'referer')).toBe(true)
     })
 
     it('translates rate_limit action', () => {
