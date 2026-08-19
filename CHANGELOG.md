@@ -1,3 +1,10 @@
+## [3.3.1](https://github.com/gfargo/doorman/compare/v3.3.0...v3.3.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* resolve Vercel projectId/teamId from config in both legacy and unified shapes ([67b3e01](https://github.com/gfargo/doorman/commit/67b3e016af613618d21274837b5317237f493e9e))
+
 # [3.3.0](https://github.com/gfargo/doorman/compare/v3.2.5...v3.3.0) (2026-08-19)
 
 
