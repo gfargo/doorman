@@ -1,3 +1,11 @@
+## [3.2.2](https://github.com/gfargo/doorman/compare/v3.2.1...v3.2.2) (2026-08-19)
+
+
+### Bug Fixes
+
+* diff Cloudflare rules in native space, keep IP-list rule across syncs ([02dca71](https://github.com/gfargo/doorman/commit/02dca718b651e4be5ad08c1004904d4a028d86d6)), closes [#2](https://github.com/gfargo/doorman/issues/2) [#1](https://github.com/gfargo/doorman/issues/1) [#1](https://github.com/gfargo/doorman/issues/1) [#153](https://github.com/gfargo/doorman/issues/153) [#158](https://github.com/gfargo/doorman/issues/158) [#159](https://github.com/gfargo/doorman/issues/159) [#160](https://github.com/gfargo/doorman/issues/160)
+* stop Vercel sync from corrupting rules and discarding real errors ([b3091d6](https://github.com/gfargo/doorman/commit/b3091d6b6e08afdb041502bc9c2904d085ca713b)), closes [#164](https://github.com/gfargo/doorman/issues/164) [#161](https://github.com/gfargo/doorman/issues/161) [#162](https://github.com/gfargo/doorman/issues/162) [#163](https://github.com/gfargo/doorman/issues/163)
+
 ## [3.2.1](https://github.com/gfargo/doorman/compare/v3.2.0...v3.2.1) (2026-08-19)
 
 
