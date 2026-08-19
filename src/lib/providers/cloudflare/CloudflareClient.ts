@@ -666,8 +666,28 @@ export class CloudflareClient extends BaseFirewallClient {
     // Deduplicate concurrent requests for the same list items
     const dedupKey = CloudflareOptimizer.requestKey('GET', `/accounts/${this.accountId}/rules/lists/${listId}/items`)
     return this.optimizer.deduplicateRequest(dedupKey, async () => {
+      const items = await this.fetchAllListItemPages(listId)
+      this.cache.set(cacheKey, items, CacheTTL.LIST_ITEMS)
+      return items
+    })
+  }
+
+  /**
+   * Fetch every page of a List's items. Cloudflare paginates the Lists API
+   * (`result_info.page`/`total_pages`); a single unparameterized GET only
+   * ever returns page 1, so any List beyond one page silently looked
+   * incomplete to every caller (fetchConfig, getChanges's IP diffing,
+   * syncRules's add/remove-IP logic) — IPs beyond page 1 looked "missing"
+   * (redundant re-add attempts) and stale IPs beyond page 1 were never
+   * identified for removal.
+   */
+  private async fetchAllListItemPages(listId: string): Promise<CloudflareListItem[]> {
+    const items: CloudflareListItem[] = []
+    let page = 1
+
+    for (;;) {
       const response = await this.get<CloudflareListItemsResponse>(
-        `/accounts/${this.accountId}/rules/lists/${listId}/items`,
+        `/accounts/${this.accountId}/rules/lists/${listId}/items?page=${page}`,
       )
 
       if (!response.success) {
@@ -680,9 +700,16 @@ export class CloudflareClient extends BaseFirewallClient {
         )
       }
 
-      this.cache.set(cacheKey, response.result, CacheTTL.LIST_ITEMS)
-      return response.result
-    })
+      items.push(...response.result)
+
+      const totalPages = response.result_info?.total_pages ?? 1
+      if (response.result.length === 0 || page >= totalPages) {
+        break
+      }
+      page++
+    }
+
+    return items
   }
 
   /**

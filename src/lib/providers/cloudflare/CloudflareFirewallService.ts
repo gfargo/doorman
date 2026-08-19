@@ -281,7 +281,13 @@ export class CloudflareFirewallService extends BaseFirewallService {
     let ipsDeleted = 0
 
     if (this.useListsForIPs && config.ips && config.ips.length > 0) {
-      // Use Lists for IP blocking
+      // Use Lists for IP blocking. Tracks which IPs are confirmed present in
+      // the List as each step actually completes, so a failure *partway*
+      // through (e.g. addListItems succeeds but a later step throws) doesn't
+      // fall back to creating individual rules for IPs that already made it
+      // into the List — that would leave them in both places (duplicate,
+      // inconsistent state) and double-count them in ipsAdded.
+      const confirmedInList = new Set<string>()
       try {
         const ipList = await this.client.getOrCreateIPBlocklist()
         // Cache for potential future use
@@ -290,6 +296,7 @@ export class CloudflareFirewallService extends BaseFirewallService {
         // Get current IPs in list
         const currentItems = await this.client.getListItems(ipList.id)
         const currentIPs = new Set(currentItems.map((item) => item.ip))
+        currentIPs.forEach((ip) => ip && confirmedInList.add(ip))
         const desiredIPs = new Set(config.ips.map((ip) => ip.ip))
 
         // Add new IPs
@@ -302,6 +309,7 @@ export class CloudflareFirewallService extends BaseFirewallService {
             })),
           })
           ipsAdded = ipsToAdd.length
+          ipsToAdd.forEach((ip) => confirmedInList.add(ip.ip))
           logger.info(`Added ${ipsAdded} IPs to List`)
         }
 
@@ -312,6 +320,7 @@ export class CloudflareFirewallService extends BaseFirewallService {
             items: ipsToRemove.map((item) => ({ id: item.id! })),
           })
           ipsDeleted = ipsToRemove.length
+          ipsToRemove.forEach((item) => item.ip && confirmedInList.delete(item.ip))
           logger.info(`Removed ${ipsDeleted} IPs from List`)
         }
 
@@ -337,18 +346,25 @@ export class CloudflareFirewallService extends BaseFirewallService {
         // Enhanced fallback handling with detailed messaging
         this.handleListsAPIFallback(error, 'syncing IPs via List')
 
-        // Fall back to individual IP rules
-        logger.info(`🔄 Falling back to individual IP rules for ${config.ips.length} IPs`)
-        for (const ip of config.ips) {
-          const cloudflareRule = RuleTranslator.unifiedIPToCloudflare(ip)
-          cloudflareRules.push(cloudflareRule)
+        // Only fall back to individual rules for IPs not already confirmed
+        // committed to the List by the time the failure happened.
+        const ipsNeedingFallback = config.ips.filter((ip) => !confirmedInList.has(ip.ip))
+
+        if (ipsNeedingFallback.length > 0) {
+          logger.info(`🔄 Falling back to individual IP rules for ${ipsNeedingFallback.length} IPs`)
+          for (const ip of ipsNeedingFallback) {
+            const cloudflareRule = RuleTranslator.unifiedIPToCloudflare(ip)
+            cloudflareRules.push(cloudflareRule)
+          }
+          ipsAdded = ipsNeedingFallback.length
+        } else {
+          logger.info('All IPs were already confirmed in the List before the failure; no fallback rules needed.')
         }
-        ipsAdded = config.ips.length
 
         // Warn about performance impact for large lists
-        if (config.ips.length > 50) {
+        if (ipsNeedingFallback.length > 50) {
           logger.warn(
-            `⚠️  Performance warning: Using ${config.ips.length} individual IP rules instead of Lists. ` +
+            `⚠️  Performance warning: Using ${ipsNeedingFallback.length} individual IP rules instead of Lists. ` +
               'This may impact rule processing speed and count against your rule limit.',
           )
         }
@@ -776,8 +792,19 @@ export class CloudflareFirewallService extends BaseFirewallService {
    * `eq` only matches a single literal, so CIDR ranges use the `in` set
    * operator instead). The address pattern allows IPv4 dotted-decimal and
    * IPv6 hex/colon forms.
+   *
+   * Also requires the rule's action to be one `unifiedIPToCloudflare` could
+   * actually have produced (`block`/`allow`) — without this, any rule from
+   * another tool (or hand-crafted) that happens to match the expression
+   * shape but uses a different action (e.g. `challenge`/`log` a single IP)
+   * gets misclassified as an IP rule, and `cloudflareRuleToIPRule` below
+   * collapses that real action down to a plain allow/deny, silently
+   * changing what the rule does on the next sync.
    */
   private isIPBlockingRule(rule: CloudflareRule): boolean {
+    if (rule.action !== 'block' && rule.action !== 'allow') {
+      return false
+    }
     const expression = rule.expression.trim()
     return (
       CloudflareFirewallService.IP_EQ_PATTERN.test(expression) ||

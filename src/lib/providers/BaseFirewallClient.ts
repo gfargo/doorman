@@ -96,7 +96,20 @@ export abstract class BaseFirewallClient {
 
           // Handle rate limiting with exponential backoff
           if (response.status === 429) {
-            const waitTime = this.calculateRateLimitWait(attempt)
+            const waitTime = this.calculateRateLimitWait(attempt, response)
+
+            // Retrying past the last attempt would just fall through to the
+            // generic `lastError || new Error('Request failed after all
+            // retries')` below, discarding the fact this was a rate-limit
+            // exhaustion. Throw a real error with that context instead —
+            // it flows through the same catch-block handling as any other
+            // attempt (isNonRetryableError, last-attempt re-throw).
+            if (attempt === retries) {
+              throw new Error(
+                `${this.providerName} API rate limit exceeded after ${retries + 1} attempt(s) (429 Too Many Requests). Retry after ~${Math.round(waitTime / 1000)}s.`,
+              )
+            }
+
             logger.warn(
               `Rate limit exceeded for ${this.providerName}. Waiting ${waitTime}ms before retry (attempt ${attempt + 1}/${retries + 1})...`,
             )
@@ -238,10 +251,24 @@ export abstract class BaseFirewallClient {
   }
 
   /**
-   * Calculate wait time for rate limit with exponential backoff
+   * Calculate wait time for rate limit with exponential backoff.
+   *
+   * `Retry-After` (RFC 9110 §10.2.3) is the standard header servers use to
+   * tell a client how long to wait after a 429/503 — Cloudflare's API sends
+   * it — and takes priority over the non-standard `X-RateLimit-Reset` this
+   * client also tracks, which not every provider even sends. Falls back to
+   * exponential backoff only when the response gives no explicit guidance.
    */
-  private calculateRateLimitWait(attempt: number = 0): number {
+  private calculateRateLimitWait(attempt: number = 0, response?: Response): number {
     const maxWait = 60000 // Cap at 1 minute
+
+    const retryAfterMs = response ? this.parseRetryAfter(response.headers.get('Retry-After')) : null
+    if (retryAfterMs !== null) {
+      // Minimum 1 second, capped at 1 minute — same reasoning as the
+      // X-RateLimit-Reset cap below: a far-future value shouldn't block the
+      // command for its full duration on a single retry with no override.
+      return Math.min(Math.max(retryAfterMs, 1000), maxWait)
+    }
 
     if (this.rateLimitInfo.reset) {
       const now = Math.floor(Date.now() / 1000)
@@ -257,6 +284,27 @@ export abstract class BaseFirewallClient {
     const exponentialWait = baseWait * Math.pow(2, attempt)
 
     return Math.min(exponentialWait, maxWait)
+  }
+
+  /**
+   * Parse a `Retry-After` header value into a millisecond delay from now.
+   * Per RFC 9110 §10.2.3 the value is either an integer number of seconds,
+   * or an HTTP-date. Returns `null` if the header is absent or unparseable.
+   */
+  private parseRetryAfter(value: string | null): number | null {
+    if (!value) return null
+
+    const seconds = Number(value)
+    if (Number.isFinite(seconds)) {
+      return seconds * 1000
+    }
+
+    const dateMs = Date.parse(value)
+    if (!Number.isNaN(dateMs)) {
+      return dateMs - Date.now()
+    }
+
+    return null
   }
 
   /**
