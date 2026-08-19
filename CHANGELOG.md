@@ -1,3 +1,10 @@
+## [3.2.1](https://github.com/gfargo/doorman/compare/v3.2.0...v3.2.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* require explicit --allow-deletions for non-interactive rule deletions ([#164](https://github.com/gfargo/doorman/issues/164)) ([1ed794d](https://github.com/gfargo/doorman/commit/1ed794dbb40f076d42d3bc173f5406ebfbad9ef0)), closes [#157](https://github.com/gfargo/doorman/issues/157)
+
 # [3.2.0](https://github.com/gfargo/doorman/compare/v3.1.0...v3.2.0) (2026-08-18)
 
 
