@@ -176,7 +176,10 @@ export const handler = async (argv: Arguments<WatchOptions>) => {
  * Mirrors the Vercel branch above but via the generic IFirewallProvider interface.
  * Always applies changes without prompting (force: true) — same as the Vercel path,
  * which goes straight from diff to sync without a confirmation prompt, since watch
- * mode is opt-in unattended auto-sync.
+ * mode is opt-in unattended auto-sync. `allowDeletions: true` is likewise deliberate
+ * here (unlike plain `doorman sync --ci`): a `watch` session is opted into by an
+ * actively-present developer editing the local config file, not a headless CI job,
+ * so a deletion driven by their own edit is exactly what they asked for.
  */
 async function syncChangesWithProvider(provider: IFirewallProvider, updatedConfig: UnifiedConfig): Promise<void> {
   const changes = await provider.getChanges(updatedConfig)
@@ -195,7 +198,7 @@ async function syncChangesWithProvider(provider: IFirewallProvider, updatedConfi
     (changes.ipsToDelete?.length ?? 0)
   logger.log(chalk.cyan(`Syncing ${totalChanges} changes...`))
 
-  const result = await provider.syncRules(updatedConfig, { force: true })
+  const result = await provider.syncRules(updatedConfig, { force: true, allowDeletions: true })
 
   if (!result.success) {
     throw new Error(`Sync failed: ${result.errors?.join(', ') || 'unknown error'}`)

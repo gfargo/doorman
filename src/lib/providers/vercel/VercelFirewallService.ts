@@ -129,6 +129,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
         riskLevel,
         skipConfirmation: options.force || false,
         dryRun: false,
+        allowDeletions: options.allowDeletions || false,
       })
 
       if (!confirmed) {
