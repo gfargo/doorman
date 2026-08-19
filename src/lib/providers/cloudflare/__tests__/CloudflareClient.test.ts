@@ -622,6 +622,69 @@ describe('CloudflareClient', () => {
       expect(result).toEqual(mockItems)
     })
 
+    // Regression test: getListItems previously issued a single unparameterized
+    // GET and returned page 1 only, silently dropping items beyond it.
+    it('paginates through every page of List items', async () => {
+      const page1Items: CloudflareListItem[] = [
+        { id: 'item-1', ip: '10.0.0.1', created_on: '2024-01-01T00:00:00Z', modified_on: '2024-01-01T00:00:00Z' },
+      ]
+      const page2Items: CloudflareListItem[] = [
+        { id: 'item-2', ip: '10.0.0.2', created_on: '2024-01-01T00:00:00Z', modified_on: '2024-01-01T00:00:00Z' },
+      ]
+      const page3Items: CloudflareListItem[] = [
+        { id: 'item-3', ip: '10.0.0.3', created_on: '2024-01-01T00:00:00Z', modified_on: '2024-01-01T00:00:00Z' },
+      ]
+
+      fetchMock
+        .mockResolvedValueOnce(
+          makeResponse({
+            ok: true,
+            status: 200,
+            jsonBody: {
+              success: true,
+              errors: [],
+              messages: [],
+              result: page1Items,
+              result_info: { count: 1, page: 1, per_page: 1, total_count: 3, total_pages: 3 },
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          makeResponse({
+            ok: true,
+            status: 200,
+            jsonBody: {
+              success: true,
+              errors: [],
+              messages: [],
+              result: page2Items,
+              result_info: { count: 1, page: 2, per_page: 1, total_count: 3, total_pages: 3 },
+            },
+          }),
+        )
+        .mockResolvedValueOnce(
+          makeResponse({
+            ok: true,
+            status: 200,
+            jsonBody: {
+              success: true,
+              errors: [],
+              messages: [],
+              result: page3Items,
+              result_info: { count: 1, page: 3, per_page: 1, total_count: 3, total_pages: 3 },
+            },
+          }),
+        )
+
+      const result = await client.getListItems('multi-page-list')
+
+      expect(result).toEqual([...page1Items, ...page2Items, ...page3Items])
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+      expect(fetchMock.mock.calls[0]?.[0]).toContain('page=1')
+      expect(fetchMock.mock.calls[1]?.[0]).toContain('page=2')
+      expect(fetchMock.mock.calls[2]?.[0]).toContain('page=3')
+    })
+
     it('should add items to a List', async () => {
       const newItems = [
         {

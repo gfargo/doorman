@@ -241,6 +241,50 @@ describe('CloudflareFirewallService', () => {
       expect(config.ips?.[0]?.hostname).toBe('example.com')
     })
 
+    // Regression test: a single-IP-shaped rule (`ip.src eq <ip>`) whose
+    // action is something other than block/allow — e.g. challenge or log —
+    // was previously misclassified as a plain IP block/allow rule anyway,
+    // silently discarding its real action. It must instead be treated as a
+    // regular rule.
+    it('does not treat a single-IP rule with a non-block/allow action as an IP blocking rule', async () => {
+      const mockRuleset: CloudflareRuleset = {
+        id: 'ruleset-1',
+        name: 'Test Ruleset',
+        description: 'Test',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        rules: [
+          {
+            id: 'rule-1',
+            action: 'challenge',
+            expression: 'ip.src eq 192.168.1.100',
+            description: 'Challenge a specific IP',
+            enabled: true,
+          },
+        ],
+      }
+
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(mockRuleset)
+      jest.spyOn(mockClient, 'getOrCreateIPBlocklist').mockResolvedValue({
+        id: 'list-1',
+        name: 'Doorman IP Blocklist',
+        description: 'Test',
+        kind: 'ip',
+        num_items: 0,
+        num_referencing_filters: 0,
+        created_on: '2024-01-01T00:00:00Z',
+        modified_on: '2024-01-01T00:00:00Z',
+      })
+      jest.spyOn(mockClient, 'getListItems').mockResolvedValue([])
+
+      const config = await service.fetchConfig()
+
+      expect(config.ips).toHaveLength(0)
+      expect(config.rules).toHaveLength(1)
+      expect(config.rules[0]?.action.type).toBe('challenge')
+    })
+
     it('should recognize a CIDR IP-blocking rule using the `in {...}` set form (regression test)', async () => {
       const mockRuleset: CloudflareRuleset = {
         id: 'ruleset-1',
@@ -847,6 +891,71 @@ describe('CloudflareFirewallService', () => {
       expect(result.success).toBe(true)
       expect(result.ipsAdded).toBe(1)
       // Should have used individual IP rules as fallback
+    })
+
+    // Regression test: a Lists API failure *after* addListItems already
+    // succeeded previously fell back to creating individual rules for every
+    // IP in config.ips — including ones already confirmed added to the List
+    // — leaving them in both places (duplicate/inconsistent state) and
+    // double-counting them in ipsAdded.
+    it('does not create duplicate individual IP rules for IPs already confirmed in the List after a partial failure', async () => {
+      const mockConfig: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [],
+        ips: [
+          { id: 'ip-1', ip: '192.168.1.1', action: 'deny' },
+          { id: 'ip-2', ip: '192.168.1.2', action: 'deny' },
+        ],
+      }
+
+      const mockRuleset: CloudflareRuleset = {
+        id: 'ruleset-1',
+        name: 'Test Ruleset',
+        description: 'Test',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        rules: [],
+      }
+
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(mockRuleset)
+      jest.spyOn(mockClient, 'getOrCreateIPBlocklist').mockResolvedValue({
+        id: 'list-1',
+        name: 'Doorman IP Blocklist',
+        description: 'Test',
+        kind: 'ip',
+        num_items: 1,
+        num_referencing_filters: 0,
+        created_on: '2024-01-01T00:00:00Z',
+        modified_on: '2024-01-01T00:00:00Z',
+      })
+      // A stale item currently in the list (not in the desired config) forces
+      // removeListItems to be called, which is where the failure happens —
+      // *after* addListItems has already succeeded.
+      jest.spyOn(mockClient, 'getListItems').mockResolvedValue([
+        {
+          id: 'stale-item',
+          ip: '10.0.0.99',
+          created_on: '2024-01-01T00:00:00Z',
+          modified_on: '2024-01-01T00:00:00Z',
+        },
+      ])
+      jest.spyOn(mockClient, 'addListItems').mockResolvedValue([])
+      jest.spyOn(mockClient, 'removeListItems').mockRejectedValue(new Error('Lists API error during removal'))
+      const updateRulesetSpy = jest
+        .spyOn(mockClient, 'updateRuleset')
+        .mockResolvedValue({ ...mockRuleset, version: '2' })
+
+      const result = await service.syncRules(mockConfig)
+
+      expect(result.success).toBe(true)
+      // Both IPs were confirmed added to the List before removeListItems failed
+      expect(result.ipsAdded).toBe(2)
+
+      const [, payload] = updateRulesetSpy.mock.calls[0]!
+      expect(payload.rules?.some((r) => r.expression.includes('192.168.1.1'))).toBe(false)
+      expect(payload.rules?.some((r) => r.expression.includes('192.168.1.2'))).toBe(false)
     })
 
     it('should use individual IP rules when no account ID provided', async () => {

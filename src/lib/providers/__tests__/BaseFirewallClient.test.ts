@@ -106,6 +106,76 @@ describe('BaseFirewallClient', () => {
     expect(delaySpy).toHaveBeenCalledWith(60000)
   })
 
+  // Regression test: Retry-After (RFC 9110) is the standard header servers
+  // use on 429s — Cloudflare sends it — and previously wasn't read at all,
+  // only the non-standard X-RateLimit-Reset was. Must take priority.
+  it('honors Retry-After over X-RateLimit-Reset when both are present', async () => {
+    const delaySpy = jest.spyOn(client as unknown as { delay: (ms: number) => Promise<void> }, 'delay')
+    const now = Math.floor(Date.now() / 1000)
+    jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        makeResponse({
+          ok: false,
+          status: 429,
+          statusText: 'Too Many Requests',
+          jsonBody: { message: 'Rate limit' },
+          headers: {
+            'Retry-After': '5',
+            'X-RateLimit-Reset': String(now + 3600), // would otherwise dominate and wait ~1hr (capped to 60s)
+          },
+        }),
+      )
+      .mockResolvedValueOnce(makeResponse({ ok: true, status: 200, jsonBody: { ok: true } }))
+
+    await client.getJson('/retry-after', { retries: 1, retryDelay: 1 })
+
+    expect(delaySpy).toHaveBeenCalledWith(5000)
+  })
+
+  it('parses a Retry-After HTTP-date as well as a delay-in-seconds', async () => {
+    const delaySpy = jest.spyOn(client as unknown as { delay: (ms: number) => Promise<void> }, 'delay')
+    const retryAt = new Date(Date.now() + 10000)
+    jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        makeResponse({
+          ok: false,
+          status: 429,
+          statusText: 'Too Many Requests',
+          jsonBody: { message: 'Rate limit' },
+          headers: { 'Retry-After': retryAt.toUTCString() },
+        }),
+      )
+      .mockResolvedValueOnce(makeResponse({ ok: true, status: 200, jsonBody: { ok: true } }))
+
+    await client.getJson('/retry-after-date', { retries: 1, retryDelay: 1 })
+
+    // Allow a little slack for time elapsed during the test itself.
+    const waitMs = delaySpy.mock.calls[0]?.[0] as number
+    expect(waitMs).toBeGreaterThan(8000)
+    expect(waitMs).toBeLessThanOrEqual(10000)
+  })
+
+  // Regression test: exhausting retries while still getting 429s previously
+  // fell through to a generic "Request failed after all retries" error,
+  // losing all rate-limit context.
+  it('throws a rate-limit-specific error when retries are exhausted while still getting 429', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      makeResponse({
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        jsonBody: { message: 'Rate limit' },
+        headers: { 'Retry-After': '1' },
+      }),
+    )
+
+    await expect(client.getJson('/exhausted', { retries: 1, retryDelay: 1 })).rejects.toThrow(
+      /rate limit exceeded after 2 attempt/i,
+    )
+  })
+
   it('does not retry on 400 and throws formatted error', async () => {
     const fetchMock = jest
       .spyOn(globalThis, 'fetch')
