@@ -26,7 +26,13 @@ export interface VercelConfig {
   updatedAt: string
 }
 
-export const VERCEL_API_BASE_URL = 'https://api.vercel.com/v1/security/firewall/config'
+// Overridable for testing/demos against a local mock server — never set this
+// in production. Matches src/lib/services/VercelClient.ts's (legacy) existing
+// override; demos/mock-server.mjs and the VHS demo tapes rely on this to
+// drive the real CLI/network code path against a local fixture server
+// instead of the live Vercel API.
+export const VERCEL_API_BASE_URL =
+  process.env.DOORMAN_VERCEL_API_BASE_URL || 'https://api.vercel.com/v1/security/firewall/config'
 
 export interface FetchFirewallConfigOptions {
   /**

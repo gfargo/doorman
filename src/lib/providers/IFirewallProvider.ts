@@ -38,6 +38,18 @@ export interface SyncResult {
   ipsUpdated?: number
   ipsDeleted?: number
   version?: number
+  /** Provider's post-sync timestamp, paired with `version` for local
+   * config metadata write-back. Optional — not every provider tracks one. */
+  updatedAt?: string
+  /**
+   * Rules whose provider-assigned id differs from what the local config
+   * had (or had none of) before this sync — e.g. Vercel always assigns its
+   * own id on create, regardless of what was sent. Providers that accept
+   * client-supplied ids (Cloudflare) never populate this. `oldId` is
+   * omitted when the local rule had no id at all (match callers should key
+   * on `name` in that case instead).
+   */
+  idRemappings?: { oldId?: string; newId: string; name: string }[]
   errors?: string[]
   warnings?: string[]
 }
@@ -73,6 +85,11 @@ export interface ChangeSet {
   ipsToAdd?: import('../types/unified').UnifiedIPRule[]
   ipsToUpdate?: import('../types/unified').UnifiedIPRule[]
   ipsToDelete?: import('../types/unified').UnifiedIPRule[]
+  /** The provider's current remote version, if it tracks one. Lets a caller
+   * detect version-only drift (e.g. another tool synced since the local
+   * config was last saved) even when there are no rule/IP changes to make
+   * `hasChanges` true on its own. */
+  version?: number
   hasChanges: boolean
 }
 

@@ -1,0 +1,224 @@
+jest.mock('../../logger', () => ({
+  logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}))
+
+import { toUnifiedConfig, applySyncResultToConfig } from '../vercelConfigAdapter'
+import type { FirewallConfig, CustomRule, IPBlockingRule } from '../../types'
+import type { UnifiedConfig } from '../../types/unified'
+import type { SyncResult } from '../../providers/IFirewallProvider'
+
+function makeLegacyRule(overrides: Partial<CustomRule> = {}): CustomRule {
+  return {
+    id: 'rule_test',
+    name: 'Test Rule',
+    description: 'A test rule',
+    conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/api' }] }],
+    action: { mitigate: { action: 'deny' } },
+    active: true,
+    ...overrides,
+  }
+}
+
+function makeLegacyIPRule(overrides: Partial<IPBlockingRule> = {}): IPBlockingRule {
+  return {
+    id: 'ip_test',
+    ip: '10.0.0.1',
+    hostname: 'example.com',
+    notes: 'blocked',
+    action: 'deny',
+    ...overrides,
+  }
+}
+
+function makeLegacyConfig(overrides: Partial<FirewallConfig> = {}): FirewallConfig {
+  return {
+    version: 3,
+    updatedAt: '2024-01-01T00:00:00Z',
+    projectId: 'proj_123',
+    teamId: 'team_456',
+    firewallEnabled: true,
+    rules: [makeLegacyRule()],
+    ips: [makeLegacyIPRule()],
+    ...overrides,
+  }
+}
+
+describe('vercelConfigAdapter', () => {
+  describe('toUnifiedConfig', () => {
+    it('passes through a config that already has provider metadata unchanged', () => {
+      const unified: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        providers: { vercel: { projectId: 'proj_123' } },
+        rules: [],
+        ips: [],
+      }
+
+      const result = toUnifiedConfig(unified)
+
+      expect(result).toBe(unified)
+    })
+
+    it('converts a legacy config into a unified config with provider metadata set', () => {
+      const legacy = makeLegacyConfig()
+
+      const result = toUnifiedConfig(legacy)
+
+      expect(result.provider).toBe('vercel')
+      expect(result.providers?.vercel).toEqual({ projectId: 'proj_123', teamId: 'team_456' })
+      expect(result.rules).toHaveLength(1)
+      expect(result.rules[0]).toMatchObject({
+        id: 'rule_test',
+        name: 'Test Rule',
+        conditions: [{ field: 'path', operator: 'eq', value: '/api', group: 0 }],
+      })
+    })
+
+    it('hoists top-level version/updatedAt into metadata', () => {
+      const legacy = makeLegacyConfig({ version: 7, updatedAt: '2024-06-01T00:00:00Z' })
+
+      const result = toUnifiedConfig(legacy)
+
+      expect(result.metadata?.version).toBe(7)
+      expect(result.metadata?.updatedAt).toBe('2024-06-01T00:00:00Z')
+      // Top-level `version` on the unified side is the config *format*
+      // string, not the remote version number — must not be conflated.
+      expect(result.version).toBe('2.0')
+    })
+
+    it('converts IP rules, preserving notes and hostname', () => {
+      const legacy = makeLegacyConfig({ ips: [makeLegacyIPRule({ notes: 'suspicious traffic' })] })
+
+      const result = toUnifiedConfig(legacy)
+
+      expect(result.ips).toHaveLength(1)
+      expect(result.ips?.[0]).toMatchObject({
+        id: 'ip_test',
+        ip: '10.0.0.1',
+        hostname: 'example.com',
+        notes: 'suspicious traffic',
+      })
+    })
+
+    it('converts an id-less rule without throwing', () => {
+      const legacy = makeLegacyConfig({ rules: [makeLegacyRule({ id: undefined })] })
+
+      const result = toUnifiedConfig(legacy)
+
+      expect(result.rules[0]?.id).toBeUndefined()
+      expect(result.rules[0]?.name).toBe('Test Rule')
+    })
+
+    // Regression coverage for the condition-group fidelity fix this adapter
+    // depends on: a legacy rule with 2+ condition groups must not collapse
+    // into a single flat group when converted.
+    it('preserves multi-group rules through the conversion', () => {
+      const legacy = makeLegacyConfig({
+        rules: [
+          makeLegacyRule({
+            conditionGroup: [
+              {
+                conditions: [
+                  { type: 'path', op: 'eq', value: '/api' },
+                  { type: 'method', op: 'eq', value: 'POST' },
+                ],
+              },
+              { conditions: [{ type: 'header', op: 'eq', value: 'x', key: 'X-Custom' }] },
+            ],
+          }),
+        ],
+      })
+
+      const result = toUnifiedConfig(legacy)
+
+      const groups = new Set(result.rules[0]?.conditions.map((c) => c.group))
+      expect(groups.size).toBe(2)
+    })
+  })
+
+  describe('applySyncResultToConfig', () => {
+    const baseResult: Pick<SyncResult, 'version' | 'updatedAt' | 'idRemappings'> = {
+      version: 5,
+      updatedAt: '2024-07-01T00:00:00Z',
+    }
+
+    it('writes version/updatedAt to the top level for a legacy-shaped config', () => {
+      const legacy = makeLegacyConfig({ version: 3, updatedAt: '2024-01-01T00:00:00Z' })
+
+      const { config, changed } = applySyncResultToConfig(legacy, baseResult)
+
+      expect(changed).toBe(true)
+      expect(config.version).toBe(5)
+      expect(config.updatedAt).toBe('2024-07-01T00:00:00Z')
+      // metadata must never appear on a legacy-shaped config — it's not
+      // part of that schema.
+      expect((config as unknown as Record<string, unknown>).metadata).toBeUndefined()
+    })
+
+    it('writes version/updatedAt to metadata for a unified config, leaving top-level version alone', () => {
+      const unified: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [],
+        ips: [],
+        metadata: { version: 3, updatedAt: '2024-01-01T00:00:00Z' },
+      }
+
+      const { config, changed } = applySyncResultToConfig(unified, baseResult)
+
+      expect(changed).toBe(true)
+      expect(config.version).toBe('2.0')
+      expect(config.metadata?.version).toBe(5)
+      expect(config.metadata?.updatedAt).toBe('2024-07-01T00:00:00Z')
+    })
+
+    it('reports unchanged when the version already matches', () => {
+      const legacy = makeLegacyConfig({ version: 5, updatedAt: '2024-07-01T00:00:00Z' })
+
+      const { changed } = applySyncResultToConfig(legacy, baseResult)
+
+      expect(changed).toBe(false)
+    })
+
+    it('remaps a rule id by matching on oldId', () => {
+      const legacy = makeLegacyConfig({ rules: [makeLegacyRule({ id: 'stale_id', name: 'My Rule' })] })
+
+      const { config, changed } = applySyncResultToConfig(legacy, {
+        idRemappings: [{ oldId: 'stale_id', newId: 'rule_abc123', name: 'My Rule' }],
+      })
+
+      expect(changed).toBe(true)
+      expect(config.rules[0]?.id).toBe('rule_abc123')
+    })
+
+    it('remaps an id-less rule by matching on name', () => {
+      const legacy = makeLegacyConfig({ rules: [makeLegacyRule({ id: undefined, name: 'Brand New Rule' })] })
+
+      const { config, changed } = applySyncResultToConfig(legacy, {
+        idRemappings: [{ newId: 'rule_xyz789', name: 'Brand New Rule' }],
+      })
+
+      expect(changed).toBe(true)
+      expect(config.rules[0]?.id).toBe('rule_xyz789')
+    })
+
+    it('does not touch rules with no matching remapping', () => {
+      const legacy = makeLegacyConfig({ rules: [makeLegacyRule({ id: 'unrelated_id', name: 'Other Rule' })] })
+
+      const { config, changed } = applySyncResultToConfig(legacy, {
+        idRemappings: [{ oldId: 'stale_id', newId: 'rule_abc123', name: 'My Rule' }],
+      })
+
+      expect(changed).toBe(false)
+      expect(config.rules[0]?.id).toBe('unrelated_id')
+    })
+
+    it('reports unchanged and returns an equivalent config when there is nothing to write back', () => {
+      const legacy = makeLegacyConfig({ version: 5 })
+
+      const { changed } = applySyncResultToConfig(legacy, { version: 5 })
+
+      expect(changed).toBe(false)
+    })
+  })
+})
