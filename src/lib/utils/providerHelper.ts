@@ -7,7 +7,6 @@ import { VercelProvider } from '../providers/vercel'
 import { CloudflareProvider } from '../providers/cloudflare'
 import type { IFirewallProvider, ProviderType } from '../providers/IFirewallProvider'
 import type { FirewallConfig, UnifiedConfig } from '../types'
-import { isUnifiedConfig } from '../types'
 
 export interface ProviderOptions {
   // Common options
@@ -94,11 +93,13 @@ export async function getProviderInstance(options: ProviderOptions): Promise<Pro
 async function getVercelProvider(options: ProviderOptions): Promise<ProviderInstanceResult> {
   const token = options.token || process.env.VERCEL_TOKEN
 
-  // Type guard for accessing Vercel-specific properties
-  const vercelConfig =
-    options.config && !isUnifiedConfig(options.config) ? (options.config as Partial<FirewallConfig>) : undefined
-  const configProjectId = vercelConfig?.projectId
-  const configTeamId = vercelConfig?.teamId
+  // Vercel credentials may live directly on the config (legacy `.doorman.json`
+  // shape) or under `providers.vercel` (unified config shape). Both are
+  // checked since a config's shape can't be reliably inferred from `rules`
+  // alone (both legacy and unified configs have a top-level `rules` array).
+  const config = options.config as (Partial<FirewallConfig> & Partial<UnifiedConfig>) | undefined
+  const configProjectId = config?.providers?.vercel?.projectId ?? config?.projectId
+  const configTeamId = config?.providers?.vercel?.teamId ?? config?.teamId
 
   const projectId = options.projectId || configProjectId || process.env.VERCEL_PROJECT_ID
   const teamId = options.teamId || configTeamId || process.env.VERCEL_TEAM_ID
