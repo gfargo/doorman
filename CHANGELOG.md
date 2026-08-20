@@ -1,3 +1,10 @@
+# [3.9.0](https://github.com/gfargo/doorman/compare/v3.8.1...v3.9.0) (2026-08-20)
+
+
+### Features
+
+* implement UnifiedAction.response and mark supportsManagedRules reserved ([#190](https://github.com/gfargo/doorman/issues/190)) ([e95719d](https://github.com/gfargo/doorman/commit/e95719d315e8b609ae75fc1a36e627636aa61d1f)), closes [#180](https://github.com/gfargo/doorman/issues/180)
+
 ## [3.8.1](https://github.com/gfargo/doorman/compare/v3.8.0...v3.8.1) (2026-08-20)
 
 
