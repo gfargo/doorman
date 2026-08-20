@@ -1,3 +1,10 @@
+## [3.9.1](https://github.com/gfargo/doorman/compare/v3.9.0...v3.9.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* resolve Cloudflare zoneId/accountId from config; add credential descriptors ([#193](https://github.com/gfargo/doorman/issues/193)) ([b25cb2c](https://github.com/gfargo/doorman/commit/b25cb2c2d64543f12f19fdd471d36a8494c9e722)), closes [#171](https://github.com/gfargo/doorman/issues/171) [#171](https://github.com/gfargo/doorman/issues/171) [#192](https://github.com/gfargo/doorman/issues/192) [#182](https://github.com/gfargo/doorman/issues/182)
+
 # [3.9.0](https://github.com/gfargo/doorman/compare/v3.8.1...v3.9.0) (2026-08-20)
 
 
