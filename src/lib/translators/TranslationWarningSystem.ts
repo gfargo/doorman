@@ -1,4 +1,4 @@
-import type { TranslationWarning, TranslationWarningSeverity, TranslationWarningCategory } from './RuleTranslator'
+import type { TranslationWarning, TranslationWarningSeverity, TranslationWarningCategory } from './TranslationTypes'
 
 /**
  * Translation warning configuration for different scenarios
