@@ -263,6 +263,33 @@ export class CloudflareOptimizer {
       }
     }
 
+    // Position drift. Cloudflare has no per-rule priority field — a rule's
+    // index in the ruleset array *is* its precedence — and `local` arrives
+    // already sorted by `UnifiedRule.priority`. So a config whose only
+    // change is a reordering produces identical rule *content* on both
+    // sides and would otherwise diff clean, even though syncing it would
+    // rewrite the live evaluation order (a security-relevant change: a
+    // broad `allow` moving ahead of a narrow `block` inverts the policy).
+    //
+    // Compared over the rules common to both sides, in their respective
+    // orders — rules being added or deleted are excluded, since their
+    // arrival/removal shifts indices without anything having been
+    // deliberately reordered.
+    const alreadyUpdating = new Set(toUpdate.map((r) => r.id || r.name))
+    const desiredCommonOrder = local.map(({ rule }) => rule.id || rule.name).filter((key) => remoteById.has(key))
+    const remoteCommonOrder = remote.map((r) => r.id).filter((key) => localKeys.has(key))
+
+    desiredCommonOrder.forEach((key, index) => {
+      if (remoteCommonOrder[index] === key || alreadyUpdating.has(key)) {
+        return
+      }
+      const moved = local.find(({ rule }) => (rule.id || rule.name) === key)
+      if (moved) {
+        toUpdate.push(moved.rule)
+        alreadyUpdating.add(key)
+      }
+    })
+
     return { toAdd, toUpdate, toDelete }
   }
 

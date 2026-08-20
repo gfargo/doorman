@@ -573,6 +573,130 @@ describe('VercelFirewallService', () => {
     })
   })
 
+  // Regression coverage for #179. Vercel writes rules one at a time
+  // (rules.insert/rules.update), so unlike Cloudflare's full-array ruleset
+  // replace, doorman can order newly-created rules but cannot reposition a
+  // rule that already exists remotely — that limitation has to be stated,
+  // not silently papered over.
+  describe('rule priority ordering (best-effort on Vercel)', () => {
+    it('creates new rules in priority order', async () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            name: 'third',
+            enabled: true,
+            priority: 30,
+            conditions: [{ field: 'path', operator: 'eq', value: '/c' }],
+            action: { type: 'deny' },
+          },
+          {
+            name: 'first',
+            enabled: true,
+            priority: 10,
+            conditions: [{ field: 'path', operator: 'eq', value: '/a' }],
+            action: { type: 'deny' },
+          },
+          {
+            name: 'second',
+            enabled: true,
+            priority: 20,
+            conditions: [{ field: 'path', operator: 'eq', value: '/b' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({ ...mockVercelConfig, rules: [], ips: [] })
+      const createSpy = jest
+        .spyOn(client, 'createFirewallRule')
+        .mockImplementation((rule) => Promise.resolve({ ...rule, id: `id_${rule.name}` } as never))
+
+      await service.syncRules(config)
+
+      const createdOrder = createSpy.mock.calls.map(([rule]) => rule.name)
+      expect(createdOrder).toEqual(['first', 'second', 'third'])
+    })
+
+    it('does not warn about ordering when every rule is a fresh create (insertion order fully determines it)', async () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            name: 'brand new',
+            enabled: true,
+            priority: 1,
+            conditions: [{ field: 'path', operator: 'eq', value: '/new' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({ ...mockVercelConfig, rules: [], ips: [] })
+      jest
+        .spyOn(client, 'createFirewallRule')
+        .mockImplementation((rule) => Promise.resolve({ ...rule, id: 'id_new' } as never))
+
+      const result = await service.syncRules(config)
+
+      expect(result.warnings?.some((w) => w.includes('best-effort on Vercel'))).toBeFalsy()
+    })
+
+    it('warns that ordering is best-effort when prioritised rules already exist remotely', async () => {
+      // rule_1 already exists in mockVercelConfig, so it can't be repositioned.
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'rule_1',
+            name: 'Block bots',
+            description: 'Block bad bots',
+            enabled: true,
+            priority: 20,
+            conditions: [{ field: 'user_agent', operator: 'contains', value: 'BadBot' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [{ id: 'ip_1', ip: '1.2.3.4', hostname: 'example.com', action: 'deny', notes: 'Blocked IP' }],
+      }
+
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue(mockVercelConfig)
+
+      const result = await service.syncRules(config)
+
+      expect(result.warnings?.some((w) => w.includes('best-effort on Vercel'))).toBe(true)
+    })
+
+    it('does not warn when no rule declares a priority', async () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'rule_1',
+            name: 'Block bots',
+            description: 'Block bad bots',
+            enabled: true,
+            conditions: [{ field: 'user_agent', operator: 'contains', value: 'BadBot' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [{ id: 'ip_1', ip: '1.2.3.4', hostname: 'example.com', action: 'deny', notes: 'Blocked IP' }],
+      }
+
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue(mockVercelConfig)
+
+      const result = await service.syncRules(config)
+
+      expect(result.warnings?.some((w) => w.includes('best-effort on Vercel'))).toBeFalsy()
+    })
+  })
+
   describe('post-sync verification (regression: a create/update/delete that silently did not take effect used to go unreported)', () => {
     it('warns when a created rule is missing from the post-sync remote config', async () => {
       const config: UnifiedConfig = {

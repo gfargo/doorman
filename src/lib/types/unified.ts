@@ -66,7 +66,26 @@ export interface UnifiedRule {
   conditions: UnifiedCondition[]
   conditionLogic?: 'AND' | 'OR' // How to combine conditions (default: AND)
   action: UnifiedAction
-  priority?: number // Rule execution order
+  /**
+   * Rule evaluation order. **Lower numbers are evaluated first**, matching
+   * the convention of every provider that exposes an explicit numeric
+   * priority. Rules without a priority keep their config-file order and are
+   * evaluated *after* all prioritised rules, so adding `priority` to one
+   * rule promotes it rather than demoting it. Equal priorities keep their
+   * config-file order.
+   *
+   * Fully honoured on Cloudflare (the ruleset write is an ordered replace).
+   * Best-effort on Vercel, which creates rules individually and cannot
+   * reposition one that already exists — `syncRules` warns when that
+   * applies. See `sortRulesByPriority`.
+   *
+   * Note this field only exists on the unified config format. The legacy
+   * Vercel-only format (`FirewallConfig`/`CustomRule`, `additionalProperties:
+   * false`) has no `priority`, so a legacy-shaped config cannot declare one —
+   * deliberately, since ordering is best-effort on Vercel regardless and the
+   * legacy schema isn't the place to add new capability surface.
+   */
+  priority?: number
   categories?: string[] // Tags for organization
 }
 

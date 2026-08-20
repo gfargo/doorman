@@ -467,6 +467,133 @@ describe('CloudflareFirewallService', () => {
     })
   })
 
+  // Regression coverage for #179: `UnifiedRule.priority` used to feed the
+  // dedup/diff hash while never affecting the order rules were written, so
+  // setting it changed nothing about actual firewall evaluation order.
+  describe('rule priority ordering', () => {
+    const ruleWith = (name: string, priority?: number): UnifiedRule => ({
+      id: name,
+      name,
+      enabled: true,
+      action: { type: 'deny' },
+      conditions: [{ field: 'path', operator: 'eq', value: `/${name}` }],
+      ...(priority !== undefined ? { priority } : {}),
+    })
+
+    const configWith = (rules: UnifiedRule[]): UnifiedConfig => ({
+      version: '2.0',
+      provider: 'cloudflare',
+      rules,
+      ips: [],
+    })
+
+    it('writes rules to the ruleset in priority order, lowest number first', async () => {
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue({
+        id: 'ruleset-1',
+        name: 'rs',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        last_updated: '2024-01-01T00:00:00Z',
+        rules: [],
+      })
+      const updateSpy = jest.spyOn(mockClient, 'updateRuleset').mockResolvedValue({
+        id: 'ruleset-1',
+        name: 'rs',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '2',
+        last_updated: '2024-01-01T00:00:00Z',
+        rules: [],
+      })
+
+      // Deliberately declared out of order in the config.
+      await service.syncRules(configWith([ruleWith('c', 30), ruleWith('a', 10), ruleWith('b', 20)]), { force: true })
+
+      const [, payload] = updateSpy.mock.calls[0]!
+      const written = payload.rules!.map((r) => r.description)
+      expect(written).toEqual(['a', 'b', 'c'])
+    })
+
+    it('places unprioritised rules after prioritised ones, preserving their config order', async () => {
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue({
+        id: 'ruleset-1',
+        name: 'rs',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        last_updated: '2024-01-01T00:00:00Z',
+        rules: [],
+      })
+      const updateSpy = jest.spyOn(mockClient, 'updateRuleset').mockResolvedValue({
+        id: 'ruleset-1',
+        name: 'rs',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '2',
+        last_updated: '2024-01-01T00:00:00Z',
+        rules: [],
+      })
+
+      await service.syncRules(configWith([ruleWith('plain-1'), ruleWith('promoted', 1), ruleWith('plain-2')]), {
+        force: true,
+      })
+
+      const [, payload] = updateSpy.mock.calls[0]!
+      const written = payload.rules!.map((r) => r.description)
+      expect(written).toEqual(['promoted', 'plain-1', 'plain-2'])
+    })
+
+    // Without this, `diff`/`status` would report "in sync" while `sync`
+    // silently rewrote the live evaluation order — the ruleset write is a
+    // full-array replace, so reordering takes effect regardless of whether
+    // the diff noticed.
+    it('reports a priority-only reorder as a change rather than showing clean', async () => {
+      // Remote currently has a, b (in that order) with matching content.
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue({
+        id: 'ruleset-1',
+        name: 'rs',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        last_updated: '2024-01-01T00:00:00Z',
+        rules: [
+          { id: 'a', action: 'block', expression: 'http.request.uri.path eq "/a"', description: 'a', enabled: true },
+          { id: 'b', action: 'block', expression: 'http.request.uri.path eq "/b"', description: 'b', enabled: true },
+        ],
+      })
+
+      // Same two rules, same content — only the priorities invert the order.
+      const changes = await service.getChanges(configWith([ruleWith('a', 20), ruleWith('b', 10)]))
+
+      expect(changes.hasChanges).toBe(true)
+      expect(changes.rulesToAdd).toHaveLength(0)
+      expect(changes.rulesToDelete).toHaveLength(0)
+      expect(changes.rulesToUpdate.length).toBeGreaterThan(0)
+    })
+
+    it('still reports clean when order and content both match remote', async () => {
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue({
+        id: 'ruleset-1',
+        name: 'rs',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        last_updated: '2024-01-01T00:00:00Z',
+        rules: [
+          { id: 'a', action: 'block', expression: 'http.request.uri.path eq "/a"', description: 'a', enabled: true },
+          { id: 'b', action: 'block', expression: 'http.request.uri.path eq "/b"', description: 'b', enabled: true },
+        ],
+      })
+
+      const changes = await service.getChanges(configWith([ruleWith('a', 10), ruleWith('b', 20)]))
+
+      expect(changes.rulesToAdd).toHaveLength(0)
+      expect(changes.rulesToUpdate).toHaveLength(0)
+      expect(changes.rulesToDelete).toHaveLength(0)
+    })
+  })
+
   describe('syncRules', () => {
     it('should sync rules in dry run mode', async () => {
       const mockConfig: UnifiedConfig = {
