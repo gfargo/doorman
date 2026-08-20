@@ -2,6 +2,7 @@ import type { VercelCustomRule, VercelIPBlockingRule, VercelConditionGroup, Verc
 import type { CloudflareRule } from '../types/cloudflare'
 import type { UnifiedRule, UnifiedIPRule, UnifiedCondition, UnifiedAction } from '../types/unified'
 import { ExpressionBuilder } from './ExpressionBuilder'
+import { parseWirefilterExpression } from './WirefilterParser'
 import { ipAddressSchema } from '../schemas/commonSchemas'
 import { logger } from '../logger'
 
@@ -132,29 +133,36 @@ export class RuleTranslator {
   public static cloudflareToVercel(rule: CloudflareRule): TranslationResult<VercelCustomRule> {
     const warnings: TranslationWarning[] = []
 
-    // Import the warning system
-    const { TranslationWarningSystem } = require('./TranslationWarningSystem')
+    const parsed = parseWirefilterExpression(rule.expression)
 
-    warnings.push(
-      TranslationWarningSystem.createLossyConversionWarning(
-        'Cloudflare expression',
-        'Cloudflare expressions cannot be perfectly converted to Vercel structured conditions',
-        rule.id,
-        'expression',
-      ),
-    )
+    let conditionGroups: VercelConditionGroup[] = []
+    if (parsed) {
+      conditionGroups = this.buildVercelConditionGroups(parsed.conditions, rule.id, warnings)
+    }
 
-    // For now, create a basic Vercel rule
-    // Full expression parsing would require a wirefilter parser
+    // Falls back to the original "empty condition group" placeholder when
+    // the expression couldn't be parsed at all, or every parsed condition's
+    // field has no Vercel equivalent — same "never throws" contract this
+    // function has always had (unlike unifiedToVercel, which hard-fails a
+    // rule Vercel genuinely can't represent at all).
+    if (conditionGroups.length === 0) {
+      const { TranslationWarningSystem } = require('./TranslationWarningSystem')
+      warnings.push(
+        TranslationWarningSystem.createLossyConversionWarning(
+          'Cloudflare expression',
+          'Cloudflare expression could not be converted to Vercel structured conditions',
+          rule.id,
+          'expression',
+        ),
+      )
+      conditionGroups = [{ conditions: [] }]
+    }
+
     const vercelRule: VercelCustomRule = {
       id: rule.id,
       name: rule.description || `Rule ${rule.id}`,
       description: rule.description,
-      conditionGroup: [
-        {
-          conditions: [],
-        },
-      ],
+      conditionGroup: conditionGroups,
       action: {
         mitigate: {
           action: this.translateCloudflareActionToVercel(rule.action),
@@ -267,18 +275,30 @@ export class RuleTranslator {
   public static cloudflareToUnified(rule: CloudflareRule): TranslationResult<UnifiedRule> {
     const warnings: TranslationWarning[] = []
 
-    // Import the warning system
-    const { TranslationWarningSystem } = require('./TranslationWarningSystem')
+    // doorman only ever *writes* wirefilter expressions itself, so
+    // WirefilterParser understands exactly the grammar subset it can
+    // produce — anything else (hand-authored, or from another tool) it
+    // reports as unparseable (`null`) rather than guessing, and this falls
+    // back to the previous "empty conditions" behavior with a warning.
+    const parsed = parseWirefilterExpression(rule.expression)
 
-    warnings.push(
-      TranslationWarningSystem.createWarning(
-        'complex_expressions',
-        rule.id,
-        'expression',
-        'Expression parsing not fully implemented. Using simplified translation.',
-        'Review the translated rule and add missing conditions manually if needed.',
-      ),
-    )
+    let conditions: UnifiedRule['conditions'] = []
+    let conditionLogic: UnifiedRule['conditionLogic']
+    if (parsed) {
+      conditions = parsed.conditions
+      conditionLogic = parsed.conditionLogic
+    } else {
+      const { TranslationWarningSystem } = require('./TranslationWarningSystem')
+      warnings.push(
+        TranslationWarningSystem.createWarning(
+          'complex_expressions',
+          rule.id,
+          'expression',
+          'Expression could not be parsed back into structured conditions — it may be hand-authored or use syntax outside what doorman itself generates.',
+          'Review the translated rule and add missing conditions manually if needed.',
+        ),
+      )
+    }
 
     const action: UnifiedAction = {
       type: this.mapCloudflareActionToUnified(rule.action),
@@ -298,7 +318,8 @@ export class RuleTranslator {
       name: rule.description || `Rule ${rule.id}`,
       description: rule.description,
       enabled: rule.enabled ?? true,
-      conditions: [], // Would need expression parser
+      conditions,
+      conditionLogic,
       action,
     }
 
@@ -351,60 +372,7 @@ export class RuleTranslator {
   public static unifiedToVercel(rule: UnifiedRule): TranslationResult<VercelCustomRule> {
     const warnings: TranslationWarning[] = []
 
-    // Group conditions by their `group` index (set by vercelToUnified when
-    // the rule originated from Vercel's own conditionGroup[] structure) so a
-    // multi-group rule round-trips correctly instead of collapsing into one
-    // group and changing what the rule matches (AND-within/OR-across ->
-    // everything AND'd together). Conditions with no `group` (e.g. a
-    // hand-authored config) all fall into one implicit group — the same
-    // single-group behavior this function has always had.
-    const groupedConditions = new Map<number, UnifiedCondition[]>()
-    for (const condition of rule.conditions) {
-      const groupIndex = condition.group ?? 0
-      const bucket = groupedConditions.get(groupIndex)
-      if (bucket) {
-        bucket.push(condition)
-      } else {
-        groupedConditions.set(groupIndex, [condition])
-      }
-    }
-
-    // A condition whose field has no Vercel equivalent (e.g. Cloudflare-only
-    // `referer`/`port`) is dropped with a critical warning rather than
-    // mistranslated — silently relabeling it (the previous behavior defaulted
-    // to `path`) rewrote what the rule actually matches with no indication
-    // anything was wrong. A group that ends up fully empty is dropped too —
-    // that OR-branch simply doesn't exist in the output.
-    const conditionGroups: VercelConditionGroup[] = []
-    for (const groupConditions of groupedConditions.values()) {
-      const mapped: VercelRuleCondition[] = []
-      for (const condition of groupConditions) {
-        const type = this.mapUnifiedTypeToVercel(condition.field)
-        if (!type) {
-          const { TranslationWarningSystem } = require('./TranslationWarningSystem')
-          warnings.push(
-            TranslationWarningSystem.createUnsupportedFeatureWarning(
-              `condition field '${condition.field}'`,
-              'unified config',
-              'Vercel',
-              rule.id,
-              condition.field,
-            ),
-          )
-          continue
-        }
-        mapped.push({
-          op: this.mapUnifiedOperatorToVercel(condition.operator),
-          neg: condition.negated,
-          type,
-          key: condition.key,
-          value: condition.value,
-        })
-      }
-      if (mapped.length > 0) {
-        conditionGroups.push({ conditions: mapped })
-      }
-    }
+    const conditionGroups = this.buildVercelConditionGroups(rule.conditions, rule.id, warnings)
 
     if (conditionGroups.length === 0) {
       throw new Error(
@@ -443,6 +411,74 @@ export class RuleTranslator {
     }
 
     return { result: vercelRule, warnings }
+  }
+
+  /**
+   * Groups unified conditions by their `group` index (set by
+   * `vercelToUnified` when the rule originated from Vercel's own
+   * `conditionGroup[]` structure, or by `WirefilterParser` when it came from
+   * a parsed Cloudflare expression) into Vercel's `conditionGroup[]` shape,
+   * so a multi-group rule round-trips correctly instead of collapsing into
+   * one group and changing what the rule matches (AND-within/OR-across ->
+   * everything AND'd together). Conditions with no `group` (e.g. a
+   * hand-authored config) all fall into one implicit group.
+   *
+   * A condition whose field has no Vercel equivalent (e.g. Cloudflare-only
+   * `referer`/`port`) is dropped with a warning pushed onto the caller's
+   * `warnings` array, rather than mistranslated — silently relabeling it
+   * would rewrite what the rule actually matches with no indication
+   * anything was wrong. A group that ends up fully empty is dropped too —
+   * that OR-branch simply doesn't exist in the output. Shared by
+   * `unifiedToVercel` and `cloudflareToVercel`.
+   */
+  private static buildVercelConditionGroups(
+    conditions: UnifiedCondition[],
+    ruleId: string | undefined,
+    warnings: TranslationWarning[],
+  ): VercelConditionGroup[] {
+    const groupedConditions = new Map<number, UnifiedCondition[]>()
+    for (const condition of conditions) {
+      const groupIndex = condition.group ?? 0
+      const bucket = groupedConditions.get(groupIndex)
+      if (bucket) {
+        bucket.push(condition)
+      } else {
+        groupedConditions.set(groupIndex, [condition])
+      }
+    }
+
+    const conditionGroups: VercelConditionGroup[] = []
+    for (const groupConditions of groupedConditions.values()) {
+      const mapped: VercelRuleCondition[] = []
+      for (const condition of groupConditions) {
+        const type = this.mapUnifiedTypeToVercel(condition.field)
+        if (!type) {
+          const { TranslationWarningSystem } = require('./TranslationWarningSystem')
+          warnings.push(
+            TranslationWarningSystem.createUnsupportedFeatureWarning(
+              `condition field '${condition.field}'`,
+              'unified config',
+              'Vercel',
+              ruleId,
+              condition.field,
+            ),
+          )
+          continue
+        }
+        mapped.push({
+          op: this.mapUnifiedOperatorToVercel(condition.operator),
+          neg: condition.negated,
+          type,
+          key: condition.key,
+          value: condition.value,
+        })
+      }
+      if (mapped.length > 0) {
+        conditionGroups.push({ conditions: mapped })
+      }
+    }
+
+    return conditionGroups
   }
 
   /**

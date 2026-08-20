@@ -12,3 +12,22 @@
 export function escapeWirefilterString(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
 }
+
+/**
+ * Inverse of `escapeWirefilterString` — decodes `\\` and `\"` escape
+ * sequences in the *contents* of a wirefilter double-quoted string literal
+ * (the caller strips the surrounding quotes before calling this). Any other
+ * backslash sequence is left as-is; wirefilter only defines these two.
+ */
+export function unescapeWirefilterString(value: string): string {
+  let result = ''
+  for (let i = 0; i < value.length; i++) {
+    if (value[i] === '\\' && (value[i + 1] === '\\' || value[i + 1] === '"')) {
+      result += value[i + 1]
+      i++
+    } else {
+      result += value[i]
+    }
+  }
+  return result
+}

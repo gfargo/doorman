@@ -403,7 +403,7 @@ describe('RuleTranslator', () => {
   })
 
   describe('cloudflareToUnified', () => {
-    it('translates a basic block rule', () => {
+    it('translates a basic block rule, parsing the expression back into structured conditions', () => {
       const cfRule = makeCloudflareRule()
       const { result, warnings } = RuleTranslator.cloudflareToUnified(cfRule)
 
@@ -411,10 +411,20 @@ describe('RuleTranslator', () => {
       expect(result.name).toBe('A test rule')
       expect(result.enabled).toBe(true)
       expect(result.action.type).toBe('deny')
-      // Conditions are empty because expression parsing is not fully implemented
+      expect(result.conditions).toEqual([
+        { field: 'path', operator: 'eq', value: '/api', key: undefined, negated: undefined, group: 0 },
+      ])
+      // A successfully-parsed expression gets no "couldn't parse" warning.
+      expect(warnings).toEqual([])
+    })
+
+    it('falls back to empty conditions with a warning when the expression is outside what WirefilterParser understands', () => {
+      const cfRule = makeCloudflareRule({ expression: 'http.request.body.raw contains "x"' })
+      const { result, warnings } = RuleTranslator.cloudflareToUnified(cfRule)
+
       expect(result.conditions).toEqual([])
-      // Should have a warning about expression parsing
       expect(warnings.length).toBeGreaterThan(0)
+      expect(warnings.some((w) => w.field === 'expression')).toBe(true)
     })
 
     it('maps Cloudflare actions to unified actions', () => {
@@ -654,7 +664,7 @@ describe('RuleTranslator', () => {
   })
 
   describe('cloudflareToVercel', () => {
-    it('translates a basic block rule', () => {
+    it('translates a basic block rule, parsing the expression back into structured conditions', () => {
       const cfRule = makeCloudflareRule()
       const { result, warnings } = RuleTranslator.cloudflareToVercel(cfRule)
 
@@ -662,7 +672,16 @@ describe('RuleTranslator', () => {
       expect(result.name).toBe('A test rule')
       expect(result.active).toBe(true)
       expect(result.action.mitigate.action).toBe('deny')
-      // Should have lossy conversion warning
+      expect(result.conditionGroup).toEqual([{ conditions: [{ type: 'path', op: 'eq', value: '/api' }] }])
+      // A successfully-parsed expression gets no lossy-conversion warning.
+      expect(warnings).toEqual([])
+    })
+
+    it('falls back to an empty condition group with a lossy-conversion warning when the expression cannot be parsed', () => {
+      const cfRule = makeCloudflareRule({ expression: 'http.request.body.raw contains "x"' })
+      const { result, warnings } = RuleTranslator.cloudflareToVercel(cfRule)
+
+      expect(result.conditionGroup).toEqual([{ conditions: [] }])
       expect(warnings.length).toBeGreaterThan(0)
       expect(warnings.some((w) => w.category === 'lossy_conversion')).toBe(true)
     })
