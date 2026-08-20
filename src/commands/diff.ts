@@ -3,7 +3,7 @@ import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
 import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
 import type { UnifiedConfig } from '../lib/types/unified'
-import { displayIPBlockingTable, displayRulesTable, RULE_STATUS_MAP } from '../lib/ui/table'
+import { toUnifiedConfig } from '../lib/utils/vercelConfigAdapter'
 import { withCredentials } from '../lib/utils/withCredentials'
 
 interface DiffOptions {
@@ -52,96 +52,8 @@ export const handler = async (argv: Arguments<DiffOptions>) => {
       ci: argv.ci,
       errorContext: 'calculating diff',
     },
-    async ({ config, service, provider }) => {
-      if (provider.name !== 'vercel') {
-        await diffWithProvider(provider, config as unknown as UnifiedConfig, argv)
-        return
-      }
-
-      logger.start('Calculating differences...')
-
-      const { toAdd, toUpdate, toDelete, ipsToAdd, ipsToUpdate, ipsToDelete, version } =
-        await service.getChanges(config)
-
-      const hasCustomRuleChanges = toAdd.length > 0 || toUpdate.length > 0 || toDelete.length > 0
-      const hasIPRuleChanges = ipsToAdd.length > 0 || ipsToUpdate.length > 0 || ipsToDelete.length > 0
-      const hasVersionChange = config.version !== version
-
-      if (!hasCustomRuleChanges && !hasIPRuleChanges && !hasVersionChange) {
-        logger.success(chalk.green('No differences found. Local and remote configurations are in sync.'))
-        return
-      }
-
-      if (argv.format === 'json') {
-        const diff = {
-          version: { local: config.version, remote: version, changed: hasVersionChange },
-          customRules: {
-            toAdd: toAdd.map((rule) => ({ ...rule, status: 'add' })),
-            toUpdate: toUpdate.map((rule) => ({ ...rule, status: 'update' })),
-            toDelete: toDelete.map((rule) => ({ ...rule, status: 'delete' })),
-          },
-          ipRules: {
-            toAdd: ipsToAdd.map((rule) => ({ ...rule, status: 'add' })),
-            toUpdate: ipsToUpdate.map((rule) => ({ ...rule, status: 'update' })),
-            toDelete: ipsToDelete.map((rule) => ({ ...rule, status: 'delete' })),
-          },
-          summary: {
-            hasChanges: hasCustomRuleChanges || hasIPRuleChanges || hasVersionChange,
-            customRuleChanges: toAdd.length + toUpdate.length + toDelete.length,
-            ipRuleChanges: ipsToAdd.length + ipsToUpdate.length + ipsToDelete.length,
-          },
-        }
-        logger.log(JSON.stringify(diff, null, 2))
-        return
-      }
-
-      logger.log(chalk.bold('\n🔍 Configuration Differences\n'))
-
-      if (hasVersionChange) {
-        logger.log(chalk.bold('Version Changes:'))
-        logger.log(`  Local:  ${chalk.red(config.version || 'unknown')}`)
-        logger.log(`  Remote: ${chalk.green(version)}`)
-        logger.log('')
-      }
-
-      if (hasCustomRuleChanges) {
-        logger.log(chalk.bold('Custom Rule Changes:\n'))
-        displayRulesTable(
-          [
-            ...toAdd.map((rule: any) => ({ ...rule, changeStatus: RULE_STATUS_MAP.new, id: rule.id as string })),
-            ...toUpdate.map((rule) => ({ ...rule, changeStatus: RULE_STATUS_MAP.modified, id: rule.id as string })),
-            ...toDelete.map((rule) => ({ ...rule, changeStatus: RULE_STATUS_MAP.deleted, id: rule.id as string })),
-          ],
-          { showStatus: true },
-        )
-        logger.log('')
-      }
-
-      if (hasIPRuleChanges) {
-        logger.log(chalk.bold('IP Blocking Rule Changes:\n'))
-        displayIPBlockingTable(
-          [
-            ...ipsToAdd.map((rule) => ({ ...rule, changeStatus: RULE_STATUS_MAP.new, id: rule.id || undefined })),
-            ...ipsToUpdate.map((rule) => ({
-              ...rule,
-              changeStatus: RULE_STATUS_MAP.modified,
-              id: rule.id || undefined,
-            })),
-            ...ipsToDelete.map((rule) => ({
-              ...rule,
-              changeStatus: RULE_STATUS_MAP.deleted,
-              id: rule.id || undefined,
-            })),
-          ],
-          { showStatus: true },
-        )
-        logger.log('')
-      }
-
-      const totalChanges =
-        toAdd.length + toUpdate.length + toDelete.length + ipsToAdd.length + ipsToUpdate.length + ipsToDelete.length
-      logger.log(chalk.bold(`Summary: ${totalChanges} total changes detected`))
-      logger.log(chalk.dim('Run `sync` to apply these changes to the remote configuration.'))
+    async ({ config, provider }) => {
+      await diffWithProvider(provider, toUnifiedConfig(config), argv)
     },
   )
 }

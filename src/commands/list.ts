@@ -4,8 +4,6 @@ import { z } from 'zod'
 import { logger } from '../lib/logger'
 import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
 import { configVersionSchema } from '../lib/schemas/firewallSchemas'
-import { IPBlockingRule } from '../lib/types'
-import { displayIPBlockingTable, displayRulesTable } from '../lib/ui/table'
 import { withCredentials } from '../lib/utils/withCredentials'
 
 interface ListOptions {
@@ -79,7 +77,7 @@ export const handler = async (argv: Arguments<ListOptions>) => {
       skipValidation: true,
       errorContext: 'listing firewall rules',
     },
-    async ({ client, provider, projectId, teamId }) => {
+    async ({ provider }) => {
       // Validate version if provided
       if (argv.configVersion !== undefined) {
         try {
@@ -93,64 +91,7 @@ export const handler = async (argv: Arguments<ListOptions>) => {
         }
       }
 
-      if (provider.name !== 'vercel') {
-        await listWithProvider(provider, argv)
-        return
-      }
-
-      logger.start(`Fetching firewall configuration${argv.configVersion ? ` version ${argv.configVersion}` : ''} ...`)
-      logger.verbose(`projectId: ${projectId}\t teamId: ${teamId}`)
-
-      const liveConfig = await client.fetchFirewallConfig(argv.configVersion)
-
-      const configRules = liveConfig.rules
-      const ipBlockingRules = liveConfig.ips as IPBlockingRule[]
-
-      const lastUpdated = new Date(liveConfig.updatedAt)
-      const formattedDate = new Intl.DateTimeFormat('en-US', {
-        dateStyle: 'medium',
-        timeStyle: 'medium',
-      }).format(lastUpdated)
-
-      logger.info(
-        `Found ${chalk.cyan(configRules.length)} custom rules and ${chalk.cyan(ipBlockingRules.length)} IP blocking rules\n` +
-          chalk.dim(`Version: ${chalk.yellow(liveConfig.version)} • Last Updated: ${chalk.yellow(formattedDate)}`),
-      )
-
-      if (argv.format === 'json') {
-        logger.info(
-          JSON.stringify(
-            {
-              version: liveConfig.version,
-              updatedAt: liveConfig.updatedAt,
-              lastUpdated: formattedDate,
-              rules: configRules,
-              ips: ipBlockingRules,
-            },
-            null,
-            2,
-          ),
-        )
-      } else {
-        if (configRules.length === 0 && ipBlockingRules.length === 0) {
-          logger.info(chalk.yellow('No rules found'))
-          return
-        }
-
-        if (configRules.length > 0) {
-          logger.log(chalk.bold.underline('\nCustom Rules:'), '\n')
-          displayRulesTable(configRules, { showStatus: false })
-        } else {
-          logger.info(chalk.cyan('No custom rules found'))
-        }
-
-        if (ipBlockingRules.length > 0) {
-          logger.log(chalk.bold.underline('\nIP Blocking Rules:'), '\n')
-          displayIPBlockingTable(ipBlockingRules, { showStatus: false })
-        } else {
-          logger.info(chalk.cyan('No IP blocking rules found'))
-        }
-      }
+      await listWithProvider(provider, argv)
     },
   )
 }

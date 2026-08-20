@@ -3,7 +3,7 @@ import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
 import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
 import type { UnifiedConfig } from '../lib/types/unified'
-import { ConfigHealthChecker } from '../lib/utils/configHealth'
+import { toUnifiedConfig } from '../lib/utils/vercelConfigAdapter'
 import { withCredentials } from '../lib/utils/withCredentials'
 
 interface StatusOptions {
@@ -69,64 +69,8 @@ export const handler = async (argv: Arguments<StatusOptions>) => {
       ci: argv.ci,
       errorContext: 'checking status',
     },
-    async ({ config, service, provider }) => {
-      if (provider.name !== 'vercel') {
-        await statusWithProvider(provider, config as unknown as UnifiedConfig)
-        return
-      }
-
-      logger.start('Checking sync status...')
-
-      const { toAdd, toUpdate, toDelete, ipsToAdd, ipsToUpdate, ipsToDelete, version } =
-        await service.getChanges(config)
-
-      const hasCustomRuleChanges = toAdd.length > 0 || toUpdate.length > 0 || toDelete.length > 0
-      const hasIPRuleChanges = ipsToAdd.length > 0 || ipsToUpdate.length > 0 || ipsToDelete.length > 0
-      const hasVersionChange = config.version !== version
-
-      logger.log(chalk.bold('\n📊 Sync Status Summary\n'))
-
-      logger.log(`${chalk.dim('Local Version:')} ${chalk.yellow(config.version || 'unknown')}`)
-      logger.log(`${chalk.dim('Remote Version:')} ${chalk.yellow(version)}`)
-
-      if (hasVersionChange) {
-        logger.log(`${chalk.dim('Version Status:')} ${chalk.red('Out of sync')}`)
-      } else {
-        logger.log(`${chalk.dim('Version Status:')} ${chalk.green('In sync')}`)
-      }
-
-      logger.log('')
-
-      logger.log(`${chalk.dim('Custom Rules:')}`)
-      logger.log(`  ${chalk.green('+')} ${toAdd.length} to add`)
-      logger.log(`  ${chalk.cyan('~')} ${toUpdate.length} to update`)
-      logger.log(`  ${chalk.red('-')} ${toDelete.length} to delete`)
-
-      logger.log(`${chalk.dim('IP Blocking Rules:')}`)
-      logger.log(`  ${chalk.green('+')} ${ipsToAdd.length} to add`)
-      logger.log(`  ${chalk.cyan('~')} ${ipsToUpdate.length} to update`)
-      logger.log(`  ${chalk.red('-')} ${ipsToDelete.length} to delete`)
-
-      logger.log('')
-
-      if (!hasCustomRuleChanges && !hasIPRuleChanges && !hasVersionChange) {
-        logger.success(chalk.green('✅ Everything is in sync!'))
-      } else {
-        logger.warn(chalk.yellow('⚠️  Changes detected. Run `sync` to apply changes.'))
-
-        if (hasVersionChange) {
-          logger.info(chalk.dim('💡 Version mismatch detected - this will be updated during sync'))
-        }
-      }
-
-      if (config.updatedAt) {
-        logger.log(`\n${chalk.dim('Last Updated:')} ${new Date(config.updatedAt).toLocaleString()}`)
-      }
-
-      logger.log('\n' + chalk.bold('🏥 Configuration Health Check'))
-      const healthResult = ConfigHealthChecker.check(config)
-      const healthReport = ConfigHealthChecker.formatHealthReport(healthResult)
-      logger.log(healthReport)
+    async ({ config, provider }) => {
+      await statusWithProvider(provider, toUnifiedConfig(config))
     },
   )
 }
@@ -135,7 +79,24 @@ async function statusWithProvider(provider: IFirewallProvider, config: UnifiedCo
   logger.start('Checking sync status...')
   const changes = await provider.getChanges(config)
 
+  const localVersion = config.metadata?.version
+  // Only flag a mismatch when a local version was actually tracked before —
+  // a brand-new/never-synced config has no `metadata.version` yet, and that
+  // absence isn't itself a drift signal.
+  const hasVersionChange =
+    changes.version !== undefined && localVersion !== undefined && localVersion !== changes.version
+
   logger.log(chalk.bold(`\n📊 ${provider.name} Sync Status Summary\n`))
+
+  if (changes.version !== undefined) {
+    logger.log(`${chalk.dim('Local Version:')} ${chalk.yellow(localVersion ?? 'unknown')}`)
+    logger.log(`${chalk.dim('Remote Version:')} ${chalk.yellow(changes.version)}`)
+    logger.log(
+      `${chalk.dim('Version Status:')} ${hasVersionChange ? chalk.red('Out of sync') : chalk.green('In sync')}`,
+    )
+    logger.log('')
+  }
+
   logger.log(`${chalk.dim('Rules:')}`)
   logger.log(`  ${chalk.green('+')} ${changes.rulesToAdd.length} to add`)
   logger.log(`  ${chalk.cyan('~')} ${changes.rulesToUpdate.length} to update`)
@@ -146,7 +107,7 @@ async function statusWithProvider(provider: IFirewallProvider, config: UnifiedCo
   logger.log(`  ${chalk.red('-')} ${changes.ipsToDelete?.length ?? 0} to delete`)
   logger.log('')
 
-  if (!changes.hasChanges) {
+  if (!changes.hasChanges && !hasVersionChange) {
     logger.success(chalk.green('✅ Everything is in sync!'))
   } else {
     logger.warn(chalk.yellow('⚠️  Changes detected. Run `sync` to apply changes.'))
