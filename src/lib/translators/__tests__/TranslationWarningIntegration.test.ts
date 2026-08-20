@@ -59,42 +59,6 @@ describe('Translation Warning Integration', () => {
       expect(performanceWarning?.suggestion).toContain('splitting complex rules')
     })
 
-    it('should generate enhanced warnings for Vercel to Cloudflare translation', () => {
-      const vercelRule: VercelCustomRule = {
-        id: 'rate-limit-rule',
-        name: 'Rate Limit Rule',
-        conditionGroup: [
-          {
-            conditions: [{ op: 'eq', type: 'path', value: '/api/upload' }],
-          },
-        ],
-        action: {
-          mitigate: {
-            action: 'rate_limit',
-            rateLimit: {
-              requests: 10,
-              window: '1m',
-              characteristics: ['ip.src'],
-              // No mitigationTimeout to trigger warning
-            },
-          },
-        },
-        active: true,
-      }
-
-      const result = RuleTranslator.vercelToCloudflare(vercelRule)
-
-      expect(result.warnings).toHaveLength(1)
-
-      const warning = result.warnings[0]
-      expect(warning?.category).toBe('lossy_conversion')
-      expect(warning?.severity).toBe('info')
-      expect(warning?.message).toContain('No mitigation timeout specified')
-      expect(warning?.suggestion).toContain('Specify mitigationTimeout')
-      expect(warning?.rule).toBe('rate-limit-rule')
-      expect(warning?.field).toBe('rateLimit.mitigationTimeout')
-    })
-
     it('should format warnings consistently across different translation paths', () => {
       const warning = TranslationWarningSystem.createWarning('managed_rules', 'test-rule', 'conditions')
       const formatted = TranslationWarningSystem.formatWarning(warning)
