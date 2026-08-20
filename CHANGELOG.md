@@ -1,3 +1,10 @@
+# [3.6.0](https://github.com/gfargo/doorman/compare/v3.5.0...v3.6.0) (2026-08-20)
+
+
+### Features
+
+* migrate backup and export onto IFirewallProvider for Vercel ([#175](https://github.com/gfargo/doorman/issues/175)) ([2019ff6](https://github.com/gfargo/doorman/commit/2019ff63ea9ea4ee7d051b41a6069898e7e6a512))
+
 # [3.5.0](https://github.com/gfargo/doorman/compare/v3.4.0...v3.5.0) (2026-08-20)
 
 
