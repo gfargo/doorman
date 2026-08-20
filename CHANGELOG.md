@@ -1,3 +1,10 @@
+## [3.7.1](https://github.com/gfargo/doorman/compare/v3.7.0...v3.7.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* restore upfront config validation and add post-sync verification ([#177](https://github.com/gfargo/doorman/issues/177)) ([de85554](https://github.com/gfargo/doorman/commit/de85554051a284d8fa05172bd892ff32d1a31f4a)), closes [#176](https://github.com/gfargo/doorman/issues/176)
+
 # [3.7.0](https://github.com/gfargo/doorman/compare/v3.6.0...v3.7.0) (2026-08-20)
 
 
