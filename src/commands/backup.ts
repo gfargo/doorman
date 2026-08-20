@@ -5,8 +5,7 @@ import { LogLevels } from 'consola'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
 import { ValidationService } from '../lib/services/ValidationService'
-import type { VercelConfig } from '../lib/services/VercelClient'
-import { FirewallConfig, IPBlockingRule } from '../lib/types'
+import { FirewallConfig } from '../lib/types'
 import { prompt } from '../lib/ui/prompt'
 import { getConfig, saveConfig } from '../lib/utils/config'
 import { handleCommandError } from '../lib/utils/handleCommandError'
@@ -173,50 +172,25 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
         ci: argv.ci,
         errorContext: 'creating backup',
       },
-      async ({ client, provider, projectId, teamId }) => {
+      async ({ provider, projectId, teamId }) => {
         logger.start('Fetching current remote configuration...')
-        const remoteConfig =
-          provider.name === 'vercel' ? await client.fetchFirewallConfig() : await provider.fetchConfig()
+        // `fetchConfig()` already returns a clean UnifiedConfig for every
+        // provider — RuleTranslator.vercelToUnified builds its result from
+        // an explicit field allowlist, so API-only fields (valid,
+        // validationErrors, id, crs, projectKey, ownerId, firewallEnabled)
+        // genuinely cannot survive it, the same guarantee Cloudflare's
+        // fetchConfig() already provided. No further sanitization needed.
+        const remoteConfig = await provider.fetchConfig()
+        const remoteVersion = remoteConfig.metadata?.version ?? remoteConfig.version
 
-        // The raw Vercel API response includes fields (id, crs, projectKey,
-        // ownerId) that aren't part of a Doorman config and would fail schema
-        // validation (additionalProperties: false) — strip them before
-        // validating/saving, the same way download.ts builds its saved config.
-        // The API also attaches valid/validationErrors to every rule object
-        // (download.ts strips these too, for the same reason — CustomRule also
-        // has additionalProperties: false). IP-blocking rules are similarly
-        // allowlist-reconstructed by known schema field names (id, ip,
-        // hostname, notes, action) rather than passed through as-is — no
-        // extra fields have been observed there yet, but IPBlockingRule also
-        // has additionalProperties: false, so this closes off the same bug
-        // class before it can trigger a third time. Cloudflare's
-        // fetchConfig() already returns a clean UnifiedConfig with no extra
-        // fields, so it's used as-is.
-        const sanitizedConfig =
-          provider.name === 'vercel'
-            ? {
-                version: remoteConfig.version,
-                firewallEnabled: (remoteConfig as VercelConfig).firewallEnabled,
-                rules: remoteConfig.rules.map(({ valid, validationErrors, ...rule }: any) => rule),
-                ips: (remoteConfig.ips as IPBlockingRule[]).map(({ id, ip, hostname, notes, action }) => ({
-                  ...(id !== undefined && { id }),
-                  ip,
-                  hostname,
-                  ...(notes !== undefined && { notes }),
-                  action,
-                })),
-                updatedAt: (remoteConfig as VercelConfig).updatedAt,
-              }
-            : remoteConfig
-
-        // Validate the sanitized config (before adding the backup metadata
+        // Validate the fetched config (before adding the backup metadata
         // wrapper below) — this catches genuine API response corruption rather
         // than trusting whatever the provider returned. It's validated here,
         // not after wrapping, because the wrapper's `backup` field isn't part of
         // the live config schema (additionalProperties: false); see the save
         // below for why that final write is unvalidated.
         const validator: ValidationService = ValidationService.getInstance()
-        validator.validateConfig(sanitizedConfig)
+        validator.validateConfig(remoteConfig)
 
         if (!existsSync(backupDir)) {
           mkdirSync(backupDir, { recursive: true })
@@ -230,13 +204,13 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
         const backupPath = join(backupDir, backupFilename)
 
         const backupConfig = {
-          ...sanitizedConfig,
+          ...remoteConfig,
           backup: {
             createdAt: new Date().toISOString(),
             source: 'remote',
             provider: provider.name,
             ...(provider.name === 'vercel' ? { projectId, teamId } : {}),
-            originalVersion: remoteConfig.version,
+            originalVersion: remoteVersion,
           },
         }
 
@@ -249,7 +223,7 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
         logger.success(chalk.green(`✅ Backup created: ${backupPath}`))
         logger.log('')
         logger.log(chalk.bold('Backup Details:'))
-        logger.log(`${chalk.dim('Version:')} ${remoteConfig.version}`)
+        logger.log(`${chalk.dim('Version:')} ${remoteVersion ?? 'unknown'}`)
         logger.log(
           `${chalk.dim('Rules:')} ${remoteConfig.rules.length} custom, ${remoteConfig.ips?.length ?? 0} IP blocking`,
         )

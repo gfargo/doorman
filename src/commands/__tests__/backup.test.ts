@@ -1,14 +1,14 @@
 import { promises as fs } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { VercelClient } from '../../lib/services/VercelClient'
+import { VercelClient } from '../../lib/providers/vercel/VercelClient'
 import { CloudflareClient } from '../../lib/providers/cloudflare/CloudflareClient'
 import { logger } from '../../lib/logger'
-import { mockCloudflareClientPrototype } from '../../tests/testHelpers/providerMocks'
+import { mockCloudflareClientPrototype, mockVercelClientPrototype } from '../../tests/testHelpers/providerMocks'
 import { handler } from '../backup'
 
 jest.mock('../../lib/logger', () => ({ logger: require('../../tests/testHelpers/loggerMock').createLoggerMock() }))
-jest.mock('../../lib/services/VercelClient')
+jest.mock('../../lib/providers/vercel/VercelClient')
 jest.mock('../../lib/providers/cloudflare/CloudflareClient')
 
 const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
@@ -73,7 +73,7 @@ describe('backup command', () => {
     // `find-up` package and doesn't play well with ts-jest's CJS transform).
     configPath = join(tempDir, '.doorman.json')
     await fs.writeFile(configPath, JSON.stringify({ rules: [], ips: [] }))
-    MockedVercelClient.prototype.fetchFirewallConfig = jest.fn().mockResolvedValue(vercelRemoteConfig) as any
+    mockVercelClientPrototype(MockedVercelClient, { config: vercelRemoteConfig as any })
     mockCloudflareClientPrototype(MockedCloudflareClient)
   })
 
@@ -100,15 +100,21 @@ describe('backup command', () => {
     const content = JSON.parse(await fs.readFile(join(backupDir, files[0]!), 'utf8'))
     expect(content.backup.provider).toBe('vercel')
     expect(content.backup.projectId).toBe('prj')
-    // Vercel API-only fields must not leak into the saved backup — this is
-    // also what makes the sanitized config pass schema validation at all.
+    // The backup now saves the UnifiedConfig fetchConfig() returns —
+    // RuleTranslator.vercelToUnified builds it from an explicit field
+    // allowlist, so API-only fields (id, crs, projectKey, ownerId,
+    // firewallEnabled, per-rule valid/validationErrors) never survive it in
+    // the first place; no separate sanitization step needed.
     expect(content.id).toBeUndefined()
     expect(content.crs).toBeUndefined()
     expect(content.projectKey).toBeUndefined()
     expect(content.ownerId).toBeUndefined()
-    expect(content.version).toBe(5)
-    expect(content.firewallEnabled).toBe(true)
-    // Per-rule API-only fields must not leak into the saved backup either.
+    // Top-level `version` is now the unified format string; the real
+    // remote version lives under `metadata.version` (and is mirrored into
+    // `backup.originalVersion`).
+    expect(content.version).toBe('2.0')
+    expect(content.metadata.version).toBe(5)
+    expect(content.backup.originalVersion).toBe(5)
     expect(content.rules).toHaveLength(1)
     expect(content.rules[0].valid).toBeUndefined()
     expect(content.rules[0].validationErrors).toBeUndefined()
