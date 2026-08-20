@@ -1,6 +1,7 @@
 import type { CloudflareClient } from '../../lib/providers/cloudflare/CloudflareClient'
 import { CloudflareOptimizer } from '../../lib/providers/cloudflare/CloudflareOptimizer'
 import type { CloudflareRuleset } from '../../lib/types/cloudflare'
+import type { VercelClient, VercelConfig } from '../../lib/providers/vercel/VercelClient'
 
 /**
  * Default empty Cloudflare ruleset used by tests that don't care about its contents.
@@ -51,4 +52,57 @@ export function mockCloudflareClientPrototype(
   MockedCloudflareClient.prototype.addListItems = jest.fn().mockResolvedValue([]) as any
   MockedCloudflareClient.prototype.removeListItems = jest.fn().mockResolvedValue(undefined) as any
   MockedCloudflareClient.prototype.verifyCredentials = jest.fn().mockResolvedValue(true) as any
+}
+
+/**
+ * Default empty Vercel firewall config used by tests that don't care about its contents.
+ */
+export function emptyVercelConfig(overrides: Partial<VercelConfig> = {}): VercelConfig {
+  return {
+    version: 1,
+    id: 'config_1',
+    firewallEnabled: true,
+    crs: null,
+    rules: [],
+    ips: [],
+    projectKey: 'pk_1',
+    ownerId: 'owner_1',
+    updatedAt: '2024-01-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
+/**
+ * Wires up a mocked `VercelClient` class (from `jest.mock('.../providers/vercel/VercelClient')`)
+ * with sensible defaults so commands that resolve a Vercel provider (via
+ * `withCredentials` -> `getProviderInstance` -> `VercelProvider.fromConfig`) don't
+ * make real network calls. Call this after `jest.mock('.../providers/vercel/VercelClient')`
+ * in the test file; pass the mocked class itself.
+ *
+ * Note: this mocks the NEW `src/lib/providers/vercel/VercelClient`, which is what
+ * `IFirewallProvider`-based command paths use — not the legacy
+ * `src/lib/services/VercelClient`.
+ */
+export function mockVercelClientPrototype(
+  MockedVercelClient: jest.MockedClass<typeof VercelClient>,
+  options: { config?: VercelConfig } = {},
+): void {
+  const config = options.config ?? emptyVercelConfig()
+
+  MockedVercelClient.prototype.fetchFirewallConfig = jest.fn().mockResolvedValue(config) as any
+  MockedVercelClient.prototype.createFirewallRule = jest
+    .fn()
+    .mockImplementation((rule) =>
+      Promise.resolve({ ...rule, id: `rule_${Math.random().toString(36).slice(2)}` }),
+    ) as any
+  MockedVercelClient.prototype.updateFirewallRule = jest.fn().mockImplementation((rule) => Promise.resolve(rule)) as any
+  MockedVercelClient.prototype.deleteFirewallRule = jest.fn().mockResolvedValue(undefined) as any
+  MockedVercelClient.prototype.createIPBlockingRule = jest
+    .fn()
+    .mockImplementation((rule) => Promise.resolve({ ...rule, id: `ip_${Math.random().toString(36).slice(2)}` })) as any
+  MockedVercelClient.prototype.updateIPBlockingRule = jest
+    .fn()
+    .mockImplementation((rule) => Promise.resolve(rule)) as any
+  MockedVercelClient.prototype.deleteIPBlockingRule = jest.fn().mockResolvedValue(undefined) as any
+  MockedVercelClient.prototype.verifyCredentials = jest.fn().mockResolvedValue(true) as any
 }

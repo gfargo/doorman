@@ -5,8 +5,10 @@ import { tmpdir } from 'os'
 import { handler as syncHandler } from '../commands/sync'
 import { FirewallConfig } from '../lib/types'
 
-// Mock external dependencies
-jest.mock('../lib/services/VercelClient')
+// Mock external dependencies. Mocks the NEW `providers/vercel/VercelClient`
+// (what the generic IFirewallProvider-based sync path uses) — not the
+// legacy `services/VercelClient`, which sync.ts no longer touches.
+jest.mock('../lib/providers/vercel/VercelClient')
 jest.mock('../lib/ui/prompt')
 jest.mock('../lib/ui/promptForCredentials')
 
@@ -74,7 +76,7 @@ describe('Version Sync Fix', () => {
     await fs.writeFile(configPath, JSON.stringify(localConfig, null, 2))
 
     // Mock VercelClient to return same rules but newer version
-    const { VercelClient } = await import('../lib/services/VercelClient')
+    const { VercelClient } = await import('../lib/providers/vercel/VercelClient')
     const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
 
     const remoteConfig = {
@@ -122,7 +124,7 @@ describe('Version Sync Fix', () => {
 
     await fs.writeFile(configPath, JSON.stringify(localConfig, null, 2))
 
-    const { VercelClient } = await import('../lib/services/VercelClient')
+    const { VercelClient } = await import('../lib/providers/vercel/VercelClient')
     const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
 
     const remoteConfig = {
@@ -165,7 +167,7 @@ describe('Version Sync Fix', () => {
 
     await fs.writeFile(configPath, JSON.stringify(localConfig, null, 2))
 
-    const { VercelClient } = await import('../lib/services/VercelClient')
+    const { VercelClient } = await import('../lib/providers/vercel/VercelClient')
     const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
 
     const remoteConfig = {
@@ -209,7 +211,7 @@ describe('Version Sync Fix', () => {
     await fs.writeFile(configPath, JSON.stringify(localConfig, null, 2))
     const originalStats = await fs.stat(configPath)
 
-    const { VercelClient } = await import('../lib/services/VercelClient')
+    const { VercelClient } = await import('../lib/providers/vercel/VercelClient')
     const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
 
     const remoteConfig = {

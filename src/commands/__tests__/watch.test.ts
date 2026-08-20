@@ -1,14 +1,14 @@
 import type { Stats } from 'fs'
 import { getConfig } from '../../lib/utils/config'
 import { logger } from '../../lib/logger'
-import { VercelClient } from '../../lib/services/VercelClient'
+import { VercelClient } from '../../lib/providers/vercel/VercelClient'
 import { CloudflareClient } from '../../lib/providers/cloudflare/CloudflareClient'
-import { mockCloudflareClientPrototype } from '../../tests/testHelpers/providerMocks'
+import { mockCloudflareClientPrototype, mockVercelClientPrototype } from '../../tests/testHelpers/providerMocks'
 import { handler } from '../watch'
 
 jest.mock('../../lib/logger', () => ({ logger: require('../../tests/testHelpers/loggerMock').createLoggerMock() }))
 jest.mock('../../lib/utils/config', () => ({ getConfig: jest.fn(), saveConfig: jest.fn() }))
-jest.mock('../../lib/services/VercelClient')
+jest.mock('../../lib/providers/vercel/VercelClient')
 jest.mock('../../lib/providers/cloudflare/CloudflareClient')
 
 let capturedWatchListener: ((curr: Stats, prev: Stats) => void) | undefined
@@ -37,13 +37,19 @@ describe('watch command', () => {
     jest.clearAllMocks()
     jest.useFakeTimers()
     capturedWatchListener = undefined
-    MockedVercelClient.prototype.fetchFirewallConfig = jest.fn().mockResolvedValue({
-      version: 5,
-      firewallEnabled: true,
-      rules: [],
-      ips: [],
-      updatedAt: '2024-01-01T00:00:00Z',
-    }) as any
+    mockVercelClientPrototype(MockedVercelClient, {
+      config: {
+        version: 5,
+        id: 'config_1',
+        firewallEnabled: true,
+        crs: null,
+        rules: [],
+        ips: [],
+        projectKey: 'pk_1',
+        ownerId: 'owner_1',
+        updatedAt: '2024-01-01T00:00:00Z',
+      },
+    })
     mockCloudflareClientPrototype(MockedCloudflareClient)
   })
 

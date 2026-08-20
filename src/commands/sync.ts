@@ -2,11 +2,10 @@ import chalk from 'chalk'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
 import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
-import { CustomRule, FirewallConfig } from '../lib/types'
-import type { UnifiedConfig } from '../lib/types/unified'
-import { prompt } from '../lib/ui/prompt'
-import { displayIPBlockingTable, displayRulesTable, RULE_STATUS_MAP } from '../lib/ui/table'
+import type { UnifiedIPRule, UnifiedRule } from '../lib/types/unified'
+import { FirewallConfig } from '../lib/types'
 import { saveConfig } from '../lib/utils/config'
+import { applySyncResultToConfig, toUnifiedConfig } from '../lib/utils/vercelConfigAdapter'
 import { withCredentials } from '../lib/utils/withCredentials'
 
 interface SyncOptions {
@@ -80,180 +79,67 @@ export const handler = async (argv: Arguments<SyncOptions>) => {
       errorContext: 'syncing firewall rules',
     },
     async (ctx) => {
-      if (ctx.provider.name !== 'vercel') {
-        await syncWithProvider(ctx.provider, ctx.config, argv)
-        return
-      }
-
-      let config = ctx.config
-      const service = ctx.service
-
-      logger.start(chalk.magenta('Calculating firewall configuration changes...'))
-      const { toAdd, toUpdate, toDelete, ipsToAdd, ipsToUpdate, ipsToDelete, version } =
-        await service.getChanges(config)
-
-      const hasCustomRuleChanges = toAdd.length > 0 || toUpdate.length > 0 || toDelete.length > 0
-      const hasIPRuleChanges = ipsToAdd.length > 0 || ipsToUpdate.length > 0 || ipsToDelete.length > 0
-      const hasVersionChange = config.version !== version
-
-      if (!hasCustomRuleChanges && !hasIPRuleChanges && !hasVersionChange) {
-        logger.success(chalk.green('No changes detected. Firewall rules are in sync.'))
-        return
-      }
-
-      if (hasCustomRuleChanges) {
-        logger.log(chalk.bold('\nProposed Custom Rule Changes:\n'))
-        displayRulesTable(
-          [
-            ...toAdd.map((rule: any) => ({ ...rule, changeStatus: RULE_STATUS_MAP.new, id: rule.id as string })),
-            ...toUpdate.map((rule) => ({ ...rule, changeStatus: RULE_STATUS_MAP.modified, id: rule.id as string })),
-            ...toDelete.map((rule) => ({ ...rule, changeStatus: RULE_STATUS_MAP.deleted, id: rule.id as string })),
-          ],
-          { showStatus: true },
-        )
-      }
-
-      if (hasIPRuleChanges) {
-        logger.log(chalk.bold('\nProposed IP Blocking Rule Changes:\n'))
-        displayIPBlockingTable(
-          [
-            ...ipsToAdd.map((rule) => ({ ...rule, changeStatus: RULE_STATUS_MAP.new, id: rule.id || undefined })),
-            ...ipsToUpdate.map((rule) => ({
-              ...rule,
-              changeStatus: RULE_STATUS_MAP.modified,
-              id: rule.id || undefined,
-            })),
-            ...ipsToDelete.map((rule) => ({
-              ...rule,
-              changeStatus: RULE_STATUS_MAP.deleted,
-              id: rule.id || undefined,
-            })),
-          ],
-          { showStatus: true },
-        )
-      }
-
-      if (hasVersionChange) {
-        logger.log(chalk.bold('\nProposed Metadata Changes:\n'))
-        logger.log(`  - Version: ${chalk.red(config.version)} ${chalk.dim('->')} ${chalk.green(version)}`)
-      }
-
-      const confirmed = await prompt('Do you want to apply these changes?', { type: 'confirm' })
-      if (!confirmed) {
-        logger.info(chalk.yellow('Sync cancelled.'))
-        return
-      }
-
-      logger.start('Starting firewall rules sync...')
-
-      const backupConfig = JSON.parse(JSON.stringify(config)) as FirewallConfig
-
-      const syncResult = await service.syncRules(config, {
-        debug: argv.debug,
-      })
-      const { rulesToUpdateLocally } = syncResult
-      logger.success(chalk.green('Firewall rules sync completed successfully'))
-
-      try {
-        const updatedConfig = await service.validateAndUpdateConfig(config, syncResult, { dryRun: false })
-        config = updatedConfig
-      } catch (error) {
-        logger.error('Failed to validate sync result or update config metadata')
-        logger.error(error instanceof Error ? error.message : String(error))
-
-        await saveConfig(backupConfig, argv.config)
-
-        logger.info(chalk.yellow('Restored original config due to validation failure'))
-        throw new Error('Sync validation failed - original config restored')
-      }
-
-      // Filter rulesToUpdateLocally to only include entries whose oldId still
-      // exists in the current config. validateAndUpdateConfig may have already
-      // updated some rule IDs to match remote-assigned IDs.
-      const pendingIdUpdates = rulesToUpdateLocally.filter((r) =>
-        config.rules.some((rule) => r.oldId === rule.id || (r.oldId === '' && r.name === rule.name)),
-      )
-
-      if (pendingIdUpdates.length > 0) {
-        logger.log('')
-        logger.info(chalk.yellow('Some rules have IDs that do not match their expected snake_case name:'))
-        pendingIdUpdates.forEach((rule) => {
-          logger.log(
-            `  - Rule "${rule.name}": ${chalk.red(rule.oldId || 'empty')} ${chalk.dim('->')} ${chalk.green(rule.newId)}`,
-          )
-        })
-
-        const updateConfirmed = await prompt('Do you want to update the local config with the new IDs?', {
-          type: 'confirm',
-        })
-
-        if (updateConfirmed) {
-          config = {
-            ...config,
-            rules: config.rules.map((rule: CustomRule) => {
-              const ruleToUpdate = pendingIdUpdates.find(
-                (r) => r.oldId === rule.id || (r.oldId === '' && r.name === rule.name),
-              )
-              return ruleToUpdate ? { ...rule, id: ruleToUpdate.newId } : rule
-            }),
-            ips: config.ips || [],
-          }
-
-          await saveConfig(config, argv.config)
-          logger.success(chalk.green('Updated local config with new rule IDs'))
-        } else {
-          logger.warn(chalk.yellow('Local config not updated. Remember to update rule IDs manually if needed.'))
-        }
-      }
-
-      if (backupConfig.version !== config.version || backupConfig.updatedAt !== config.updatedAt) {
-        await saveConfig(config, argv.config)
-        logger.success(
-          chalk.green(`Updated version ${chalk.dim(`(v${config.version})`)} and metadata in local config file`),
-        )
-      }
+      await syncWithProvider(ctx.provider, ctx.config, argv)
     },
   )
 }
 
 /**
- * Sync using the generic IFirewallProvider interface (Cloudflare and any future
- * non-Vercel provider). Simpler than the Vercel flow above: providers implementing
- * this interface handle their own diff/risk-assessment/confirmation internally, and
- * the interface has no equivalent of Vercel's remote-assigned-ID reconciliation, so
- * there's nothing to write back to the local config file after a successful sync.
+ * Sync using the generic IFirewallProvider interface — the same path for
+ * every provider (Vercel included). A local legacy-shaped Vercel config is
+ * converted to `UnifiedConfig` in-memory via `toUnifiedConfig` before being
+ * handed to the provider; the file on disk is never rewritten into unified
+ * format as a side effect of this.
+ *
+ * Providers implementing `IFirewallProvider` handle their own diff/risk-
+ * assessment/confirmation internally (`syncRules` -> `OperationSafety`), so
+ * there's a single confirmation UX across providers rather than Vercel
+ * having its own separate prompt. After a successful sync, any
+ * provider-assigned rule ID changes and version/metadata drift are written
+ * back to the local config file in its original format (legacy or unified)
+ * via `applySyncResultToConfig` — unconditionally, not behind a prompt: the
+ * provider's returned ID is authoritative, so declining the write-back
+ * would just leave the config permanently desynced.
  */
 async function syncWithProvider(
   provider: IFirewallProvider,
   config: FirewallConfig,
   argv: Arguments<SyncOptions>,
 ): Promise<void> {
-  const unifiedConfig = config as unknown as UnifiedConfig
+  const unifiedConfig = toUnifiedConfig(config)
 
   logger.start(chalk.magenta(`Calculating ${provider.name} firewall configuration changes...`))
   const changes = await provider.getChanges(unifiedConfig)
 
-  if (!changes.hasChanges) {
+  const localVersion = unifiedConfig.metadata?.version
+  const hasVersionChange = changes.version !== undefined && localVersion !== changes.version
+
+  if (!changes.hasChanges && !hasVersionChange) {
     logger.success(chalk.green('No changes detected. Firewall rules are in sync.'))
     return
   }
 
   logger.log(chalk.bold('\nProposed Changes:\n'))
-  logger.log(`  ${chalk.green('+')} ${changes.rulesToAdd.length} rules to add`)
-  logger.log(`  ${chalk.cyan('~')} ${changes.rulesToUpdate.length} rules to update`)
-  logger.log(`  ${chalk.red('-')} ${changes.rulesToDelete.length} rules to delete`)
+  logRuleNames('Rules to add', changes.rulesToAdd, chalk.green('+'))
+  logRuleNames('Rules to update', changes.rulesToUpdate, chalk.cyan('~'))
+  logRuleNames('Rules to delete', changes.rulesToDelete, chalk.red('-'))
   const ipsToAdd = changes.ipsToAdd ?? []
   const ipsToUpdate = changes.ipsToUpdate ?? []
   const ipsToDelete = changes.ipsToDelete ?? []
   if (ipsToAdd.length || ipsToUpdate.length || ipsToDelete.length) {
-    logger.log(`  ${chalk.green('+')} ${ipsToAdd.length} IPs to add`)
-    logger.log(`  ${chalk.cyan('~')} ${ipsToUpdate.length} IPs to update`)
-    logger.log(`  ${chalk.red('-')} ${ipsToDelete.length} IPs to delete`)
+    logIPNames('IPs to add', ipsToAdd, chalk.green('+'))
+    logIPNames('IPs to update', ipsToUpdate, chalk.cyan('~'))
+    logIPNames('IPs to delete', ipsToDelete, chalk.red('-'))
+  }
+  if (hasVersionChange) {
+    logger.log(
+      `  Remote config version: ${chalk.red(localVersion ?? 'unknown')} ${chalk.dim('->')} ${chalk.green(changes.version)}`,
+    )
   }
 
   logger.start('Starting firewall rules sync...')
-  // Non-vercel providers prompt for confirmation internally (unless --ci); no need
-  // to prompt again here. In --ci mode, a sync that would delete anything still
+  // Providers prompt for confirmation internally (unless --ci); no need to
+  // prompt again here. In --ci mode, a sync that would delete anything still
   // requires --allow-deletions — see OperationSafety.confirmDestructiveOperation.
   const result = await provider.syncRules(unifiedConfig, { force: argv.ci, allowDeletions: argv.allowDeletions })
 
@@ -269,4 +155,29 @@ async function syncWithProvider(
     )
   }
   result.warnings?.forEach((w) => logger.warn(w))
+
+  if (result.idRemappings?.length) {
+    logger.info(chalk.yellow('Rule IDs were reassigned by the provider and written back to the local config:'))
+    result.idRemappings.forEach((r) => {
+      logger.log(`  - ${r.name}: ${chalk.red(r.oldId || 'none')} ${chalk.dim('->')} ${chalk.green(r.newId)}`)
+    })
+  }
+
+  const writeBack = applySyncResultToConfig(config, result)
+  if (writeBack.changed) {
+    await saveConfig(writeBack.config, argv.config)
+    logger.success(chalk.green('Updated local config with new version/metadata'))
+  }
+}
+
+function logRuleNames(label: string, rules: UnifiedRule[], marker: string): void {
+  if (rules.length === 0) return
+  logger.log(`  ${marker} ${label} (${rules.length}):`)
+  rules.forEach((rule) => logger.log(`      - ${rule.name}`))
+}
+
+function logIPNames(label: string, ips: UnifiedIPRule[], marker: string): void {
+  if (ips.length === 0) return
+  logger.log(`  ${marker} ${label} (${ips.length}):`)
+  ips.forEach((ip) => logger.log(`      - ${ip.ip}${ip.hostname ? ` (${ip.hostname})` : ''}`))
 }

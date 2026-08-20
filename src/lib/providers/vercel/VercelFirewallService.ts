@@ -353,9 +353,17 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       })
       logger.debug(`Fetched ${activeConfig.rules.length} custom rules and ${activeConfig.ips.length} IP blocking rules`)
 
-      // Convert unified rules back to Vercel format for comparison
-      const configRules: CustomRule[] = config.rules.map((rule) => {
-        const translation = RuleTranslator.unifiedToVercel(rule)
+      // Diff in unified space, normalizing BOTH sides through
+      // `vercelToUnified` rather than translating only the local config to
+      // Vercel shape and comparing it against the raw remote response.
+      // Translating one side but not the other is asymmetric: `unifiedToVercel`
+      // fills in fields a minimal on-disk config never had (e.g.
+      // action.mitigate.rateLimit/redirect/actionDuration defaulting to
+      // null), which then never structurally matches a remote rule that
+      // omits them — producing a spurious "update" on every sync even when
+      // nothing actually changed.
+      const remoteRules: UnifiedRule[] = activeConfig.rules.map((rule) => {
+        const translation = RuleTranslator.vercelToUnified(rule)
         if (translation.warnings.length > 0) {
           translation.warnings.forEach((w) => {
             const { TranslationWarningSystem } = require('../../translators/TranslationWarningSystem')
@@ -367,36 +375,21 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       })
 
       // Handle custom rules
-      const { toAdd, toUpdate, toDelete } = this.diffRules(configRules, activeConfig.rules)
+      const { toAdd, toUpdate, toDelete } = this.diffRules(config.rules, remoteRules)
 
-      // Convert unified IP rules back to Vercel format
-      const configIPs: IPBlockingRule[] = (config.ips || []).map((ip) => ({
-        id: ip.id || '',
-        ip: ip.ip,
-        hostname: ip.hostname || '',
-        action: ip.action as 'deny',
-        notes: ip.notes,
-      }))
+      const remoteIPs: UnifiedIPRule[] = activeConfig.ips.map((ip) => RuleTranslator.vercelIPToUnified(ip))
 
       // Handle IP blocking rules
-      const { ipsToAdd, ipsToUpdate, ipsToDelete } = this.diffIPRules(configIPs, activeConfig.ips)
-
-      // Convert to unified format for ChangeSet compatibility
-      const unifiedRulesToAdd = toAdd.map((r) => RuleTranslator.vercelToUnified(r).result)
-      const unifiedRulesToUpdate = toUpdate.map((r) => RuleTranslator.vercelToUnified(r).result)
-      const unifiedRulesToDelete = toDelete.map((r) => RuleTranslator.vercelToUnified(r).result)
-      const unifiedIPsToAdd = ipsToAdd.map((ip) => RuleTranslator.vercelIPToUnified(ip))
-      const unifiedIPsToUpdate = ipsToUpdate.map((ip) => RuleTranslator.vercelIPToUnified(ip))
-      const unifiedIPsToDelete = ipsToDelete.map((ip) => RuleTranslator.vercelIPToUnified(ip))
+      const { ipsToAdd, ipsToUpdate, ipsToDelete } = this.diffIPRules(config.ips || [], remoteIPs)
 
       return {
         version: activeConfig.version,
-        rulesToAdd: unifiedRulesToAdd,
-        rulesToUpdate: unifiedRulesToUpdate,
-        rulesToDelete: unifiedRulesToDelete,
-        ipsToAdd: unifiedIPsToAdd,
-        ipsToUpdate: unifiedIPsToUpdate,
-        ipsToDelete: unifiedIPsToDelete,
+        rulesToAdd: toAdd,
+        rulesToUpdate: toUpdate,
+        rulesToDelete: toDelete,
+        ipsToAdd,
+        ipsToUpdate,
+        ipsToDelete,
         hasChanges:
           toAdd.length > 0 ||
           toUpdate.length > 0 ||
@@ -515,18 +508,20 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
   }
 
   /**
-   * Diff custom rules
+   * Diff custom rules. Both arguments must already be normalized into
+   * `UnifiedRule` — see the comment in `getChanges` for why comparing an
+   * unnormalized side against a normalized one produces false diffs.
    */
   private diffRules(
-    configRules: CustomRule[],
-    existingRules: CustomRule[],
+    configRules: UnifiedRule[],
+    existingRules: UnifiedRule[],
   ): {
-    toAdd: CustomRule[]
-    toUpdate: CustomRule[]
-    toDelete: CustomRule[]
+    toAdd: UnifiedRule[]
+    toUpdate: UnifiedRule[]
+    toDelete: UnifiedRule[]
   } {
-    const toAdd: CustomRule[] = []
-    const toUpdate: CustomRule[] = []
+    const toAdd: UnifiedRule[] = []
+    const toUpdate: UnifiedRule[] = []
     const toDelete = [...existingRules]
 
     for (const configRule of configRules) {
@@ -548,18 +543,19 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
   }
 
   /**
-   * Diff IP blocking rules
+   * Diff IP blocking rules. Both arguments must already be normalized into
+   * `UnifiedIPRule` — see the comment in `getChanges`.
    */
   private diffIPRules(
-    configRules: IPBlockingRule[],
-    existingRules: IPBlockingRule[],
+    configRules: UnifiedIPRule[],
+    existingRules: UnifiedIPRule[],
   ): {
-    ipsToAdd: IPBlockingRule[]
-    ipsToUpdate: IPBlockingRule[]
-    ipsToDelete: IPBlockingRule[]
+    ipsToAdd: UnifiedIPRule[]
+    ipsToUpdate: UnifiedIPRule[]
+    ipsToDelete: UnifiedIPRule[]
   } {
-    const ipsToAdd: IPBlockingRule[] = []
-    const ipsToUpdate: IPBlockingRule[] = []
+    const ipsToAdd: UnifiedIPRule[] = []
+    const ipsToUpdate: UnifiedIPRule[] = []
     const ipsToDelete = [...existingRules]
 
     for (const configRule of configRules) {
