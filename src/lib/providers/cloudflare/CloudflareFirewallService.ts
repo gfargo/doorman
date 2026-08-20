@@ -421,10 +421,13 @@ export class CloudflareFirewallService extends BaseFirewallService {
    * Get changes between local and remote configurations.
    *
    * Diffs rules in Cloudflare's *native* space (real wirefilter expressions)
-   * rather than going through `fetchConfig()`'s lossy Unified translation —
-   * `cloudflareToUnified` always returns `conditions: []` (expression
-   * parsing isn't implemented), so a remote rule with real conditions could
-   * never diff-equal its local counterpart: every synced rule showed as
+   * rather than going through `fetchConfig()`'s Unified translation. Even
+   * though `cloudflareToUnified` now parses expressions back into real
+   * conditions (via `WirefilterParser`) for hand-authored or foreign
+   * expressions outside the grammar subset it understands, that translation
+   * still isn't guaranteed lossless — diffing in native space avoids any
+   * risk of a remote rule failing to diff-equal its local counterpart due
+   * to a translation gap, which previously showed every synced rule as
    * `toUpdate` forever, even on a no-op sync. See
    * `CloudflareOptimizer.diffCloudflareRules`.
    */
@@ -442,8 +445,8 @@ export class CloudflareFirewallService extends BaseFirewallService {
 
     const ruleDiff = this.optimizer.diffCloudflareRules(localTranslations, remoteCloudflareRules)
     // No local counterpart for a remote-only rule — best-effort translation
-    // back to Unified (still lossy on conditions) is fine for a delete
-    // preview, which only needs to identify *what* is being removed.
+    // back to Unified is fine for a delete preview, which only needs to
+    // identify *what* is being removed, not perfectly round-trip it.
     const rulesToDelete = ruleDiff.toDelete.map((r) => RuleTranslator.cloudflareToUnified(r).result)
 
     // IP diffing is unaffected by the above: it round-trips losslessly

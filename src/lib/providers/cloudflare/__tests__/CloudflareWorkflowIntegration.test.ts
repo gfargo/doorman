@@ -93,6 +93,10 @@ describe('Complete Sync Workflow Integration', () => {
     expect(remoteConfig.rules.length).toBeGreaterThanOrEqual(1)
     expect(remoteConfig.ips).toHaveLength(1)
     expect(remoteConfig.metadata?.version).toBe(3)
+    // A rule fetched straight from Cloudflare shows its real conditions —
+    // not an empty array — so `list`/`status`/`diff`/`download`/`backup`
+    // can actually display what a remote rule matches on.
+    expect(remoteConfig.rules[0]?.conditions).toEqual([{ field: 'path', operator: 'eq', value: '/admin', group: 0 }])
 
     const localConfig: UnifiedConfig = {
       version: '2.0',
@@ -361,7 +365,7 @@ describe('Rule Translation Accuracy', () => {
       expect(rl?.mitigationTimeout).toBe(600)
     })
 
-    it('should produce warnings for complex expressions', () => {
+    it('parses an expression combining multiple comparisons with "and" into real conditions', () => {
       const cfRule: CloudflareRule = {
         id: 'cf-cx',
         action: 'block',
@@ -370,6 +374,21 @@ describe('Rule Translation Accuracy', () => {
         enabled: true,
       }
       const result = RuleTranslator.cloudflareToUnified(cfRule)
+      expect(result.result.conditions).toHaveLength(2)
+      expect(result.warnings).toEqual([])
+    })
+
+    it('produces a warning and falls back to empty conditions for a structure outside what WirefilterParser understands (OR nested inside AND)', () => {
+      const cfRule: CloudflareRule = {
+        id: 'cf-cx-2',
+        action: 'block',
+        expression:
+          'http.request.uri.path eq "/api" and (http.host eq "a.example.com" or http.host eq "b.example.com")',
+        description: 'Complex',
+        enabled: true,
+      }
+      const result = RuleTranslator.cloudflareToUnified(cfRule)
+      expect(result.result.conditions).toEqual([])
       expect(result.warnings.length).toBeGreaterThan(0)
       expect(result.warnings.some((w: { category: string }) => w.category === 'lossy_conversion')).toBe(true)
     })
