@@ -6,6 +6,7 @@ import { RuleTranslator } from '../../translators'
 import { isDeepEqual } from '../../utils/isDeepEqual'
 import { omitId } from '../../utils/omitId'
 import { firewallConfigSchema } from '../../schemas/firewallSchemas'
+import { unifiedConfigSchema } from '../../schemas/unifiedSchemas'
 import type {
   IFirewallProvider,
   ProviderType,
@@ -293,17 +294,52 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
           `${chalk.cyan('Updated:')} ${chalk.cyan(updatedIPRules.length)}, ${chalk.red('Deleted:')} ${chalk.red(deletedIPRules.length)}`,
       )
 
-      // Fetch updated version/timestamp. Best-effort: a failure here
-      // shouldn't discard the sync results already collected above. Falls
-      // back to the pre-sync version (captured before any mutations) if it
-      // fails — updatedAt has no equivalent pre-sync fallback, so it's left
-      // undefined in that case rather than reporting a stale timestamp.
+      // Fetch updated version/timestamp, and use the same re-fetch to
+      // spot-check that the mutations above actually landed. This is
+      // deliberately lightweight (presence/absence by id, not a full
+      // content comparison) — it's meant to catch a create/update/delete
+      // that silently didn't take effect (API eventual consistency, a
+      // partial failure not caught by the per-item try/catch above, etc),
+      // not to replace the per-item error handling. Mismatches are
+      // reported as warnings, not failures — the sync itself already
+      // succeeded from the API's point of view.
       let finalVersion: number = version
       let finalUpdatedAt: string | undefined
+      const warnings: string[] = []
       try {
         const activeConfig = await this.client.fetchFirewallConfig()
         finalVersion = activeConfig.version
         finalUpdatedAt = activeConfig.updatedAt
+
+        const remoteRuleIds = new Set(activeConfig.rules.map((r) => r.id))
+        const remoteIPIds = new Set(activeConfig.ips.map((r) => r.id))
+
+        for (const rule of [...addedRules, ...updatedRules]) {
+          if (rule.id && !remoteRuleIds.has(rule.id)) {
+            warnings.push(
+              `Rule "${rule.name}" (${rule.id}) was synced but is missing from the post-sync remote config — a subsequent sync may re-create or misdiff it.`,
+            )
+          }
+        }
+        for (const rule of deletedRules) {
+          if (rule.id && remoteRuleIds.has(rule.id)) {
+            warnings.push(
+              `Rule "${rule.name}" (${rule.id}) was deleted but still appears in the post-sync remote config.`,
+            )
+          }
+        }
+        for (const ip of [...addedIPRules, ...updatedIPRules]) {
+          if (ip.id && !remoteIPIds.has(ip.id)) {
+            warnings.push(
+              `IP rule "${ip.ip}" (${ip.id}) was synced but is missing from the post-sync remote config — a subsequent sync may re-create or misdiff it.`,
+            )
+          }
+        }
+        for (const ip of deletedIPRules) {
+          if (ip.id && remoteIPIds.has(ip.id)) {
+            warnings.push(`IP rule "${ip.ip}" (${ip.id}) was deleted but still appears in the post-sync remote config.`)
+          }
+        }
       } catch (error) {
         logger.error('Failed to fetch updated firewall configuration version after sync:', error)
         errors.push(describeError('Failed to fetch updated configuration version after sync', error))
@@ -321,6 +357,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
         updatedAt: finalUpdatedAt,
         idRemappings: idRemappings.length > 0 ? idRemappings : undefined,
         errors: errors.length > 0 ? errors : undefined,
+        warnings: warnings.length > 0 ? warnings : undefined,
       }
     } catch (error) {
       logger.error('Error during sync:', error)
@@ -341,6 +378,21 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
     config: UnifiedConfig,
     options?: { allowCreate?: boolean },
   ): Promise<ChangeSet & { version: number }> {
+    // Reject a structurally invalid config up front — before ever diffing
+    // or contacting the API — rather than letting a rule with no
+    // conditions, or an IP rule with a malformed address, silently reach
+    // Vercel. Uses the schema directly rather than `validateUnifiedConfig`,
+    // which also asserts `providers.<provider>` is present — a routing
+    // concern already enforced earlier in the command pipeline, not
+    // something a diff/sync call needs to re-check on every invocation.
+    // Deliberately outside the try/catch below so this specific failure
+    // surfaces with its own message instead of being flattened into the
+    // generic "failed to fetch" one.
+    const configValidation = unifiedConfigSchema.safeParse(config)
+    if (!configValidation.success) {
+      throw new Error(`Invalid firewall configuration: ${configValidation.error.message}`)
+    }
+
     try {
       logger.debug('Fetching existing firewall configuration')
       // `allowCreate: false` is threaded down from syncRules' dry-run path

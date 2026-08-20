@@ -573,6 +573,88 @@ describe('VercelFirewallService', () => {
     })
   })
 
+  describe('post-sync verification (regression: a create/update/delete that silently did not take effect used to go unreported)', () => {
+    it('warns when a created rule is missing from the post-sync remote config', async () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            name: 'New Rule',
+            enabled: true,
+            conditions: [{ field: 'path', operator: 'eq', value: '/new' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+
+      jest
+        .spyOn(client, 'fetchFirewallConfig')
+        // Pre-sync diff: nothing exists yet.
+        .mockResolvedValueOnce({ ...mockVercelConfig, rules: [], ips: [] })
+        // Post-sync re-fetch: the just-created rule isn't there — e.g. an
+        // eventual-consistency lag, or a create that silently no-op'd.
+        .mockResolvedValueOnce({ ...mockVercelConfig, rules: [], ips: [] })
+      jest.spyOn(client, 'createFirewallRule').mockResolvedValue({
+        id: 'new_rule_1',
+        name: 'New Rule',
+        active: true,
+        conditionGroup: [],
+        action: { mitigate: { action: 'deny', rateLimit: null, redirect: null, actionDuration: null } },
+      })
+
+      const result = await service.syncRules(config)
+
+      expect(result.success).toBe(true)
+      expect(result.warnings).toBeDefined()
+      expect(result.warnings!.some((w) => w.includes('New Rule') && w.includes('missing from the post-sync'))).toBe(
+        true,
+      )
+    })
+
+    it('warns when a deleted rule still appears in the post-sync remote config', async () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [],
+        ips: [],
+      }
+
+      jest
+        .spyOn(client, 'fetchFirewallConfig')
+        // Pre-sync diff: the remote rule exists, gets marked for deletion.
+        .mockResolvedValueOnce(mockVercelConfig)
+        // Post-sync re-fetch: the "deleted" rule is still there.
+        .mockResolvedValueOnce(mockVercelConfig)
+      jest.spyOn(client, 'deleteFirewallRule').mockResolvedValue(undefined)
+      // mockVercelConfig also has an IP rule not present in `config.ips`,
+      // so it's marked for deletion too — mock it out so it doesn't fail
+      // as a real (unmocked-fetch) API call and pollute `result.success`.
+      jest.spyOn(client, 'deleteIPBlockingRule').mockResolvedValue(undefined)
+
+      const result = await service.syncRules(config)
+
+      expect(result.success).toBe(true)
+      expect(result.warnings).toBeDefined()
+      expect(result.warnings!.some((w) => w.includes('rule_1') && w.includes('still appears in the post-sync'))).toBe(
+        true,
+      )
+    })
+
+    it('leaves warnings undefined when nothing needed to change (no mutations, nothing to verify)', async () => {
+      const config: UnifiedConfig = { version: '2.0', provider: 'vercel', rules: [], ips: [] }
+
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({ ...mockVercelConfig, rules: [], ips: [] })
+
+      const result = await service.syncRules(config)
+
+      expect(result.success).toBe(true)
+      expect(result.rulesAdded + result.rulesUpdated + result.rulesDeleted).toBe(0)
+      expect(result.warnings).toBeUndefined()
+    })
+  })
+
   describe('getChanges', () => {
     const unifiedConfig: UnifiedConfig = {
       version: '2.0',
@@ -719,6 +801,39 @@ describe('VercelFirewallService', () => {
 
       expect(changes.rulesToAdd).toHaveLength(1)
       expect(changes.rulesToAdd[0]?.name).toBe('Rule Without ID')
+    })
+
+    it('rejects a rule with no conditions before ever contacting the API', async () => {
+      const configWithEmptyConditions: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            name: 'Malformed Rule',
+            enabled: true,
+            conditions: [],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+      const fetchSpy = jest.spyOn(client, 'fetchFirewallConfig')
+
+      await expect(service.getChanges(configWithEmptyConditions)).rejects.toThrow('Invalid firewall configuration')
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it('rejects an IP rule with a malformed address before ever contacting the API', async () => {
+      const configWithBadIP: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [],
+        ips: [{ ip: 'not-an-ip-address', hostname: 'test-host', action: 'deny' }],
+      }
+      const fetchSpy = jest.spyOn(client, 'fetchFirewallConfig')
+
+      await expect(service.getChanges(configWithBadIP)).rejects.toThrow('Invalid firewall configuration')
+      expect(fetchSpy).not.toHaveBeenCalled()
     })
 
     it('should throw on error', async () => {
