@@ -1,6 +1,7 @@
 import { getProviderRegistry } from './ProviderRegistry'
 import { CloudflareProvider } from './cloudflare'
 import { VercelProvider } from './vercel'
+import { FastlyProvider } from './fastly'
 import { logger } from '../logger'
 import type { ProviderType } from './IFirewallProvider'
 
@@ -21,6 +22,12 @@ export function initProviders(): void {
   registry.register('cloudflare', () => {
     logger.debug('Initializing Cloudflare provider')
     return CloudflareProvider.fromEnv()
+  })
+
+  // Register Fastly provider factory
+  registry.register('fastly', () => {
+    logger.debug('Initializing Fastly provider')
+    return FastlyProvider.fromEnv()
   })
 
   logger.debug('Provider registry initialized')
@@ -50,6 +57,12 @@ export async function getProvider(
   if (providerType === 'cloudflare' && config) {
     const cfConfig = config as { apiToken?: string; zoneId?: string; accountId?: string }
     return CloudflareProvider.fromConfig(cfConfig)
+  }
+
+  // For Fastly with custom config
+  if (providerType === 'fastly' && config) {
+    const fastlyConfig = config as { apiToken?: string; workspaceId?: string }
+    return FastlyProvider.fromConfig(fastlyConfig)
   }
 
   // Get from registry

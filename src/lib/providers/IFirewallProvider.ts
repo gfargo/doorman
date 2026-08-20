@@ -16,7 +16,7 @@
  * The registry remains the source of truth for provider *instances*; this
  * is the source of truth for the closed set of known provider *types*.
  */
-export const PROVIDER_TYPES = ['vercel', 'cloudflare'] as const
+export const PROVIDER_TYPES = ['vercel', 'cloudflare', 'fastly'] as const
 
 /**
  * Provider type discriminator

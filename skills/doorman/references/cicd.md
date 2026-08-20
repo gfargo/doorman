@@ -170,6 +170,7 @@ doorman status --format json
 ```
 
 The health score evaluates:
+
 - Rule descriptions present
 - ID conventions followed (`rule_` prefix)
 - Operator complexity (penalizes unnecessary regex)
@@ -210,17 +211,18 @@ doorman sync --provider cloudflare --config .doorman.json
 
 Global flags available on all commands:
 
-| Flag | Description |
-|------|-------------|
-| `--config <path>` | Path to config file (default: auto-discovered `.doorman.json`) |
-| `--provider vercel\|cloudflare` | Override provider detection |
-| `--format json\|table\|yaml\|markdown\|terraform` | Output format (command-dependent) |
-| `--verbose` | Show detailed output |
-| `--output <path>` | Write output to file instead of stdout |
+| Flag                                              | Description                                                    |
+| ------------------------------------------------- | -------------------------------------------------------------- |
+| `--config <path>`                                 | Path to config file (default: auto-discovered `.doorman.json`) |
+| `--provider vercel\|cloudflare\|fastly`           | Override provider detection                                    |
+| `--format json\|table\|yaml\|markdown\|terraform` | Output format (command-dependent)                              |
+| `--verbose`                                       | Show detailed output                                           |
+| `--output <path>`                                 | Write output to file instead of stdout                         |
 
 ## Error Handling in Automation
 
 Doorman exit codes:
+
 - `0` — success
 - `1` — error (validation failure, API error, config not found)
 

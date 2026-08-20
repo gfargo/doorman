@@ -5,10 +5,12 @@ import { promptSecret } from '../ui/promptSecret'
 import { ProviderDetector } from '../providers/ProviderDetector'
 import { VercelProvider } from '../providers/vercel'
 import { CloudflareProvider } from '../providers/cloudflare'
+import { FastlyProvider } from '../providers/fastly'
 import { PROVIDER_TYPES, type IFirewallProvider, type ProviderType } from '../providers/IFirewallProvider'
 import { resolveCredentials } from '../providers/credentials'
 import { vercelCredentials } from '../providers/vercel/credentials'
 import { cloudflareCredentials } from '../providers/cloudflare/credentials'
+import { fastlyCredentials } from '../providers/fastly/credentials'
 import type { FirewallConfig, UnifiedConfig } from '../types'
 
 export interface ProviderOptions {
@@ -26,6 +28,12 @@ export interface ProviderOptions {
   apiToken?: string
   zoneId?: string
   accountId?: string
+
+  // Fastly-specific (note: `apiToken` above is shared with Cloudflare's
+  // flag — both mean "this provider's API token" and are resolved against
+  // whichever provider is actually selected, same as Cloudflare/Vercel
+  // never colliding today because only one provider is active per command)
+  workspaceId?: string
 }
 
 export interface ProviderInstanceResult {
@@ -80,6 +88,9 @@ export async function getProviderInstance(options: ProviderOptions): Promise<Pro
       return await getVercelProvider(options)
     } else if (providerType === 'cloudflare') {
       const provider = await getCloudflareProvider(options)
+      return { provider }
+    } else if (providerType === 'fastly') {
+      const provider = await getFastlyProvider(options)
       return { provider }
     } else {
       throw new Error(`Unknown provider: ${providerType}`)
@@ -195,6 +206,46 @@ async function getCloudflareProvider(options: ProviderOptions): Promise<IFirewal
 }
 
 /**
+ * Get Fastly provider instance
+ */
+async function getFastlyProvider(options: ProviderOptions): Promise<IFirewallProvider> {
+  const config = options.config as Partial<UnifiedConfig> | undefined
+
+  const { apiToken, workspaceId } = resolveCredentials(fastlyCredentials, {
+    explicit: { apiToken: options.apiToken, workspaceId: options.workspaceId },
+    config: {
+      workspaceId: config?.providers?.fastly?.workspaceId,
+    },
+  })
+
+  if (!apiToken || !workspaceId) {
+    if (options.interactive === false) {
+      throw new Error('Fastly credentials missing. Provide apiToken and workspaceId.')
+    }
+
+    logger.warn('Missing Fastly credentials')
+    logger.info('Please provide your Fastly credentials:')
+
+    const apiTokenInput = apiToken || (await promptSecret('Fastly API Token: '))
+    const workspaceIdInput =
+      workspaceId ||
+      (await prompt('Fastly Next-Gen WAF Workspace ID:', {
+        type: 'text',
+      }))
+
+    return FastlyProvider.fromConfig({
+      apiToken: apiTokenInput as string,
+      workspaceId: workspaceIdInput as string,
+    })
+  }
+
+  return FastlyProvider.fromConfig({
+    apiToken,
+    workspaceId,
+  })
+}
+
+/**
  * Prompt user to select provider
  */
 async function promptForProvider(): Promise<ProviderType> {
@@ -259,6 +310,8 @@ export function getProviderDisplayName(providerType: ProviderType): string {
       return 'Vercel Firewall'
     case 'cloudflare':
       return 'Cloudflare WAF'
+    case 'fastly':
+      return 'Fastly Next-Gen WAF'
     default:
       return providerType
   }

@@ -1,6 +1,6 @@
 {
   "name": "security",
-  "description": "Web application firewall management as code with Doorman: create rules, block IPs, rate limit, protect against bots, and deploy WAF configs to Vercel and Cloudflare.",
+  "description": "Web application firewall management as code with Doorman: create rules, block IPs, rate limit, protect against bots, and deploy WAF configs to Vercel, Cloudflare, and Fastly.",
   "version": "1.0.0",
   "author": {
     "name": "Griffen Fargo",
@@ -13,6 +13,7 @@
     "waf",
     "vercel",
     "cloudflare",
+    "fastly",
     "doorman",
     "iac",
     "rules",

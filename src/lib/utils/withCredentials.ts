@@ -34,12 +34,14 @@ export interface WithCredentialsOptions {
   teamId?: string
   /** CLI --token override (Vercel) */
   token?: string
-  /** CLI --apiToken override (Cloudflare) */
+  /** CLI --apiToken override (Cloudflare, also reused for Fastly's API token) */
   apiToken?: string
   /** CLI --zoneId override (Cloudflare) */
   zoneId?: string
   /** CLI --accountId override (Cloudflare) */
   accountId?: string
+  /** CLI --workspaceId override (Fastly) */
+  workspaceId?: string
   /** CLI --debug flag */
   debug?: boolean
   /** CLI --ci flag (non-interactive mode) */
@@ -100,6 +102,8 @@ export async function withCredentials(
       apiToken: options.apiToken,
       zoneId: options.zoneId,
       accountId: options.accountId,
+      // Fastly credentials
+      workspaceId: options.workspaceId,
     })
 
     // Resolved Vercel credentials, when applicable — some commands (e.g.

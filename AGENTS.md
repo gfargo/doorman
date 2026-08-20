@@ -5,14 +5,14 @@
 
 ## Quick Reference (pointers to detailed docs)
 
-| Topic | Steering Doc |
-| ----- | ------------ |
-| Product overview, supported providers, target users | [`.kiro/steering/product.md`](.kiro/steering/product.md) |
-| Project structure, module organization, file layout | [`.kiro/steering/structure.md`](.kiro/steering/structure.md) |
-| Tech stack, build/test/lint commands, architecture patterns | [`.kiro/steering/tech.md`](.kiro/steering/tech.md) |
-| Branching & release strategy, CI/CD | [`.kiro/steering/tech.md`](.kiro/steering/tech.md) |
-| Wiki-powered docs site workflow | [`.kiro/steering/wiki-docs.md`](.kiro/steering/wiki-docs.md) |
-| Adding a new firewall provider (checklist, known gaps) | [`.kiro/steering/adding-a-provider.md`](.kiro/steering/adding-a-provider.md) |
+| Topic                                                       | Steering Doc                                                                 |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Product overview, supported providers, target users         | [`.kiro/steering/product.md`](.kiro/steering/product.md)                     |
+| Project structure, module organization, file layout         | [`.kiro/steering/structure.md`](.kiro/steering/structure.md)                 |
+| Tech stack, build/test/lint commands, architecture patterns | [`.kiro/steering/tech.md`](.kiro/steering/tech.md)                           |
+| Branching & release strategy, CI/CD                         | [`.kiro/steering/tech.md`](.kiro/steering/tech.md)                           |
+| Wiki-powered docs site workflow                             | [`.kiro/steering/wiki-docs.md`](.kiro/steering/wiki-docs.md)                 |
+| Adding a new firewall provider (checklist, known gaps)      | [`.kiro/steering/adding-a-provider.md`](.kiro/steering/adding-a-provider.md) |
 
 ---
 
@@ -56,7 +56,7 @@ Extends the testing info in `.kiro/steering/tech.md`:
 
 ## CLI Commands (quick list)
 
-All commands accept `--provider vercel|cloudflare` (auto-detected if omitted), `--debug`, and `--ci` flags.
+All commands accept `--provider vercel|cloudflare|fastly` (auto-detected if omitted), `--debug`, and `--ci` flags.
 
 `list` · `sync` · `download` · `template` · `validate` · `status` · `diff` · `watch` · `backup` · `export` · `init` · `setup`
 
