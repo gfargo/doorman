@@ -109,7 +109,7 @@
   - Handle config loading with multiple modes (required, optional, raw, lenient)
   - Integrate ProviderDetector for automatic provider selection
   - Resolve credentials from CLI flags, config, env vars, and interactive prompts
-  - Build `CommandContext` with provider instance and legacy compat fields
+  - Build `CommandContext` with the resolved provider instance and credentials
   - Wrap all command execution in consistent error handling
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6_
 

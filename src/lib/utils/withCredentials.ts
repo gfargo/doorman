@@ -1,8 +1,6 @@
 import { LogLevels } from 'consola'
 import { logger } from '../logger'
 import type { IFirewallProvider, ProviderType } from '../providers/IFirewallProvider'
-import { FirewallService } from '../services/FirewallService'
-import { VercelClient } from '../services/VercelClient'
 import { FirewallConfig } from '../types'
 import { getConfig } from './config'
 import { handleCommandError } from './handleCommandError'
@@ -10,20 +8,12 @@ import { getProviderInstance } from './providerHelper'
 
 /**
  * Context provided to command handlers by `withCredentials`.
- *
- * For Vercel (legacy) usage, `client` and `service` are available.
- * For multi-provider usage, use `provider` which implements `IFirewallProvider`.
- * Both are always populated — `provider` wraps the Vercel client when in legacy mode.
  */
 export interface CommandContext {
   /** The loaded config (FirewallConfig for legacy, may be UnifiedConfig for multi-provider) */
   config: FirewallConfig
   /** The resolved provider instance (works for both Vercel and Cloudflare) */
   provider: IFirewallProvider
-  /** @deprecated Use `provider` instead. Vercel client (only populated for Vercel provider) */
-  client: VercelClient
-  /** @deprecated Use `provider` instead. Vercel firewall service (only populated for Vercel provider) */
-  service: FirewallService
   /** Resolved credentials */
   token: string
   projectId: string
@@ -71,7 +61,6 @@ export interface WithCredentialsOptions {
  * Shared middleware that handles config loading, provider detection, credential
  * resolution, and error handling for all CLI commands.
  *
- * Supports both legacy Vercel-only usage and multi-provider (Vercel/Cloudflare) usage.
  * Provider is auto-detected from config/environment when not explicitly specified.
  */
 export async function withCredentials(
@@ -113,31 +102,13 @@ export async function withCredentials(
       accountId: options.accountId,
     })
 
-    // 3. For backward compatibility, also create legacy Vercel client/service
-    //    These are only meaningful when the provider is Vercel.
-    let client: VercelClient
-    let service: FirewallService
-    let token = ''
-    let projectId = ''
-    let teamId = ''
+    // Resolved Vercel credentials, when applicable — some commands (e.g.
+    // backup) still want the raw token/projectId/teamId alongside `provider`.
+    const token = vercelCredentials?.token ?? ''
+    const projectId = vercelCredentials?.projectId ?? ''
+    const teamId = vercelCredentials?.teamId ?? ''
 
-    if (provider.name === 'vercel' && vercelCredentials) {
-      // Reuse the credentials getProviderInstance already resolved above —
-      // re-resolving here via promptForCredentials would ask an interactive
-      // user for the same token/projectId/teamId a second time.
-      token = vercelCredentials.token
-      projectId = vercelCredentials.projectId
-      teamId = vercelCredentials.teamId
-      client = new VercelClient(projectId, teamId, token)
-      service = new FirewallService(client)
-    } else {
-      // For non-Vercel providers, create stub instances
-      // Commands should use `provider` instead
-      client = {} as VercelClient
-      service = {} as FirewallService
-    }
-
-    await handler({ config, provider, client, service, token, projectId, teamId })
+    await handler({ config, provider, token, projectId, teamId })
   } catch (error) {
     handleCommandError(error, options.errorContext)
   }

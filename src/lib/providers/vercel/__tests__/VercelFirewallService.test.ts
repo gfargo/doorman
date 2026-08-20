@@ -205,6 +205,40 @@ describe('VercelFirewallService', () => {
       expect(result.ipsAdded).toBe(1)
     })
 
+    it('deletes stale rules before creating new ones', async () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            name: 'New Rule',
+            enabled: true,
+            conditions: [{ field: 'path', operator: 'eq', value: '/new' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue(mockVercelConfig)
+      const deleteSpy = jest.spyOn(client, 'deleteFirewallRule').mockResolvedValue(undefined)
+      const createSpy = jest.spyOn(client, 'createFirewallRule').mockResolvedValue({
+        id: 'new_rule_1',
+        name: 'New Rule',
+        active: true,
+        conditionGroup: [],
+        action: { mitigate: { action: 'deny', rateLimit: null, redirect: null, actionDuration: null } },
+      })
+
+      const result = await service.syncRules(config)
+
+      expect(deleteSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'rule_1' }))
+      expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({ name: 'New Rule' }))
+      expect(deleteSpy.mock.invocationCallOrder[0]!).toBeLessThan(createSpy.mock.invocationCallOrder[0]!)
+      expect(result.rulesDeleted).toBe(1)
+      expect(result.rulesAdded).toBe(1)
+    })
+
     it('asks for confirmation before applying a destructive sync, not just Cloudflare (regression test for #104)', async () => {
       jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
         ...mockVercelConfig,
@@ -617,6 +651,74 @@ describe('VercelFirewallService', () => {
       const changes = await service.getChanges(unifiedConfig)
 
       expect(changes.version).toBe(mockVercelConfig.version)
+    })
+
+    it('should detect an update when a rule with the same id has different content', async () => {
+      const configWithModifiedRule: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'rule_1',
+            name: 'Block bots',
+            description: 'Modified description',
+            enabled: true,
+            conditions: [{ field: 'user_agent', operator: 'contains', value: 'BadBot' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({ ...mockVercelConfig, ips: [] })
+
+      const changes = await service.getChanges(configWithModifiedRule)
+
+      expect(changes.rulesToUpdate).toHaveLength(1)
+      expect(changes.rulesToUpdate[0]?.id).toBe('rule_1')
+      expect(changes.rulesToAdd).toHaveLength(0)
+      expect(changes.rulesToDelete).toHaveLength(0)
+    })
+
+    it('should detect an IP rule update when hostname/notes change for the same id', async () => {
+      const configWithModifiedIP: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [],
+        ips: [{ id: 'ip_1', ip: '1.2.3.4', hostname: 'changed.example.com', action: 'deny', notes: 'Blocked IP' }],
+      }
+
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({ ...mockVercelConfig, rules: [] })
+
+      const changes = await service.getChanges(configWithModifiedIP)
+
+      expect(changes.ipsToUpdate).toHaveLength(1)
+      expect(changes.ipsToUpdate?.[0]?.hostname).toBe('changed.example.com')
+      expect(changes.ipsToAdd).toHaveLength(0)
+      expect(changes.ipsToDelete).toHaveLength(0)
+    })
+
+    it('treats an id-less local rule as an addition rather than matching it to an unrelated remote rule', async () => {
+      const configWithIdlessRule: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            name: 'Rule Without ID',
+            enabled: true,
+            conditions: [{ field: 'path', operator: 'eq', value: '/test' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({ ...mockVercelConfig, rules: [], ips: [] })
+
+      const changes = await service.getChanges(configWithIdlessRule)
+
+      expect(changes.rulesToAdd).toHaveLength(1)
+      expect(changes.rulesToAdd[0]?.name).toBe('Rule Without ID')
     })
 
     it('should throw on error', async () => {

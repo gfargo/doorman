@@ -5,9 +5,7 @@ import { tmpdir } from 'os'
 import { handler as syncHandler } from '../commands/sync'
 import { FirewallConfig } from '../lib/types'
 
-// Mock external dependencies. Mocks the NEW `providers/vercel/VercelClient`
-// (what the generic IFirewallProvider-based sync path uses) — not the
-// legacy `services/VercelClient`, which sync.ts no longer touches.
+// Mock external dependencies.
 jest.mock('../lib/providers/vercel/VercelClient')
 jest.mock('../lib/ui/prompt')
 jest.mock('../lib/ui/promptForCredentials')

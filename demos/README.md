@@ -33,6 +33,6 @@ demos/
 
 Each tape aliases `doorman` to the locally built `bin/run` and works in a scratch fixture under `demos/.fixtures/<name>/` (git-ignored) — no real Vercel/Cloudflare credentials involved.
 
-`init`, `add`, `template`, and `validate` work directly against a local `.doorman.json`. `list`, `download`, `sync`, and `import-existing` normally need a live Vercel API token — those tapes instead start `mock-server.mjs` on a local port and point the CLI at it via `DOORMAN_VERCEL_API_BASE_URL` (see `src/lib/services/VercelClient.ts`), so they still run the real CLI/network code path, just against fixture data instead of production. `status` and `diff` aren't captured yet but could follow the same pattern.
+`init`, `add`, `template`, and `validate` work directly against a local `.doorman.json`. `list`, `download`, `sync`, and `import-existing` normally need a live Vercel API token — those tapes instead start `mock-server.mjs` on a local port and point the CLI at it via `DOORMAN_VERCEL_API_BASE_URL` (see `src/lib/providers/vercel/VercelClient.ts`), so they still run the real CLI/network code path, just against fixture data instead of production. `status` and `diff` aren't captured yet but could follow the same pattern.
 
 `import-existing` tells the "adopting doorman on a project that already has rules" story: `download` pulls hand-configured rules from the (mocked) Vercel dashboard into a fresh `.doorman.json`, `validate --verbose` confirms the result, and a `git commit` shows the config ready to check in.

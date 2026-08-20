@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Minimal local stand-in for the Vercel Firewall Config API, used only for
 // demo/VHS capture purposes (see DOORMAN_VERCEL_API_BASE_URL in
-// src/lib/services/VercelClient.ts). Never used against real traffic.
+// src/lib/providers/vercel/VercelClient.ts). Never used against real traffic.
 import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
 

@@ -78,10 +78,6 @@ export function emptyVercelConfig(overrides: Partial<VercelConfig> = {}): Vercel
  * `withCredentials` -> `getProviderInstance` -> `VercelProvider.fromConfig`) don't
  * make real network calls. Call this after `jest.mock('.../providers/vercel/VercelClient')`
  * in the test file; pass the mocked class itself.
- *
- * Note: this mocks the NEW `src/lib/providers/vercel/VercelClient`, which is what
- * `IFirewallProvider`-based command paths use — not the legacy
- * `src/lib/services/VercelClient`.
  */
 export function mockVercelClientPrototype(
   MockedVercelClient: jest.MockedClass<typeof VercelClient>,
