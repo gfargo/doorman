@@ -2,6 +2,7 @@ import { getProviderRegistry } from './ProviderRegistry'
 import { CloudflareProvider } from './cloudflare'
 import { VercelProvider } from './vercel'
 import { logger } from '../logger'
+import type { ProviderType } from './IFirewallProvider'
 
 /**
  * Initialize and register all available providers
@@ -29,7 +30,7 @@ export function initProviders(): void {
  * Get a provider instance with automatic initialization
  */
 export async function getProvider(
-  providerType: 'vercel' | 'cloudflare',
+  providerType: ProviderType,
   config?: Record<string, unknown>,
 ): Promise<import('./IFirewallProvider').IFirewallProvider> {
   const registry = getProviderRegistry()
