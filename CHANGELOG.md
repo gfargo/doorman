@@ -1,3 +1,10 @@
+## [3.9.2](https://github.com/gfargo/doorman/compare/v3.9.1...v3.9.2) (2026-08-20)
+
+
+### Bug Fixes
+
+* write the config file atomically ([#194](https://github.com/gfargo/doorman/issues/194)) ([90e71e2](https://github.com/gfargo/doorman/commit/90e71e2a14cb607811f3735be829ed2cf5d5e035))
+
 ## [3.9.1](https://github.com/gfargo/doorman/compare/v3.9.0...v3.9.1) (2026-08-20)
 
 
