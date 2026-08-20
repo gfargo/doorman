@@ -1,3 +1,10 @@
+## [3.8.1](https://github.com/gfargo/doorman/compare/v3.8.0...v3.8.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* make UnifiedRule.priority actually control rule evaluation order ([#189](https://github.com/gfargo/doorman/issues/189)) ([76f7666](https://github.com/gfargo/doorman/commit/76f7666e462e1e473c0ca0052440fe8fb2d3506a)), closes [#179](https://github.com/gfargo/doorman/issues/179)
+
 # [3.8.0](https://github.com/gfargo/doorman/compare/v3.7.1...v3.8.0) (2026-08-20)
 
 
