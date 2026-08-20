@@ -1,3 +1,10 @@
+# [3.8.0](https://github.com/gfargo/doorman/compare/v3.7.1...v3.8.0) (2026-08-20)
+
+
+### Features
+
+* parse Cloudflare wirefilter expressions back into structured conditions ([#178](https://github.com/gfargo/doorman/issues/178)) ([a8264c1](https://github.com/gfargo/doorman/commit/a8264c18f7fe8caf20a7d4f0187a3617e241cd2e)), closes [#153](https://github.com/gfargo/doorman/issues/153)
+
 ## [3.7.1](https://github.com/gfargo/doorman/compare/v3.7.0...v3.7.1) (2026-08-20)
 
 
