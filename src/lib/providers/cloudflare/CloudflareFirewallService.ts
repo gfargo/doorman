@@ -6,6 +6,7 @@ import { RuleTranslator } from '../../translators/RuleTranslator'
 import { logger } from '../../logger'
 import { CloudflareErrorHandler } from './CloudflareErrorHandler'
 import { cloudflareErrors } from '../../errors'
+import { sortRulesByPriority } from '../../utils/sortRulesByPriority'
 import type { ProviderType, SyncOptions, SyncResult, ChangeSet, FeatureSet, HealthScore } from '../IFirewallProvider'
 import type { UnifiedConfig, UnifiedRule, UnifiedIPRule } from '../../types/unified'
 import type { CloudflareRule } from '../../types/cloudflare'
@@ -261,8 +262,13 @@ export class CloudflareFirewallService extends BaseFirewallService {
     // Translate all rules to Cloudflare format
     const cloudflareRules: CloudflareRule[] = []
 
-    // Add regular rules
-    for (const rule of config.rules) {
+    // Cloudflare has no per-rule priority field — position in the ruleset
+    // array *is* precedence, and this write is a full-array replace, so
+    // ordering here is exactly the resulting evaluation order. Sorting by
+    // `UnifiedRule.priority` is what actually gives that field meaning; see
+    // sortRulesByPriority for the semantics. IP rules are appended after
+    // custom rules below, which is pre-existing behaviour and unchanged.
+    for (const rule of sortRulesByPriority(config.rules)) {
       const translation = RuleTranslator.unifiedToCloudflare(rule)
       cloudflareRules.push(translation.result)
 
@@ -438,7 +444,12 @@ export class CloudflareFirewallService extends BaseFirewallService {
       (r) => r && r.id && r.expression && r.action && !this.isListBasedIPRule(r) && !this.isIPBlockingRule(r),
     )
 
-    const localTranslations = config.rules.map((rule) => ({
+    // Sorted the same way `syncRules` sorts before writing, so the diff
+    // reflects the order a sync would actually produce. Without this, a
+    // priority-only change (no rule content edited) would report "no
+    // changes" while `sync` silently rewrote the ruleset into a new
+    // evaluation order — see diffCloudflareRules' position-drift check.
+    const localTranslations = sortRulesByPriority(config.rules).map((rule) => ({
       rule,
       translated: RuleTranslator.unifiedToCloudflare(rule).result,
     }))

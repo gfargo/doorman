@@ -7,6 +7,7 @@ import { isDeepEqual } from '../../utils/isDeepEqual'
 import { omitId } from '../../utils/omitId'
 import { firewallConfigSchema } from '../../schemas/firewallSchemas'
 import { unifiedConfigSchema } from '../../schemas/unifiedSchemas'
+import { hasExplicitPriorities, sortRulesByPriority } from '../../utils/sortRulesByPriority'
 import type {
   IFirewallProvider,
   ProviderType,
@@ -196,6 +197,27 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       const describeError = (context: string, error: unknown): string =>
         `${context}: ${error instanceof Error ? error.message : String(error)}`
 
+      // Ordering on Vercel is best-effort. Rules are written individually
+      // (`rules.insert`/`rules.update`), not as one ordered array like
+      // Cloudflare's ruleset replace — so doorman controls the order new
+      // rules are appended in, but cannot move a rule that already exists
+      // remotely. A config that declares priorities and still has surviving
+      // pre-existing rules therefore won't end up in exactly the declared
+      // order, and saying so is better than letting the user assume it did.
+      // `config.rules.length > rulesToAdd.length` means at least one rule
+      // already exists remotely (being updated, or unchanged) — those are
+      // the ones whose position is fixed. When every rule is a fresh create,
+      // insertion order fully determines evaluation order and there's
+      // nothing to warn about.
+      const orderingWarnings: string[] = []
+      if (hasExplicitPriorities(config.rules) && config.rules.length > rulesToAdd.length) {
+        orderingWarnings.push(
+          'Rule `priority` is best-effort on Vercel: new rules are created in priority order, but rules that already ' +
+            'exist remotely cannot be repositioned via the Vercel API. Recreate them (remove and re-add) if exact ' +
+            'evaluation order matters.',
+        )
+      }
+
       // Vercel always assigns its own id on create (createFirewallRule sends
       // `id: null` regardless of what the local rule had, if anything) — so
       // the local config's rule id is essentially always stale for a newly
@@ -305,7 +327,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       // succeeded from the API's point of view.
       let finalVersion: number = version
       let finalUpdatedAt: string | undefined
-      const warnings: string[] = []
+      const warnings: string[] = [...orderingWarnings]
       try {
         const activeConfig = await this.client.fetchFirewallConfig()
         finalVersion = activeConfig.version
@@ -426,8 +448,12 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
         return translation.result
       })
 
-      // Handle custom rules
-      const { toAdd, toUpdate, toDelete } = this.diffRules(config.rules, remoteRules)
+      // Handle custom rules. Sorted by `priority` first so `toAdd` comes out
+      // in the intended evaluation order — Vercel creates rules one at a
+      // time via `rules.insert`, so insertion order is the only ordering
+      // lever available here. See syncRules for why that's best-effort
+      // rather than a guarantee.
+      const { toAdd, toUpdate, toDelete } = this.diffRules(sortRulesByPriority(config.rules), remoteRules)
 
       const remoteIPs: UnifiedIPRule[] = activeConfig.ips.map((ip) => RuleTranslator.vercelIPToUnified(ip))
 

@@ -50,7 +50,15 @@ export const unifiedRuleSchema = z.object({
   conditions: z.array(unifiedConditionSchema).min(1, 'At least one condition is required'),
   conditionLogic: z.enum(['AND', 'OR']).optional().default('AND'),
   action: unifiedActionSchema,
-  priority: z.number().int().optional(),
+  priority: z
+    .number()
+    .int()
+    .optional()
+    .describe(
+      'Rule evaluation order. Lower numbers are evaluated first. Rules without a priority keep their config order ' +
+        'and run after all prioritised rules. Fully honoured on Cloudflare; best-effort on Vercel, which cannot ' +
+        'reposition rules that already exist remotely.',
+    ),
   categories: z.array(z.string()).optional(),
 }) satisfies z.ZodType<UnifiedRule>
 
