@@ -1,13 +1,13 @@
 import { getConfig } from '../../lib/utils/config'
 import { logger } from '../../lib/logger'
-import { VercelClient } from '../../lib/services/VercelClient'
+import { VercelClient } from '../../lib/providers/vercel/VercelClient'
 import { CloudflareClient } from '../../lib/providers/cloudflare/CloudflareClient'
-import { mockCloudflareClientPrototype } from '../../tests/testHelpers/providerMocks'
+import { mockCloudflareClientPrototype, mockVercelClientPrototype } from '../../tests/testHelpers/providerMocks'
 import { handler } from '../export'
 
 jest.mock('../../lib/logger', () => ({ logger: require('../../tests/testHelpers/loggerMock').createLoggerMock() }))
 jest.mock('../../lib/utils/config', () => ({ getConfig: jest.fn() }))
-jest.mock('../../lib/services/VercelClient')
+jest.mock('../../lib/providers/vercel/VercelClient')
 jest.mock('../../lib/providers/cloudflare/CloudflareClient')
 
 const mockedGetConfig = getConfig as jest.MockedFunction<typeof getConfig>
@@ -32,13 +32,19 @@ describe('export command', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     jest.spyOn(process, 'exit').mockImplementation((() => undefined) as any)
-    MockedVercelClient.prototype.fetchFirewallConfig = jest.fn().mockResolvedValue({
-      version: 5,
-      firewallEnabled: true,
-      rules: [],
-      ips: [],
-      updatedAt: '2024-01-01T00:00:00Z',
-    }) as any
+    mockVercelClientPrototype(MockedVercelClient, {
+      config: {
+        version: 5,
+        id: 'config_1',
+        firewallEnabled: true,
+        crs: null,
+        rules: [],
+        ips: [],
+        projectKey: 'pk_1',
+        ownerId: 'owner_1',
+        updatedAt: '2024-01-01T00:00:00Z',
+      },
+    })
     mockCloudflareClientPrototype(MockedCloudflareClient)
   })
 
@@ -80,7 +86,11 @@ describe('export command', () => {
     } as any)
 
     const logged = (logger.log as unknown as jest.Mock).mock.calls.map((c) => String(c[0])).join('\n')
-    expect(JSON.parse(logged).version).toBe(5)
+    const parsed = JSON.parse(logged)
+    // A remote export always fetches a clean UnifiedConfig now — the real
+    // remote version lives under `metadata.version`, not the top-level
+    // `version` (which is the unified format string, e.g. "2.0").
+    expect(parsed.metadata.version).toBe(5)
   })
 
   it('exports the remote config for the Cloudflare provider without crashing (regression test for #82)', async () => {
@@ -101,17 +111,49 @@ describe('export command', () => {
     expect(JSON.parse(logged).provider).toBe('cloudflare')
   })
 
-  it('refuses non-JSON export formats for a multi-provider config instead of producing garbage output', async () => {
+  it('exports markdown for a multi-provider (Cloudflare) config too, not just Vercel', async () => {
     mockedGetConfig.mockResolvedValue({
       version: '2.0',
       provider: 'cloudflare',
       providers: { cloudflare: { zoneId: '0123456789abcdef0123456789abcdef' } },
-      rules: [],
+      rules: [
+        {
+          name: 'Block Bad Bots',
+          enabled: true,
+          conditions: [{ field: 'user_agent', operator: 'contains', value: 'badbot' }],
+          action: { type: 'deny' },
+        },
+      ],
       ips: [],
     } as any)
 
     await handler({ source: 'local', format: 'markdown', output: '-', debug: false, ci: true } as any)
 
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('only supported for Vercel configurations'))
+    const logged = (logger.log as unknown as jest.Mock).mock.calls.map((c) => String(c[0])).join('\n')
+    expect(logged).toContain('Block Bad Bots')
+    expect(logger.error).not.toHaveBeenCalled()
+  })
+
+  it('exports terraform for a multi-provider (Cloudflare) config too', async () => {
+    mockedGetConfig.mockResolvedValue({
+      version: '2.0',
+      provider: 'cloudflare',
+      providers: { cloudflare: { zoneId: '0123456789abcdef0123456789abcdef' } },
+      rules: [
+        {
+          name: 'Block Bad Bots',
+          enabled: true,
+          conditions: [{ field: 'user_agent', operator: 'contains', value: 'badbot' }],
+          action: { type: 'deny' },
+        },
+      ],
+      ips: [],
+    } as any)
+
+    await handler({ source: 'local', format: 'terraform', output: '-', debug: false, ci: true } as any)
+
+    const logged = (logger.log as unknown as jest.Mock).mock.calls.map((c) => String(c[0])).join('\n')
+    expect(logged).toContain('resource "firewall_rule" "rule_0"')
+    expect(logged).toContain('Block Bad Bots')
   })
 })

@@ -2,9 +2,11 @@ import chalk from 'chalk'
 import { writeFileSync } from 'fs'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
-import { CustomRule, FirewallConfig, IPBlockingRule, hasProviderMetadata } from '../lib/types'
+import type { FirewallConfig } from '../lib/types'
+import type { UnifiedConfig, UnifiedIPRule, UnifiedRule } from '../lib/types/unified'
 import { getConfig } from '../lib/utils/config'
 import { handleCommandError } from '../lib/utils/handleCommandError'
+import { toUnifiedConfig } from '../lib/utils/vercelConfigAdapter'
 import { withCredentials } from '../lib/utils/withCredentials'
 
 interface ExportOptions {
@@ -77,32 +79,55 @@ export const builder = {
   ci: { type: 'boolean', description: 'Run in CI mode (non-interactive)', default: false },
 }
 
-const generateMarkdownReport = (config: FirewallConfig): string => {
-  const { rules, ips = [], version, updatedAt } = config
+/**
+ * Groups a rule's flat `conditions[]` by `.group` (defaulting ungrouped
+ * conditions to a single implicit group 0) — reconstructs the AND-within/
+ * OR-across structure providers like Vercel model as nested condition
+ * groups, for display purposes.
+ */
+function groupConditions(conditions: UnifiedRule['conditions']): UnifiedRule['conditions'][] {
+  const groups = new Map<number, UnifiedRule['conditions']>()
+  for (const condition of conditions) {
+    const index = condition.group ?? 0
+    const bucket = groups.get(index)
+    if (bucket) {
+      bucket.push(condition)
+    } else {
+      groups.set(index, [condition])
+    }
+  }
+  return [...groups.values()]
+}
 
-  let markdown = `# Vercel Firewall Configuration Report\n\n`
-  markdown += `**Version:** ${version}\n`
+const generateMarkdownReport = (config: UnifiedConfig): string => {
+  const { rules, ips = [] } = config
+  const version = config.metadata?.version
+  const updatedAt = config.metadata?.updatedAt
+
+  let markdown = `# Firewall Configuration Report\n\n`
+  markdown += `**Provider:** ${config.provider ?? 'unknown'}\n`
+  markdown += `**Version:** ${version ?? 'unknown'}\n`
   markdown += `**Last Updated:** ${updatedAt ? new Date(updatedAt).toLocaleString() : 'Unknown'}\n`
   markdown += `**Generated:** ${new Date().toLocaleString()}\n\n`
 
   markdown += `## Custom Rules (${rules.length})\n\n`
   if (rules.length > 0) {
-    rules.forEach((rule: CustomRule, index: number) => {
+    rules.forEach((rule: UnifiedRule, index: number) => {
       markdown += `### ${index + 1}. ${rule.name}\n\n`
-      markdown += `- **ID:** \`${rule.id}\`\n`
+      markdown += `- **ID:** \`${rule.id ?? 'unassigned'}\`\n`
       markdown += `- **Description:** ${rule.description || 'No description'}\n`
-      markdown += `- **Action:** ${rule.action.mitigate.action}\n`
-      markdown += `- **Active:** ${rule.active ? '✅ Yes' : '❌ No'}\n`
+      markdown += `- **Action:** ${rule.action.type}\n`
+      markdown += `- **Enabled:** ${rule.enabled ? '✅ Yes' : '❌ No'}\n`
 
-      if (rule.action.mitigate.rateLimit) {
-        markdown += `- **Rate Limit:** ${rule.action.mitigate.rateLimit.requests} requests per ${rule.action.mitigate.rateLimit.window}\n`
+      if (rule.action.rateLimit) {
+        markdown += `- **Rate Limit:** ${rule.action.rateLimit.requests} requests per ${rule.action.rateLimit.window}\n`
       }
 
       markdown += `- **Conditions:**\n`
-      rule.conditionGroup.forEach((group, groupIndex) => {
+      groupConditions(rule.conditions).forEach((group, groupIndex) => {
         markdown += `  - Group ${groupIndex + 1}:\n`
-        group.conditions.forEach((condition) => {
-          markdown += `    - ${condition.type} ${condition.op} \`${condition.value}\`\n`
+        group.forEach((condition) => {
+          markdown += `    - ${condition.field} ${condition.operator} \`${condition.value}\`\n`
         })
       })
       markdown += `\n`
@@ -115,7 +140,7 @@ const generateMarkdownReport = (config: FirewallConfig): string => {
   if (ips.length > 0) {
     markdown += `| IP Address | Hostname | Action |\n`
     markdown += `|------------|----------|--------|\n`
-    ips.forEach((ip: IPBlockingRule) => {
+    ips.forEach((ip: UnifiedIPRule) => {
       markdown += `| \`${ip.ip}\` | ${ip.hostname || 'N/A'} | ${ip.action} |\n`
     })
   } else {
@@ -125,33 +150,33 @@ const generateMarkdownReport = (config: FirewallConfig): string => {
   return markdown
 }
 
-const generateTerraformConfig = (config: FirewallConfig): string => {
+const generateTerraformConfig = (config: UnifiedConfig): string => {
   const { rules, ips = [] } = config
 
-  let terraform = `# Vercel Firewall Configuration\n`
+  let terraform = `# Firewall Configuration (${config.provider ?? 'unknown'})\n`
   terraform += `# Generated on ${new Date().toISOString()}\n\n`
   terraform += `# Note: This is a conceptual Terraform configuration\n`
-  terraform += `# A Vercel Terraform provider would need to be implemented for actual use\n\n`
+  terraform += `# A provider-specific Terraform provider would need to be implemented for actual use\n\n`
 
-  rules.forEach((rule: CustomRule, index: number) => {
-    terraform += `resource "vercel_firewall_rule" "rule_${index}" {\n`
+  rules.forEach((rule: UnifiedRule, index: number) => {
+    terraform += `resource "firewall_rule" "rule_${index}" {\n`
     terraform += `  name        = "${rule.name}"\n`
     terraform += `  description = "${rule.description || ''}"\n`
-    terraform += `  active      = ${rule.active}\n`
-    terraform += `  action      = "${rule.action.mitigate.action}"\n`
+    terraform += `  enabled     = ${rule.enabled}\n`
+    terraform += `  action      = "${rule.action.type}"\n`
 
-    if (rule.action.mitigate.rateLimit) {
+    if (rule.action.rateLimit) {
       terraform += `  rate_limit {\n`
-      terraform += `    requests = ${rule.action.mitigate.rateLimit.requests}\n`
-      terraform += `    window   = "${rule.action.mitigate.rateLimit.window}"\n`
+      terraform += `    requests = ${rule.action.rateLimit.requests}\n`
+      terraform += `    window   = "${rule.action.rateLimit.window}"\n`
       terraform += `  }\n`
     }
 
     terraform += `}\n\n`
   })
 
-  ips.forEach((ip: IPBlockingRule, index: number) => {
-    terraform += `resource "vercel_ip_blocking_rule" "ip_${index}" {\n`
+  ips.forEach((ip: UnifiedIPRule, index: number) => {
+    terraform += `resource "firewall_ip_blocking_rule" "ip_${index}" {\n`
     terraform += `  ip       = "${ip.ip}"\n`
     terraform += `  hostname = "${ip.hostname || ''}"\n`
     terraform += `  action   = "${ip.action}"\n`
@@ -163,7 +188,14 @@ const generateTerraformConfig = (config: FirewallConfig): string => {
 
 export const handler = async (argv: Arguments<ExportOptions>) => {
   try {
-    let config: FirewallConfig
+    // The raw config as loaded/fetched, in whatever shape it's already in
+    // (legacy or unified) — JSON export serializes this as-is, matching the
+    // pre-migration behavior of round-tripping the on-disk file unchanged.
+    // `provider.fetchConfig()` always returns a clean UnifiedConfig now
+    // (for every provider), so a remote JSON export no longer leaks
+    // API-only fields (id, crs, projectKey, ownerId, valid,
+    // validationErrors) the way a raw Vercel API response used to.
+    let config: FirewallConfig | UnifiedConfig
 
     if (argv.source === 'remote') {
       // Remote export needs credentials
@@ -181,12 +213,9 @@ export const handler = async (argv: Arguments<ExportOptions>) => {
           ci: argv.ci,
           errorContext: 'exporting configuration',
         },
-        async ({ client, provider }) => {
+        async ({ provider }) => {
           logger.start('Fetching remote configuration...')
-          config =
-            provider.name === 'vercel'
-              ? await client.fetchFirewallConfig()
-              : ((await provider.fetchConfig()) as unknown as FirewallConfig)
+          config = await provider.fetchConfig()
         },
       )
     } else {
@@ -194,17 +223,6 @@ export const handler = async (argv: Arguments<ExportOptions>) => {
     }
 
     logger.start(`Exporting configuration in ${argv.format} format...`)
-
-    // The yaml/terraform/markdown generators below assume the legacy Vercel rule
-    // shape (conditionGroup/action.mitigate). A multi-provider (Cloudflare) config
-    // uses a different rule shape and would otherwise silently produce garbage
-    // output, so only json export is supported for those until dedicated generators
-    // exist.
-    if (argv.format !== 'json' && hasProviderMetadata(config!)) {
-      throw new Error(
-        `The '${argv.format}' export format is currently only supported for Vercel configurations. Use --format json instead.`,
-      )
-    }
 
     let output: string
     let defaultExtension: string
@@ -215,27 +233,29 @@ export const handler = async (argv: Arguments<ExportOptions>) => {
         defaultExtension = 'json'
         break
 
-      case 'yaml':
-        output = `# Vercel Firewall Configuration\n`
-        output += `version: ${config!.version}\n`
-        output += `updatedAt: "${config!.updatedAt}"\n`
+      case 'yaml': {
+        const unified = toUnifiedConfig(config!)
+        output = `# Firewall Configuration (${unified.provider ?? 'unknown'})\n`
+        output += `version: ${unified.metadata?.version ?? 'unknown'}\n`
+        output += `updatedAt: "${unified.metadata?.updatedAt ?? ''}"\n`
         output += `rules:\n`
-        config!.rules.forEach((rule: CustomRule) => {
+        unified.rules.forEach((rule: UnifiedRule) => {
           output += `  - name: "${rule.name}"\n`
-          output += `    id: "${rule.id}"\n`
-          output += `    active: ${rule.active}\n`
-          output += `    action: "${rule.action.mitigate.action}"\n`
+          output += `    id: "${rule.id ?? ''}"\n`
+          output += `    enabled: ${rule.enabled}\n`
+          output += `    action: "${rule.action.type}"\n`
         })
         defaultExtension = 'yaml'
         break
+      }
 
       case 'terraform':
-        output = generateTerraformConfig(config!)
+        output = generateTerraformConfig(toUnifiedConfig(config!))
         defaultExtension = 'tf'
         break
 
       case 'markdown':
-        output = generateMarkdownReport(config!)
+        output = generateMarkdownReport(toUnifiedConfig(config!))
         defaultExtension = 'md'
         break
 
