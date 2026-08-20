@@ -410,6 +410,54 @@ describe('providerHelper', () => {
         })
       })
 
+      // Regression test: getCloudflareProvider resolved only `flag || env`
+      // and never looked at the config file at all, so a unified config
+      // declaring providers.cloudflare.zoneId was ignored — the user got
+      // "Cloudflare credentials missing" despite having declared it. This
+      // is the same bug #171 fixed for Vercel, which was never fixed for
+      // Cloudflare.
+      it('resolves zoneId/accountId from providers.cloudflare on a unified config', async () => {
+        process.env.CLOUDFLARE_API_TOKEN = 'env-api-token'
+
+        await getProviderInstance({
+          provider: 'cloudflare',
+          config: { providers: { cloudflare: { zoneId: 'config-zone', accountId: 'config-account' } } } as never,
+          interactive: false,
+        })
+
+        expect(mockedCloudflareFromConfig).toHaveBeenCalledWith({
+          apiToken: 'env-api-token',
+          zoneId: 'config-zone',
+          accountId: 'config-account',
+        })
+      })
+
+      it('prefers the CLI flag over a config-declared zoneId', async () => {
+        process.env.CLOUDFLARE_API_TOKEN = 'env-api-token'
+
+        await getProviderInstance({
+          provider: 'cloudflare',
+          zoneId: 'flag-zone',
+          config: { providers: { cloudflare: { zoneId: 'config-zone' } } } as never,
+          interactive: false,
+        })
+
+        expect(mockedCloudflareFromConfig).toHaveBeenCalledWith(expect.objectContaining({ zoneId: 'flag-zone' }))
+      })
+
+      it('prefers a config-declared zoneId over the environment', async () => {
+        process.env.CLOUDFLARE_API_TOKEN = 'env-api-token'
+        process.env.CLOUDFLARE_ZONE_ID = 'env-zone'
+
+        await getProviderInstance({
+          provider: 'cloudflare',
+          config: { providers: { cloudflare: { zoneId: 'config-zone' } } } as never,
+          interactive: false,
+        })
+
+        expect(mockedCloudflareFromConfig).toHaveBeenCalledWith(expect.objectContaining({ zoneId: 'config-zone' }))
+      })
+
       it('passes accountId through as undefined when nothing supplies it (it is optional)', async () => {
         process.env.CLOUDFLARE_API_TOKEN = 'env-api-token'
         process.env.CLOUDFLARE_ZONE_ID = 'env-zone'
