@@ -1,3 +1,10 @@
+# [3.7.0](https://github.com/gfargo/doorman/compare/v3.6.0...v3.7.0) (2026-08-20)
+
+
+### Features
+
+* remove the legacy Vercel FirewallService/VercelClient stack ([#176](https://github.com/gfargo/doorman/issues/176)) ([595216b](https://github.com/gfargo/doorman/commit/595216b2f181c8df08ebdd82cb4bdb33f75b300b))
+
 # [3.6.0](https://github.com/gfargo/doorman/compare/v3.5.0...v3.6.0) (2026-08-20)
 
 
