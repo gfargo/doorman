@@ -6,6 +6,9 @@ import { ProviderDetector } from '../providers/ProviderDetector'
 import { VercelProvider } from '../providers/vercel'
 import { CloudflareProvider } from '../providers/cloudflare'
 import { PROVIDER_TYPES, type IFirewallProvider, type ProviderType } from '../providers/IFirewallProvider'
+import { resolveCredentials } from '../providers/credentials'
+import { vercelCredentials } from '../providers/vercel/credentials'
+import { cloudflareCredentials } from '../providers/cloudflare/credentials'
 import type { FirewallConfig, UnifiedConfig } from '../types'
 
 export interface ProviderOptions {
@@ -91,18 +94,23 @@ export async function getProviderInstance(options: ProviderOptions): Promise<Pro
  * Get Vercel provider instance
  */
 async function getVercelProvider(options: ProviderOptions): Promise<ProviderInstanceResult> {
-  const token = options.token || process.env.VERCEL_TOKEN
-
   // Vercel credentials may live directly on the config (legacy `.doorman.json`
   // shape) or under `providers.vercel` (unified config shape). Both are
   // checked since a config's shape can't be reliably inferred from `rules`
   // alone (both legacy and unified configs have a top-level `rules` array).
   const config = options.config as (Partial<FirewallConfig> & Partial<UnifiedConfig>) | undefined
-  const configProjectId = config?.providers?.vercel?.projectId ?? config?.projectId
-  const configTeamId = config?.providers?.vercel?.teamId ?? config?.teamId
 
-  const projectId = options.projectId || configProjectId || process.env.VERCEL_PROJECT_ID
-  const teamId = options.teamId || configTeamId || process.env.VERCEL_TEAM_ID
+  // Resolution order (explicit flag -> config -> env) comes from the shared
+  // descriptor rather than being spelled out per credential here; the env
+  // var names live with the Vercel adapter. Precedence is pinned by the
+  // tests in providerHelper.test.ts.
+  const { token, projectId, teamId } = resolveCredentials(vercelCredentials, {
+    explicit: { token: options.token, projectId: options.projectId, teamId: options.teamId },
+    config: {
+      projectId: config?.providers?.vercel?.projectId ?? config?.projectId,
+      teamId: config?.providers?.vercel?.teamId ?? config?.teamId,
+    },
+  })
 
   if (!token || !projectId || !teamId) {
     if (options.interactive === false) {
@@ -140,9 +148,15 @@ async function getVercelProvider(options: ProviderOptions): Promise<ProviderInst
  * Get Cloudflare provider instance
  */
 async function getCloudflareProvider(options: ProviderOptions): Promise<IFirewallProvider> {
-  const apiToken = options.apiToken || process.env.CLOUDFLARE_API_TOKEN
-  const zoneId = options.zoneId || process.env.CLOUDFLARE_ZONE_ID
-  const accountId = options.accountId || process.env.CLOUDFLARE_ACCOUNT_ID
+  const config = options.config as Partial<UnifiedConfig> | undefined
+
+  const { apiToken, zoneId, accountId } = resolveCredentials(cloudflareCredentials, {
+    explicit: { apiToken: options.apiToken, zoneId: options.zoneId, accountId: options.accountId },
+    config: {
+      zoneId: config?.providers?.cloudflare?.zoneId,
+      accountId: config?.providers?.cloudflare?.accountId,
+    },
+  })
 
   if (!apiToken || !zoneId) {
     if (options.interactive === false) {
