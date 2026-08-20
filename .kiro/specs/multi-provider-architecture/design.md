@@ -132,11 +132,13 @@ Abstract service providing:
 
 ### RuleTranslator
 
+> **Update (#196, August 2026):** as originally implemented, all of the below lived in one `RuleTranslator` class in one file. It's now a thin facade — the actual logic for each direction lives in that provider's own module (`src/lib/providers/vercel/translator.ts`, `.../cloudflare/translator.ts`), so a new provider adds its own translator file instead of growing this one. `vercelToCloudflare()`/`cloudflareToVercel()` (below) were removed as dead code — confirmed zero production callers; doorman has always routed through `UnifiedConfig`, never provider-to-provider directly, since this architecture landed. See `.kiro/steering/adding-a-provider.md`.
+
 Static methods for bidirectional translation:
 
 - `vercelToUnified()` / `unifiedToVercel()` — condition groups ↔ unified conditions
 - `cloudflareToUnified()` / `unifiedToCloudflare()` — wirefilter expressions ↔ unified
-- `vercelToCloudflare()` / `cloudflareToVercel()` — direct shortcuts
+- ~~`vercelToCloudflare()` / `cloudflareToVercel()` — direct shortcuts~~ (removed, #196 — see note above)
 - `vercelIPToUnified()` / `unifiedIPToCloudflare()` — IP rule translation
 - All methods return `TranslationResult<T>` with warnings for lossy conversions
 
