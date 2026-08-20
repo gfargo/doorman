@@ -4,10 +4,10 @@ import { z } from 'zod'
 import { logger } from '../lib/logger'
 import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
 import { configVersionSchema } from '../lib/schemas/firewallSchemas'
-import { FirewallConfig, IPBlockingRule } from '../lib/types'
+import { FirewallConfig } from '../lib/types'
 import { prompt } from '../lib/ui/prompt'
-import { displayIPBlockingTable, displayRulesTable } from '../lib/ui/table'
 import { saveConfig } from '../lib/utils/config'
+import { fromUnifiedConfig } from '../lib/utils/vercelConfigAdapter'
 import { withCredentials } from '../lib/utils/withCredentials'
 
 interface DownloadOptions {
@@ -88,7 +88,7 @@ export const handler = async (argv: Arguments<DownloadOptions>) => {
       skipValidation: true,
       errorContext: 'downloading firewall rules',
     },
-    async ({ config: existingConfig, client, provider, projectId, teamId }) => {
+    async ({ config: existingConfig, provider }) => {
       // Validate version if provided
       if (argv.configVersion !== undefined) {
         try {
@@ -102,60 +102,7 @@ export const handler = async (argv: Arguments<DownloadOptions>) => {
         }
       }
 
-      if (provider.name !== 'vercel') {
-        await downloadWithProvider(provider, existingConfig, argv)
-        return
-      }
-
-      logger.start(
-        `Fetching remote firewall configuration${argv.configVersion ? ` version ${argv.configVersion}` : ''} ...`,
-      )
-      const remoteConfig = await client.fetchFirewallConfig(argv.configVersion)
-
-      const configRules = remoteConfig.rules
-      const ipBlockingRules = remoteConfig.ips as IPBlockingRule[]
-
-      if (configRules.length > 0) {
-        logger.log(chalk.bold('\nRemote Custom Rules to Download:\n'))
-        displayRulesTable(configRules, { showStatus: false })
-      } else {
-        logger.info('No custom rules to download...')
-      }
-
-      if (ipBlockingRules.length > 0) {
-        logger.log(chalk.bold('\nRemote IP Blocking Rules to Download:\n'))
-        displayIPBlockingTable(ipBlockingRules, { showStatus: false })
-      } else {
-        logger.info('No IP blocking rules to download...')
-      }
-
-      if (argv.dryRun) {
-        logger.info(chalk.cyan('Dry run completed. No changes made.'))
-        return
-      }
-
-      const confirmed = await prompt(
-        `Do you want to download${argv.configVersion ? ` version ${argv.configVersion}` : ' the latest version'} of these rules? This will overwrite your local configuration.`,
-        { type: 'confirm' },
-      )
-      if (!confirmed) {
-        logger.info(chalk.yellow('Download cancelled.'))
-        return
-      }
-
-      const newConfig: FirewallConfig = {
-        ...existingConfig,
-        projectId,
-        teamId,
-        version: remoteConfig.version,
-        updatedAt: remoteConfig.updatedAt,
-        rules: configRules.map(({ valid, validationErrors, ...rule }: any) => rule),
-        ips: ipBlockingRules,
-      }
-
-      logger.start(`Saving configuration with version: ${newConfig.version}`)
-      await saveConfig(newConfig, argv.config)
-      logger.success(chalk.green('Successfully downloaded and updated configuration'))
+      await downloadWithProvider(provider, existingConfig, argv)
     },
   )
 }
@@ -164,6 +111,15 @@ export const handler = async (argv: Arguments<DownloadOptions>) => {
  * Download via the generic IFirewallProvider interface. Rules/IPs are listed as
  * plain text rather than through the shared table renderers, which assume the
  * Vercel-specific rule shape (conditionGroup/action.mitigate).
+ *
+ * The fetched `UnifiedConfig` is written back through `fromUnifiedConfig`,
+ * which converts it into whatever format `existingConfig` was already in
+ * (legacy or unified) — a naive `{ ...existingConfig, ...remoteConfig }`
+ * spread would corrupt a legacy config (unified `version: "2.0"` format
+ * string overwriting the real numeric Vercel version, unified-shaped rules
+ * replacing the legacy `conditionGroup`/`action.mitigate` shape, and
+ * `projectId`/`teamId` dropped since they live nested under
+ * `providers.vercel` on the unified side).
  */
 async function downloadWithProvider(
   provider: IFirewallProvider,
@@ -205,9 +161,9 @@ async function downloadWithProvider(
     return
   }
 
-  const newConfig = { ...existingConfig, ...remoteConfig }
+  const newConfig = fromUnifiedConfig(remoteConfig, existingConfig)
 
   logger.start('Saving configuration...')
-  await saveConfig(newConfig as unknown as FirewallConfig, argv.config)
+  await saveConfig(newConfig as FirewallConfig, argv.config)
   logger.success(chalk.green('Successfully downloaded and updated configuration'))
 }

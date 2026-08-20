@@ -149,3 +149,48 @@ export function applySyncResultToConfig<T extends FirewallConfig | UnifiedConfig
 
   return { config: config as T, changed }
 }
+
+/**
+ * Format-preserving conversion of a freshly-fetched `UnifiedConfig` (from
+ * `provider.fetchConfig()`) into whatever shape the existing on-disk config
+ * was in — used by `download`, which (unlike `sync`) replaces the entire
+ * local rule/IP set with the remote state, not just a version/id delta.
+ *
+ * Naively spreading the fetched `UnifiedConfig` onto a legacy on-disk
+ * config (`{ ...existingConfig, ...remote }`) corrupts it: `remote.version`
+ * is the unified format string ("2.0"), not a real Vercel config version,
+ * and `remote.rules`/`remote.ips` are unified-shaped
+ * (`rule.conditions`/`action.type`), not the legacy
+ * `conditionGroup`/`action.mitigate` shape the rest of the legacy tooling
+ * (and the user's file) expects.
+ */
+export function fromUnifiedConfig(
+  remote: UnifiedConfig,
+  existingConfig: FirewallConfig | UnifiedConfig,
+): FirewallConfig | UnifiedConfig {
+  if (hasProviderMetadata(existingConfig)) {
+    return { ...(existingConfig as UnifiedConfig), ...remote }
+  }
+
+  const legacy = existingConfig as FirewallConfig
+  const rules = remote.rules.map(
+    (rule) => RuleTranslator.unifiedToVercel(rule).result as unknown as FirewallConfig['rules'][number],
+  )
+  const ips = (remote.ips ?? []).map((ip) => ({
+    id: ip.id || '',
+    ip: ip.ip,
+    hostname: ip.hostname || '',
+    action: ip.action as 'deny',
+    notes: ip.notes,
+  })) as unknown as NonNullable<FirewallConfig['ips']>
+
+  return {
+    ...legacy,
+    projectId: remote.providers?.vercel?.projectId ?? legacy.projectId,
+    teamId: remote.providers?.vercel?.teamId ?? legacy.teamId,
+    version: remote.metadata?.version,
+    updatedAt: remote.metadata?.updatedAt,
+    rules,
+    ips,
+  }
+}

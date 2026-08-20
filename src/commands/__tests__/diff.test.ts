@@ -1,25 +1,23 @@
 import { getConfig } from '../../lib/utils/config'
 import { logger } from '../../lib/logger'
-import { VercelClient } from '../../lib/services/VercelClient'
+import { VercelClient } from '../../lib/providers/vercel/VercelClient'
 import { CloudflareClient } from '../../lib/providers/cloudflare/CloudflareClient'
-import { mockCloudflareClientPrototype } from '../../tests/testHelpers/providerMocks'
+import { mockCloudflareClientPrototype, mockVercelClientPrototype } from '../../tests/testHelpers/providerMocks'
 import { handler } from '../diff'
 
 jest.mock('../../lib/logger', () => ({ logger: require('../../tests/testHelpers/loggerMock').createLoggerMock() }))
 jest.mock('../../lib/utils/config', () => ({ getConfig: jest.fn() }))
-jest.mock('../../lib/services/VercelClient')
+jest.mock('../../lib/providers/vercel/VercelClient')
 jest.mock('../../lib/providers/cloudflare/CloudflareClient')
 
 const mockedGetConfig = getConfig as jest.MockedFunction<typeof getConfig>
 const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
 const MockedCloudflareClient = CloudflareClient as jest.MockedClass<typeof CloudflareClient>
 
-const vercelRemoteConfig = { version: 5, firewallEnabled: true, rules: [], ips: [], updatedAt: '2024-01-01T00:00:00Z' }
-
 describe('diff command', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    MockedVercelClient.prototype.fetchFirewallConfig = jest.fn().mockResolvedValue(vercelRemoteConfig) as any
+    mockVercelClientPrototype(MockedVercelClient)
     mockCloudflareClientPrototype(MockedCloudflareClient)
   })
 
@@ -55,12 +53,10 @@ describe('diff command', () => {
       ci: true,
     } as any)
 
-    const jsonCall = (logger.log as unknown as jest.Mock).mock.calls.find((call) =>
-      String(call[0]).includes('"customRules"'),
-    )
+    const jsonCall = (logger.log as unknown as jest.Mock).mock.calls.find((call) => String(call[0]).includes('"rules"'))
     expect(jsonCall).toBeDefined()
     const parsed = JSON.parse(jsonCall![0])
-    expect(parsed.customRules.toAdd).toHaveLength(1)
+    expect(parsed.rules.toAdd).toHaveLength(1)
   })
 
   it('reports differences for the Cloudflare provider without crashing (regression test for #82)', async () => {

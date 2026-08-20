@@ -89,6 +89,21 @@ export function mockVercelClientPrototype(
 ): void {
   const config = options.config ?? emptyVercelConfig()
 
+  // A plain `jest.mock(...)` automock does NOT run the real constructor, so
+  // `this.projectId`/`this.teamId` (set via constructor params) are
+  // otherwise `undefined` on every mocked instance — which
+  // VercelFirewallService reads via `this.client['projectId']` (e.g. to
+  // populate `providers.vercel.projectId` on a fetched config). Restoring
+  // that via mockImplementation keeps prototype method mocks intact.
+  MockedVercelClient.mockImplementation(function (
+    this: VercelClient,
+    projectId: string,
+    teamId: string,
+    token: string,
+  ) {
+    Object.assign(this, { projectId, teamId, token })
+  } as unknown as (projectId: string, teamId: string, token: string) => VercelClient)
+
   MockedVercelClient.prototype.fetchFirewallConfig = jest.fn().mockResolvedValue(config) as any
   MockedVercelClient.prototype.createFirewallRule = jest
     .fn()

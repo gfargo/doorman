@@ -2,7 +2,7 @@ jest.mock('../../logger', () => ({
   logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }))
 
-import { toUnifiedConfig, applySyncResultToConfig } from '../vercelConfigAdapter'
+import { toUnifiedConfig, applySyncResultToConfig, fromUnifiedConfig } from '../vercelConfigAdapter'
 import type { FirewallConfig, CustomRule, IPBlockingRule } from '../../types'
 import type { UnifiedConfig } from '../../types/unified'
 import type { SyncResult } from '../../providers/IFirewallProvider'
@@ -219,6 +219,89 @@ describe('vercelConfigAdapter', () => {
       const { changed } = applySyncResultToConfig(legacy, { version: 5 })
 
       expect(changed).toBe(false)
+    })
+  })
+
+  describe('fromUnifiedConfig', () => {
+    const remoteUnified: UnifiedConfig = {
+      version: '2.0',
+      provider: 'vercel',
+      providers: { vercel: { projectId: 'proj_remote', teamId: 'team_remote' } },
+      rules: [
+        {
+          id: 'rule_remote_1',
+          name: 'Remote Rule',
+          enabled: true,
+          conditions: [{ field: 'path', operator: 'eq', value: '/remote' }],
+          action: { type: 'deny' },
+        },
+      ],
+      ips: [{ id: 'ip_remote_1', ip: '9.9.9.9', hostname: 'remote.example.com', notes: 'from remote', action: 'deny' }],
+      metadata: { version: 9, updatedAt: '2024-08-01T00:00:00Z' },
+    }
+
+    it('converts a fetched unified config back into legacy shape when the existing config was legacy', () => {
+      const existing = makeLegacyConfig({ projectId: 'proj_old', teamId: 'team_old' })
+
+      const result = fromUnifiedConfig(remoteUnified, existing) as FirewallConfig
+
+      expect(result.version).toBe(9)
+      expect(result.updatedAt).toBe('2024-08-01T00:00:00Z')
+      expect(result.projectId).toBe('proj_remote')
+      expect(result.teamId).toBe('team_remote')
+      expect(result.rules).toHaveLength(1)
+      expect(result.rules[0]).toMatchObject({
+        id: 'rule_remote_1',
+        name: 'Remote Rule',
+        conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/remote' }] }],
+        action: { mitigate: { action: 'deny' } },
+      })
+      expect(result.ips).toHaveLength(1)
+      expect(result.ips?.[0]).toMatchObject({ ip: '9.9.9.9', hostname: 'remote.example.com', notes: 'from remote' })
+    })
+
+    it('preserves legacy-only fields (like $schema) that the remote config knows nothing about', () => {
+      const existing = makeLegacyConfig({ $schema: 'https://doorman.griffen.codes/schema.json' })
+
+      const result = fromUnifiedConfig(remoteUnified, existing) as FirewallConfig
+
+      expect(result.$schema).toBe('https://doorman.griffen.codes/schema.json')
+    })
+
+    it('falls back to the existing projectId/teamId when the remote config has none', () => {
+      const existing = makeLegacyConfig({ projectId: 'proj_old', teamId: 'team_old' })
+      const remoteWithoutProviders: UnifiedConfig = { ...remoteUnified, providers: undefined }
+
+      const result = fromUnifiedConfig(remoteWithoutProviders, existing) as FirewallConfig
+
+      expect(result.projectId).toBe('proj_old')
+      expect(result.teamId).toBe('team_old')
+    })
+
+    it('does not corrupt the real version with the unified format string ("2.0")', () => {
+      const existing = makeLegacyConfig({ version: 4 })
+
+      const result = fromUnifiedConfig(remoteUnified, existing) as FirewallConfig
+
+      expect(result.version).not.toBe('2.0')
+      expect(result.version).toBe(9)
+    })
+
+    it('merges directly when the existing config was already unified', () => {
+      const existingUnified: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        providers: { vercel: { projectId: 'proj_old' } },
+        rules: [],
+        ips: [],
+        metadata: { version: 3 },
+      }
+
+      const result = fromUnifiedConfig(remoteUnified, existingUnified) as UnifiedConfig
+
+      expect(result.metadata?.version).toBe(9)
+      expect(result.rules).toHaveLength(1)
+      expect(result.rules[0]?.name).toBe('Remote Rule')
     })
   })
 })

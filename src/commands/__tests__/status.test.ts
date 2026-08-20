@@ -1,8 +1,8 @@
 import { getConfig } from '../../lib/utils/config'
 import { logger } from '../../lib/logger'
-import { VercelClient } from '../../lib/services/VercelClient'
+import { VercelClient } from '../../lib/providers/vercel/VercelClient'
 import { CloudflareClient } from '../../lib/providers/cloudflare/CloudflareClient'
-import { mockCloudflareClientPrototype } from '../../tests/testHelpers/providerMocks'
+import { mockCloudflareClientPrototype, mockVercelClientPrototype } from '../../tests/testHelpers/providerMocks'
 import { handler } from '../status'
 
 jest.mock('../../lib/logger', () => ({ logger: require('../../tests/testHelpers/loggerMock').createLoggerMock() }))
@@ -11,7 +11,7 @@ jest.mock('../../lib/utils/config', () => ({
   getConfig: jest.fn(),
 }))
 
-jest.mock('../../lib/services/VercelClient')
+jest.mock('../../lib/providers/vercel/VercelClient')
 jest.mock('../../lib/providers/cloudflare/CloudflareClient')
 
 const mockedGetConfig = getConfig as jest.MockedFunction<typeof getConfig>
@@ -20,16 +20,20 @@ const MockedCloudflareClient = CloudflareClient as jest.MockedClass<typeof Cloud
 
 const vercelRemoteConfig = {
   version: 5,
+  id: 'config_1',
   firewallEnabled: true,
+  crs: null,
   rules: [],
   ips: [],
+  projectKey: 'pk_1',
+  ownerId: 'owner_1',
   updatedAt: '2024-01-01T00:00:00Z',
 }
 
 describe('status command', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    MockedVercelClient.prototype.fetchFirewallConfig = jest.fn().mockResolvedValue(vercelRemoteConfig) as any
+    mockVercelClientPrototype(MockedVercelClient, { config: vercelRemoteConfig })
     mockCloudflareClientPrototype(MockedCloudflareClient)
   })
 
