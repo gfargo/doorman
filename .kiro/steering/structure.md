@@ -31,26 +31,28 @@ Each command uses `withCredentials()` middleware for config/credential setup:
 
 ### Provider Abstraction (`src/lib/providers/`)
 
-- `IFirewallProvider.ts` - Core provider interface
+- `IFirewallProvider.ts` - Core provider interface. Also the home of `PROVIDER_TYPES`, the single source of truth for the closed set of known providers — `ProviderType` derives from it, and every runtime list (CLI `--provider` choices, `ProviderDetector`, the interactive picker) reads it rather than repeating the literal list.
+- `credentials.ts` - `CredentialDescriptor`/`resolveCredentials`/`CREDENTIAL_DESCRIPTORS` — each provider declares its credentials (flag key, env var, required/secret, config-file path) once in its own directory; this composes them and applies the shared flag > config > env precedence.
 - `ProviderRegistry.ts` - Singleton registry for provider instances
 - `ProviderDetector.ts` - Auto-detect provider from config/environment
-- `BaseFirewallClient.ts` - Base class for API clients
-- `BaseFirewallService.ts` - Base class for firewall services
+- `BaseFirewallClient.ts` - Base class for REST-with-header-auth API clients. Optional, not mandatory — built directly on `fetch`/`RequestInit`, so it fits Vercel/Cloudflare but shouldn't be forced onto a provider with a structurally different transport (e.g. an SDK-based client). See `adding-a-provider.md`.
+- `BaseFirewallService.ts` - Base class for firewall services (provider-agnostic `validateConfig()`/`getHealthScore()`/`diffRules()`/`diffIPs()` scaffolding)
 - `initProviders.ts` - Provider initialization
-- `vercel/` - Vercel provider (VercelProvider, VercelClient, VercelFirewallService)
-- `cloudflare/` - Cloudflare provider (CloudflareProvider, CloudflareClient, CloudflareFirewallService, CloudflareErrorHandler, CloudflareOptimizer, CloudflareConfigValidator, CloudflareSetupVerifier, CloudflareValidator)
+- `vercel/` - Vercel provider: `VercelProvider`, `VercelClient`, `VercelFirewallService`, `credentials.ts`, `translator.ts` (Vercel↔Unified rule translation, split out of the old monolithic `RuleTranslator` — see Translators below)
+- `cloudflare/` - Cloudflare provider: `CloudflareProvider`, `CloudflareClient`, `CloudflareFirewallService`, `CloudflareErrorHandler`, `CloudflareOptimizer`, `CloudflareConfigValidator`, `CloudflareSetupVerifier`, `CloudflareValidator`, `credentials.ts`, `translator.ts`
+- `__tests__/conformance.test.ts` - Invariants every `IFirewallProvider` implementation must satisfy, run generically across `PROVIDER_TYPES`. See `adding-a-provider.md` for what a new provider needs to add here.
 
 ### Core Library (`src/lib/`)
 
 #### Services (`src/lib/services/`)
 
-- `FirewallService.ts` - Legacy Vercel business logic for rule management
-- `VercelClient.ts` - Legacy Vercel API integration
 - `ValidationService.ts` - Configuration validation logic
+- The legacy Vercel-only `FirewallService.ts`/`VercelClient.ts` stack (pre-`IFirewallProvider`) was removed in #176, once every command routed through the generic provider interface for both providers. If you find references to it, they're either historical (git log, `.kiro/specs/multi-provider-architecture/`) or stale docs worth fixing.
 
 #### Translators (`src/lib/translators/`)
 
-- `RuleTranslator.ts` - Bidirectional rule translation between providers
+- `RuleTranslator.ts` - Thin static-method facade over each provider's translator module (`vercel/translator.ts`, `cloudflare/translator.ts` — see Provider Abstraction above). Split out in #196 so a provider's translation logic lives with the rest of that provider's adapter instead of accumulating in one shared file; existing call sites (`CloudflareFirewallService`, `VercelFirewallService`, `vercelConfigAdapter`) go through this facade unchanged.
+- `TranslationTypes.ts` - `TranslationWarning`/`TranslationResult`/severity & category types, shared by every translator module and by `TranslationWarningSystem`
 - `FieldMapper.ts` - Field mapping between provider formats
 - `ExpressionBuilder.ts` - Cloudflare expression building
 - `TranslationWarningSystem.ts` - Warning surfacing for lossy translations
@@ -123,8 +125,9 @@ Each command uses `withCredentials()` middleware for config/credential setup:
 - `__mocks__/` - Test mocks (e.g., chalk mock)
 - `testHelpers/` - Shared test mocking utilities (not test files themselves — kept out of any `__tests__/` dir so Jest doesn't try to run them as suites): `providerMocks.ts` (`mockCloudflareClientPrototype`, `emptyCloudflareRuleset`) and `loggerMock.ts` (`createLoggerMock`). Reuse these for any new command-handler test that needs a mocked Cloudflare/Vercel client or logger — see the Testing Gotchas section in `tech.md` for why partial/ad-hoc mocks here are a trap.
 - `*.test.ts` - Integration and validation tests
-- Provider tests in `src/lib/providers/cloudflare/__tests__/` and `src/lib/providers/vercel/__tests__/`
-- Translator tests in `src/lib/translators/__tests__/`
+- Provider tests in `src/lib/providers/cloudflare/__tests__/` and `src/lib/providers/vercel/__tests__/`, including each provider's own `translator.test.ts` (post-#196 — `RuleTranslator.test.ts` no longer exists as one file; its Vercel/Cloudflare cases moved here)
+- Provider conformance suite in `src/lib/providers/__tests__/conformance.test.ts` (#197) — invariants every `IFirewallProvider` must satisfy, run generically across `PROVIDER_TYPES`
+- Remaining translator-infrastructure tests (not provider-specific) in `src/lib/translators/__tests__/`: `ExpressionBuilder`, `WirefilterParser`, `TranslationWarningSystem`
 - Schema tests in `src/lib/schemas/__tests__/`
 - Utility tests in `src/lib/utils/__tests__/`
 - Error tests in `src/lib/errors/__tests__/`

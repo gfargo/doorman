@@ -12,6 +12,7 @@
 | Tech stack, build/test/lint commands, architecture patterns | [`.kiro/steering/tech.md`](.kiro/steering/tech.md) |
 | Branching & release strategy, CI/CD | [`.kiro/steering/tech.md`](.kiro/steering/tech.md) |
 | Wiki-powered docs site workflow | [`.kiro/steering/wiki-docs.md`](.kiro/steering/wiki-docs.md) |
+| Adding a new firewall provider (checklist, known gaps) | [`.kiro/steering/adding-a-provider.md`](.kiro/steering/adding-a-provider.md) |
 
 ---
 
