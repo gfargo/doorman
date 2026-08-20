@@ -268,6 +268,163 @@ describe('providerHelper', () => {
     })
   })
 
+  // Characterization tests pinning the credential *precedence* chain, which
+  // nothing asserted before: CLI flag > config file > environment variable,
+  // independently for every credential. These are the subtleties a
+  // credential-resolution refactor (#182) would break silently — a wrong
+  // precedence still resolves *a* credential, so the suite would stay green
+  // while users authenticated as the wrong project/zone. Written against
+  // current behaviour first, as a regression baseline.
+  describe('credential precedence (flag > config > env)', () => {
+    const mockedVercelFromConfig = VercelProvider.fromConfig as jest.MockedFunction<typeof VercelProvider.fromConfig>
+    const mockedCloudflareFromConfig = CloudflareProvider.fromConfig as jest.MockedFunction<
+      typeof CloudflareProvider.fromConfig
+    >
+
+    describe('vercel', () => {
+      it('prefers the CLI flag over both config and env for every credential', async () => {
+        process.env.VERCEL_TOKEN = 'env-token'
+        process.env.VERCEL_PROJECT_ID = 'env-project'
+        process.env.VERCEL_TEAM_ID = 'env-team'
+
+        await getProviderInstance({
+          provider: 'vercel',
+          token: 'flag-token',
+          projectId: 'flag-project',
+          teamId: 'flag-team',
+          config: { projectId: 'config-project', teamId: 'config-team' } as never,
+          interactive: false,
+        })
+
+        expect(mockedVercelFromConfig).toHaveBeenCalledWith({
+          token: 'flag-token',
+          projectId: 'flag-project',
+          teamId: 'flag-team',
+        })
+      })
+
+      it('prefers the config file over env for projectId/teamId', async () => {
+        process.env.VERCEL_TOKEN = 'env-token'
+        process.env.VERCEL_PROJECT_ID = 'env-project'
+        process.env.VERCEL_TEAM_ID = 'env-team'
+
+        await getProviderInstance({
+          provider: 'vercel',
+          config: { projectId: 'config-project', teamId: 'config-team' } as never,
+          interactive: false,
+        })
+
+        expect(mockedVercelFromConfig).toHaveBeenCalledWith({
+          // token has no config-file home on the legacy shape, so it still
+          // comes from env — that asymmetry is intentional and pinned here.
+          token: 'env-token',
+          projectId: 'config-project',
+          teamId: 'config-team',
+        })
+      })
+
+      it('falls back to env when neither flag nor config supplies a value', async () => {
+        process.env.VERCEL_TOKEN = 'env-token'
+        process.env.VERCEL_PROJECT_ID = 'env-project'
+        process.env.VERCEL_TEAM_ID = 'env-team'
+
+        await getProviderInstance({ provider: 'vercel', interactive: false })
+
+        expect(mockedVercelFromConfig).toHaveBeenCalledWith({
+          token: 'env-token',
+          projectId: 'env-project',
+          teamId: 'env-team',
+        })
+      })
+
+      it('resolves each credential independently rather than all-or-nothing', async () => {
+        process.env.VERCEL_TOKEN = 'env-token'
+        process.env.VERCEL_TEAM_ID = 'env-team'
+
+        await getProviderInstance({
+          provider: 'vercel',
+          projectId: 'flag-project',
+          interactive: false,
+        })
+
+        expect(mockedVercelFromConfig).toHaveBeenCalledWith({
+          token: 'env-token',
+          projectId: 'flag-project',
+          teamId: 'env-team',
+        })
+      })
+
+      it('reads projectId/teamId from providers.vercel on a unified config', async () => {
+        process.env.VERCEL_TOKEN = 'env-token'
+
+        await getProviderInstance({
+          provider: 'vercel',
+          config: { providers: { vercel: { projectId: 'unified-project', teamId: 'unified-team' } } } as never,
+          interactive: false,
+        })
+
+        expect(mockedVercelFromConfig).toHaveBeenCalledWith({
+          token: 'env-token',
+          projectId: 'unified-project',
+          teamId: 'unified-team',
+        })
+      })
+    })
+
+    describe('cloudflare', () => {
+      it('prefers the CLI flag over env for every credential', async () => {
+        process.env.CLOUDFLARE_API_TOKEN = 'env-api-token'
+        process.env.CLOUDFLARE_ZONE_ID = 'env-zone'
+        process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account'
+
+        await getProviderInstance({
+          provider: 'cloudflare',
+          apiToken: 'flag-api-token',
+          zoneId: 'flag-zone',
+          accountId: 'flag-account',
+          interactive: false,
+        })
+
+        expect(mockedCloudflareFromConfig).toHaveBeenCalledWith({
+          apiToken: 'flag-api-token',
+          zoneId: 'flag-zone',
+          accountId: 'flag-account',
+        })
+      })
+
+      it('falls back to env for each credential independently', async () => {
+        process.env.CLOUDFLARE_API_TOKEN = 'env-api-token'
+        process.env.CLOUDFLARE_ZONE_ID = 'env-zone'
+        process.env.CLOUDFLARE_ACCOUNT_ID = 'env-account'
+
+        await getProviderInstance({
+          provider: 'cloudflare',
+          zoneId: 'flag-zone',
+          interactive: false,
+        })
+
+        expect(mockedCloudflareFromConfig).toHaveBeenCalledWith({
+          apiToken: 'env-api-token',
+          zoneId: 'flag-zone',
+          accountId: 'env-account',
+        })
+      })
+
+      it('passes accountId through as undefined when nothing supplies it (it is optional)', async () => {
+        process.env.CLOUDFLARE_API_TOKEN = 'env-api-token'
+        process.env.CLOUDFLARE_ZONE_ID = 'env-zone'
+
+        await getProviderInstance({ provider: 'cloudflare', interactive: false })
+
+        expect(mockedCloudflareFromConfig).toHaveBeenCalledWith({
+          apiToken: 'env-api-token',
+          zoneId: 'env-zone',
+          accountId: undefined,
+        })
+      })
+    })
+  })
+
   describe('verifyProviderCredentials', () => {
     it('returns true when credentials are valid', async () => {
       const mockProvider: IFirewallProvider = {
