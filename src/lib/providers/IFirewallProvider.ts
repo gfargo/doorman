@@ -4,9 +4,24 @@
  */
 
 /**
+ * Every provider doorman knows about. **This is the single place to add a
+ * new one** — `ProviderType` derives from it, and everything that needs a
+ * runtime list (CLI `--provider` choices, the interactive picker, provider-
+ * string validation) reads this rather than repeating the literals.
+ *
+ * Deliberately a const array rather than the `ProviderRegistry`'s runtime
+ * membership: yargs builds `--provider`'s `choices` synchronously at
+ * CLI-construction time, before any provider factory has been registered,
+ * so a registry-driven list would be empty exactly when the CLI needs it.
+ * The registry remains the source of truth for provider *instances*; this
+ * is the source of truth for the closed set of known provider *types*.
+ */
+export const PROVIDER_TYPES = ['vercel', 'cloudflare'] as const
+
+/**
  * Provider type discriminator
  */
-export type ProviderType = 'vercel' | 'cloudflare'
+export type ProviderType = (typeof PROVIDER_TYPES)[number]
 
 /**
  * Sync operation options

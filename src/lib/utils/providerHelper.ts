@@ -5,7 +5,7 @@ import { promptSecret } from '../ui/promptSecret'
 import { ProviderDetector } from '../providers/ProviderDetector'
 import { VercelProvider } from '../providers/vercel'
 import { CloudflareProvider } from '../providers/cloudflare'
-import type { IFirewallProvider, ProviderType } from '../providers/IFirewallProvider'
+import { PROVIDER_TYPES, type IFirewallProvider, type ProviderType } from '../providers/IFirewallProvider'
 import type { FirewallConfig, UnifiedConfig } from '../types'
 
 export interface ProviderOptions {
@@ -184,24 +184,35 @@ async function getCloudflareProvider(options: ProviderOptions): Promise<IFirewal
  * Prompt user to select provider
  */
 async function promptForProvider(): Promise<ProviderType> {
+  // Enumerated from PROVIDER_TYPES rather than hardcoded, so a new provider
+  // shows up in the picker automatically instead of needing this menu (and
+  // its numeric mapping, and its range prompt) edited by hand.
   logger.info(chalk.yellow('Unable to auto-detect firewall provider.'))
   logger.info('Please select a provider:\n')
-  logger.info('  1. Vercel Firewall')
-  logger.info('  2. Cloudflare WAF\n')
+  PROVIDER_TYPES.forEach((type, index) => {
+    logger.info(`  ${index + 1}. ${getProviderDisplayName(type)}`)
+  })
+  logger.info('')
 
-  const choice = await prompt('Select provider (1 or 2):', {
+  const choice = await prompt(`Select provider (1-${PROVIDER_TYPES.length}):`, {
     type: 'text',
   })
 
-  const choiceStr = String(choice).toLowerCase()
-  if (choiceStr === '1' || choiceStr === 'vercel') {
-    return 'vercel'
-  } else if (choiceStr === '2' || choiceStr === 'cloudflare') {
-    return 'cloudflare'
-  } else {
-    logger.warn(`Invalid choice: ${choice}, defaulting to Vercel`)
-    return 'vercel'
+  const choiceStr = String(choice).trim().toLowerCase()
+
+  const byName = PROVIDER_TYPES.find((type) => type === choiceStr)
+  if (byName) {
+    return byName
   }
+
+  const index = Number(choiceStr)
+  if (Number.isInteger(index) && index >= 1 && index <= PROVIDER_TYPES.length) {
+    return PROVIDER_TYPES[index - 1]!
+  }
+
+  const fallback = PROVIDER_TYPES[0]!
+  logger.warn(`Invalid choice: ${choice}, defaulting to ${getProviderDisplayName(fallback)}`)
+  return fallback
 }
 
 /**

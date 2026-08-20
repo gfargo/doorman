@@ -4,11 +4,13 @@ import { logger } from '../lib/logger'
 import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
 import type { UnifiedConfig } from '../lib/types/unified'
 import { toUnifiedConfig } from '../lib/utils/vercelConfigAdapter'
+import type { ProviderType } from '../lib/providers/IFirewallProvider'
+import { providerOption } from '../lib/utils/providerOption'
 import { withCredentials } from '../lib/utils/withCredentials'
 
 interface DiffOptions {
   config?: string
-  provider?: 'vercel' | 'cloudflare'
+  provider?: ProviderType | 'cloudflare'
   projectId?: string
   teamId?: string
   token?: string
@@ -25,7 +27,7 @@ export const desc = 'Show detailed differences between local and remote firewall
 
 export const builder = {
   config: { alias: 'c', type: 'string', description: 'Path to firewall config file' },
-  provider: { type: 'string', choices: ['vercel', 'cloudflare'], description: 'Firewall provider (auto-detected)' },
+  provider: providerOption,
   projectId: { alias: 'p', type: 'string', description: 'Vercel Project ID' },
   teamId: { alias: 't', type: 'string', description: 'Vercel Team ID' },
   token: { type: 'string', description: 'Vercel API token (defaults to VERCEL_TOKEN env var)' },

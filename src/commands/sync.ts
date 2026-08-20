@@ -6,11 +6,13 @@ import type { UnifiedIPRule, UnifiedRule } from '../lib/types/unified'
 import { FirewallConfig } from '../lib/types'
 import { saveConfig } from '../lib/utils/config'
 import { applySyncResultToConfig, toUnifiedConfig } from '../lib/utils/vercelConfigAdapter'
+import type { ProviderType } from '../lib/providers/IFirewallProvider'
+import { providerOption } from '../lib/utils/providerOption'
 import { withCredentials } from '../lib/utils/withCredentials'
 
 interface SyncOptions {
   config?: string
-  provider?: 'vercel' | 'cloudflare'
+  provider?: ProviderType | 'cloudflare'
   projectId?: string
   teamId?: string
   token?: string
@@ -31,7 +33,7 @@ export const builder = {
     type: 'string',
     description: 'Path to firewall config file (defaults to .doorman.json)',
   },
-  provider: { type: 'string', choices: ['vercel', 'cloudflare'], description: 'Firewall provider (auto-detected)' },
+  provider: providerOption,
   projectId: {
     alias: 'p',
     type: 'string',

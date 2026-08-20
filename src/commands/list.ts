@@ -4,10 +4,12 @@ import { z } from 'zod'
 import { logger } from '../lib/logger'
 import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
 import { configVersionSchema } from '../lib/schemas/firewallSchemas'
+import type { ProviderType } from '../lib/providers/IFirewallProvider'
+import { providerOption } from '../lib/utils/providerOption'
 import { withCredentials } from '../lib/utils/withCredentials'
 
 interface ListOptions {
-  provider?: 'vercel' | 'cloudflare'
+  provider?: ProviderType | 'cloudflare'
   projectId: string
   teamId: string
   token?: string
@@ -28,7 +30,7 @@ export const builder = {
     type: 'number',
     description: 'Specific configuration version to fetch (defaults to latest)',
   },
-  provider: { type: 'string', choices: ['vercel', 'cloudflare'], description: 'Firewall provider (auto-detected)' },
+  provider: providerOption,
   projectId: {
     alias: 'p',
     type: 'string',

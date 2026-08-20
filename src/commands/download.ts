@@ -8,11 +8,13 @@ import { FirewallConfig } from '../lib/types'
 import { prompt } from '../lib/ui/prompt'
 import { saveConfig } from '../lib/utils/config'
 import { fromUnifiedConfig } from '../lib/utils/vercelConfigAdapter'
+import type { ProviderType } from '../lib/providers/IFirewallProvider'
+import { providerOption } from '../lib/utils/providerOption'
 import { withCredentials } from '../lib/utils/withCredentials'
 
 interface DownloadOptions {
   config?: string
-  provider?: 'vercel' | 'cloudflare'
+  provider?: ProviderType | 'cloudflare'
   projectId?: string
   teamId?: string
   token?: string
@@ -39,7 +41,7 @@ export const builder = {
     type: 'string',
     description: 'Path to firewall config file (defaults to .doorman.json)',
   },
-  provider: { type: 'string', choices: ['vercel', 'cloudflare'], description: 'Firewall provider (auto-detected)' },
+  provider: providerOption,
   projectId: {
     alias: 'p',
     type: 'string',

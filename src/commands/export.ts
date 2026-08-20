@@ -7,11 +7,13 @@ import type { UnifiedConfig, UnifiedIPRule, UnifiedRule } from '../lib/types/uni
 import { getConfig } from '../lib/utils/config'
 import { handleCommandError } from '../lib/utils/handleCommandError'
 import { toUnifiedConfig } from '../lib/utils/vercelConfigAdapter'
+import type { ProviderType } from '../lib/providers/IFirewallProvider'
+import { providerOption } from '../lib/utils/providerOption'
 import { withCredentials } from '../lib/utils/withCredentials'
 
 interface ExportOptions {
   config?: string
-  provider?: 'vercel' | 'cloudflare'
+  provider?: ProviderType | 'cloudflare'
   projectId?: string
   teamId?: string
   token?: string
@@ -34,7 +36,7 @@ export const builder = {
     type: 'string',
     description: 'Path to firewall config file (defaults to .doorman.json)',
   },
-  provider: { type: 'string', choices: ['vercel', 'cloudflare'], description: 'Firewall provider (auto-detected)' },
+  provider: providerOption,
   projectId: {
     alias: 'p',
     type: 'string',

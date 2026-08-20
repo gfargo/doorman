@@ -1,5 +1,5 @@
 import { logger } from '../logger'
-import type { ProviderType } from './IFirewallProvider'
+import { PROVIDER_TYPES, type ProviderType } from './IFirewallProvider'
 
 /**
  * Provider detection result
@@ -155,7 +155,7 @@ export class ProviderDetector {
    * Validate provider type string
    */
   private static isValidProvider(provider: string): boolean {
-    return provider === 'vercel' || provider === 'cloudflare'
+    return (PROVIDER_TYPES as readonly string[]).includes(provider)
   }
 
   /**
