@@ -1,3 +1,10 @@
+# [3.10.0](https://github.com/gfargo/doorman/compare/v3.9.2...v3.10.0) (2026-08-20)
+
+
+### Features
+
+* add Fastly Next-Gen WAF as a third firewall provider ([#204](https://github.com/gfargo/doorman/issues/204)) ([33a0161](https://github.com/gfargo/doorman/commit/33a01611e82103ba05ac1c7bbf5f4da1cc1abd83)), closes [#186](https://github.com/gfargo/doorman/issues/186) [#203](https://github.com/gfargo/doorman/issues/203)
+
 ## [3.9.2](https://github.com/gfargo/doorman/compare/v3.9.1...v3.9.2) (2026-08-20)
 
 
