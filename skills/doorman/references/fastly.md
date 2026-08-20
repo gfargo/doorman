@@ -33,13 +33,14 @@ Multi-provider config with explicit provider declaration:
 }
 ```
 
-Or pass `--provider fastly` to any command to override the default.
+Or pass `--provider fastly` to any provider-aware command (`sync`, `diff`, `download`, `list`, `status`, `watch`, `backup`, `export`) to override auto-detection.
 
 ## Usage
 
+`doorman init` only supports Vercel today — it has no `--provider` flag and doesn't prompt for Fastly credentials. Create `.doorman.json` by hand using the config shape above, then:
+
 ```bash
-doorman init --provider fastly          # Initialize Fastly config
-doorman validate --provider fastly      # Validate against Fastly constraints
+doorman validate                        # Validate — auto-detects Fastly from the config's `provider` field
 doorman sync --provider fastly          # Deploy to Fastly
 doorman download --provider fastly      # Pull rules from Fastly
 doorman diff --provider fastly          # Compare local vs live

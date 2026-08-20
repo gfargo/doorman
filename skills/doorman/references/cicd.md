@@ -203,21 +203,21 @@ doorman sync --provider cloudflare --config .doorman.json
 ```bash
 # Migrate rules between providers
 doorman download --provider vercel --config .doorman.json
-doorman validate --provider cloudflare --config .doorman.json
+doorman validate --config .doorman.json
 doorman sync --provider cloudflare --config .doorman.json
 ```
 
 ## Command Flags Reference
 
-Global flags available on all commands:
+Common flags (availability varies by command):
 
-| Flag                                              | Description                                                    |
-| ------------------------------------------------- | -------------------------------------------------------------- |
-| `--config <path>`                                 | Path to config file (default: auto-discovered `.doorman.json`) |
-| `--provider vercel\|cloudflare\|fastly`           | Override provider detection                                    |
-| `--format json\|table\|yaml\|markdown\|terraform` | Output format (command-dependent)                              |
-| `--verbose`                                       | Show detailed output                                           |
-| `--output <path>`                                 | Write output to file instead of stdout                         |
+| Flag                                              | Description                                                                                           |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `--config <path>`                                 | Path to config file (default: auto-discovered `.doorman.json`)                                        |
+| `--provider vercel\|cloudflare\|fastly`           | Override provider detection — `sync`/`diff`/`download`/`list`/`status`/`watch`/`backup`/`export` only |
+| `--format json\|table\|yaml\|markdown\|terraform` | Output format (command-dependent)                                                                     |
+| `--verbose`                                       | Show detailed output                                                                                  |
+| `--output <path>`                                 | Write output to file instead of stdout                                                                |
 
 ## Error Handling in Automation
 

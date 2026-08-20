@@ -15,6 +15,7 @@ CLOUDFLARE_ACCOUNT_ID=acc_xxx      # Optional — enables Lists API for bulk IP 
 ### API Token Permissions
 
 Create a Custom Token at https://dash.cloudflare.com/profile/api-tokens with:
+
 - **Zone > Firewall Services > Edit** — for custom rulesets
 - **Account > Account Filter Lists > Edit** — for Lists API (bulk IP management, requires `CLOUDFLARE_ACCOUNT_ID`)
 
@@ -37,13 +38,14 @@ Multi-provider config with explicit provider declaration:
 }
 ```
 
-Or pass `--provider cloudflare` to any command to override the default.
+Or pass `--provider cloudflare` to any provider-aware command (`sync`, `diff`, `download`, `list`, `status`, `watch`, `backup`, `export`) to override auto-detection.
 
 ## Usage
 
+`doorman init` only supports Vercel today — it has no `--provider` flag and doesn't prompt for Cloudflare credentials. Create `.doorman.json` by hand using the config shape above, then:
+
 ```bash
-doorman init --provider cloudflare          # Initialize Cloudflare config
-doorman validate --provider cloudflare      # Validate against Cloudflare constraints
+doorman validate                            # Validate — auto-detects Cloudflare from the config's `provider` field
 doorman sync --provider cloudflare          # Deploy to Cloudflare
 doorman download --provider cloudflare      # Pull rules from Cloudflare
 doorman diff --provider cloudflare          # Compare local vs live
@@ -56,33 +58,33 @@ Doorman translates its unified rule format into Cloudflare Wirefilter expression
 
 ### Field Mapping
 
-| Doorman Type | Cloudflare Field |
-|-------------|------------------|
-| `path` | `http.request.uri.path` |
-| `method` | `http.request.method` |
-| `host` | `http.host` |
-| `user_agent` | `http.user_agent` |
-| `ip_address` | `ip.src` |
-| `header` | `http.request.headers["key"]` |
-| `query` | `http.request.uri.query` |
-| `cookie` | `http.cookie` |
-| `geo_country` | `ip.geoip.country` |
-| `geo_city` | `ip.geoip.city` |
-| `geo_continent` | `ip.geoip.continent` |
-| `geo_country_region` | `ip.geoip.subdivision_1` |
-| `geo_as_number` | `ip.geoip.asnum` |
-| `scheme` | `ssl` (boolean) |
+| Doorman Type         | Cloudflare Field              |
+| -------------------- | ----------------------------- |
+| `path`               | `http.request.uri.path`       |
+| `method`             | `http.request.method`         |
+| `host`               | `http.host`                   |
+| `user_agent`         | `http.user_agent`             |
+| `ip_address`         | `ip.src`                      |
+| `header`             | `http.request.headers["key"]` |
+| `query`              | `http.request.uri.query`      |
+| `cookie`             | `http.cookie`                 |
+| `geo_country`        | `ip.geoip.country`            |
+| `geo_city`           | `ip.geoip.city`               |
+| `geo_continent`      | `ip.geoip.continent`          |
+| `geo_country_region` | `ip.geoip.subdivision_1`      |
+| `geo_as_number`      | `ip.geoip.asnum`              |
+| `scheme`             | `ssl` (boolean)               |
 
 ### Action Mapping
 
-| Doorman Action | Cloudflare Action |
-|---------------|-------------------|
-| `deny` | `block` |
-| `challenge` | `managed_challenge` |
-| `rate_limit` | `block` + `ratelimit` config |
-| `redirect` | `redirect` + `from_value` params |
-| `log` | `log` |
-| `bypass` | `skip` |
+| Doorman Action | Cloudflare Action                |
+| -------------- | -------------------------------- |
+| `deny`         | `block`                          |
+| `challenge`    | `managed_challenge`              |
+| `rate_limit`   | `block` + `ratelimit` config     |
+| `redirect`     | `redirect` + `from_value` params |
+| `log`          | `log`                            |
+| `bypass`       | `skip`                           |
 
 ## Lists API (Bulk IP Management)
 
@@ -97,16 +99,16 @@ Without `CLOUDFLARE_ACCOUNT_ID`, IP blocking falls back to individual WAF rules 
 
 ## Limitations & Differences
 
-| Feature | Vercel | Cloudflare | Notes |
-|---------|--------|------------|-------|
-| `re` operator | All plans | Enterprise only | Use `sub`/`pre`/`suf` as alternatives |
-| `environment` type | Yes | No | Vercel-specific concept |
-| `ja3_digest`/`ja4_digest` | Yes | No | Vercel TLS fingerprints |
-| `region` type | Yes | No | Vercel edge region |
-| IP Lists (bulk) | Individual rules | Lists API | Cloudflare needs `accountId` |
-| Max custom rules | ~100 | 5-125 (plan dependent) | Free: 5, Pro: 20, Business: 100, Enterprise: 125+ |
-| Rate limit | Via rule action | Separate phase | Different underlying mechanism |
-| Rule order | Parallel evaluation | Sequential (first match wins) | Ordering matters on Cloudflare |
+| Feature                   | Vercel              | Cloudflare                    | Notes                                             |
+| ------------------------- | ------------------- | ----------------------------- | ------------------------------------------------- |
+| `re` operator             | All plans           | Enterprise only               | Use `sub`/`pre`/`suf` as alternatives             |
+| `environment` type        | Yes                 | No                            | Vercel-specific concept                           |
+| `ja3_digest`/`ja4_digest` | Yes                 | No                            | Vercel TLS fingerprints                           |
+| `region` type             | Yes                 | No                            | Vercel edge region                                |
+| IP Lists (bulk)           | Individual rules    | Lists API                     | Cloudflare needs `accountId`                      |
+| Max custom rules          | ~100                | 5-125 (plan dependent)        | Free: 5, Pro: 20, Business: 100, Enterprise: 125+ |
+| Rate limit                | Via rule action     | Separate phase                | Different underlying mechanism                    |
+| Rule order                | Parallel evaluation | Sequential (first match wins) | Ordering matters on Cloudflare                    |
 
 ## Translation Warnings
 
@@ -117,7 +119,7 @@ The `RuleTranslator` surfaces warnings when a translation is lossy:
 - **Duration differences** — `actionDuration` maps differently between providers
 - **Negation edge cases** — complex negated conditions may produce subtly different behavior in Wirefilter
 
-Run `doorman validate --provider cloudflare` to surface warnings before deploying.
+Run `doorman validate` to surface warnings before deploying — it auto-detects Cloudflare from the config's `provider` field.
 
 ## Cloudflare-Specific Validation
 
@@ -166,9 +168,7 @@ The `CloudflareOptimizer` consolidates rules for efficient deployment:
       "name": "Rate Limit API",
       "description": "Limit API requests to 100/min per IP",
       "active": true,
-      "conditionGroup": [
-        { "conditions": [{ "type": "path", "op": "pre", "value": "/api/" }] }
-      ],
+      "conditionGroup": [{ "conditions": [{ "type": "path", "op": "pre", "value": "/api/" }] }],
       "action": {
         "mitigate": {
           "action": "rate_limit",
@@ -181,8 +181,6 @@ The `CloudflareOptimizer` consolidates rules for efficient deployment:
       }
     }
   ],
-  "ips": [
-    { "ip": "203.0.113.0/24", "action": "deny", "notes": "Known attack subnet" }
-  ]
+  "ips": [{ "ip": "203.0.113.0/24", "action": "deny", "notes": "Known attack subnet" }]
 }
 ```
