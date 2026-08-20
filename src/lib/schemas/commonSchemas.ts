@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { ActionType, Operator, FieldType, ConfigMetadata, ProvidersConfig } from '../types/common'
+import { PROVIDER_TYPES } from '../providers/IFirewallProvider'
 
 /**
  * Common validation schemas shared across all providers
@@ -93,8 +94,13 @@ export const configMetadataSchema = z.object({
   migratedAt: timestampSchema,
 }) satisfies z.ZodType<ConfigMetadata>
 
-// Provider type schema
-export const providerTypeSchema = z.enum(['vercel', 'cloudflare'])
+// Provider type schema. Derived from `PROVIDER_TYPES` rather than a
+// hardcoded literal list — a config's `provider` field being validated
+// against a schema that silently doesn't know about a new provider is
+// exactly the class of bug this once caused (a `provider: 'fastly'` config
+// would otherwise fail schema validation for a provider that's fully
+// registered everywhere else).
+export const providerTypeSchema = z.enum(PROVIDER_TYPES)
 
 // Providers config schema
 export const providersConfigSchema = z.object({
@@ -108,6 +114,11 @@ export const providersConfigSchema = z.object({
     .object({
       zoneId: z.string().optional(),
       accountId: z.string().optional(),
+    })
+    .optional(),
+  fastly: z
+    .object({
+      workspaceId: z.string().optional(),
     })
     .optional(),
 }) satisfies z.ZodType<ProvidersConfig>

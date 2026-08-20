@@ -2,6 +2,8 @@ import type { CloudflareClient } from '../../lib/providers/cloudflare/Cloudflare
 import { CloudflareOptimizer } from '../../lib/providers/cloudflare/CloudflareOptimizer'
 import type { CloudflareRuleset } from '../../lib/types/cloudflare'
 import type { VercelClient, VercelConfig } from '../../lib/providers/vercel/VercelClient'
+import type { FastlyClient } from '../../lib/providers/fastly/FastlyClient'
+import type { FastlyRule, FastlyRuleInput, FastlyList } from '../../lib/types/fastly'
 
 /**
  * Default empty Cloudflare ruleset used by tests that don't care about its contents.
@@ -116,4 +118,89 @@ export function mockVercelClientPrototype(
     .mockImplementation((rule) => Promise.resolve(rule)) as any
   MockedVercelClient.prototype.deleteIPBlockingRule = jest.fn().mockResolvedValue(undefined) as any
   MockedVercelClient.prototype.verifyCredentials = jest.fn().mockResolvedValue(true) as any
+}
+
+/**
+ * Default empty Fastly list used by tests that don't care about its contents.
+ */
+export function emptyFastlyList(overrides: Partial<FastlyList> = {}): FastlyList {
+  return {
+    id: 'list-1',
+    name: 'doorman-managed-deny',
+    description: 'Managed by doorman',
+    type: 'ip',
+    entries: [],
+    reference_id: '',
+    scope: { type: 'workspace' },
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
+let fastlyRuleIdCounter = 0
+
+/** Builds a plausible API response `FastlyRule` from a `FastlyRuleInput`, merging its three condition arrays into the response's single polymorphic `conditions[]` — mirrors what Fastly's real API actually returns. */
+function fastlyRuleFromInput(id: string, input: FastlyRuleInput): FastlyRule {
+  return {
+    id,
+    type: input.type,
+    scope: { type: 'workspace', applies_to: ['workspace-1'] },
+    enabled: input.enabled,
+    description: input.description,
+    group_operator: input.group_operator,
+    request_logging: input.request_logging ?? 'sampled',
+    conditions: [...(input.conditions ?? []), ...(input.group_conditions ?? []), ...(input.multival_conditions ?? [])],
+    actions: input.actions,
+    rate_limit: input.rate_limit ?? null,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+  }
+}
+
+/**
+ * Wires up a mocked `FastlyClient` class (from `jest.mock('.../providers/fastly/FastlyClient')`)
+ * with sensible defaults so commands that resolve a Fastly provider don't make real network
+ * calls. Call this after `jest.mock('.../providers/fastly/FastlyClient')` in the test file; pass
+ * the mocked class itself.
+ */
+export function mockFastlyClientPrototype(
+  MockedFastlyClient: jest.MockedClass<typeof FastlyClient>,
+  options: { rules?: FastlyRule[]; lists?: FastlyList[] } = {},
+): void {
+  const rules = options.rules ?? []
+  const lists = options.lists ?? []
+
+  // See the equivalent note on `mockVercelClientPrototype` — an automock
+  // doesn't run the real constructor, so `this.workspaceId` (read via
+  // `this.client['workspaceId']`) would otherwise be undefined.
+  MockedFastlyClient.mockImplementation(function (this: FastlyClient, workspaceId: string, apiToken: string) {
+    Object.assign(this, { workspaceId, apiToken })
+  } as unknown as (workspaceId: string, apiToken: string) => FastlyClient)
+
+  MockedFastlyClient.prototype.fetchRules = jest.fn().mockResolvedValue(rules) as any
+  MockedFastlyClient.prototype.createRule = jest.fn().mockImplementation((input: FastlyRuleInput) => {
+    fastlyRuleIdCounter += 1
+    return Promise.resolve(fastlyRuleFromInput(`rule_${fastlyRuleIdCounter}`, input))
+  }) as any
+  MockedFastlyClient.prototype.updateRule = jest
+    .fn()
+    .mockImplementation((id: string, input: FastlyRuleInput) => Promise.resolve(fastlyRuleFromInput(id, input))) as any
+  MockedFastlyClient.prototype.deleteRule = jest.fn().mockResolvedValue(undefined) as any
+  MockedFastlyClient.prototype.fetchLists = jest.fn().mockResolvedValue(lists) as any
+  MockedFastlyClient.prototype.findList = jest
+    .fn()
+    .mockImplementation((name: string) => Promise.resolve(lists.find((l) => l.name === name) ?? null)) as any
+  MockedFastlyClient.prototype.createList = jest
+    .fn()
+    .mockImplementation((name: string, entries: string[]) => Promise.resolve(emptyFastlyList({ name, entries }))) as any
+  MockedFastlyClient.prototype.getOrCreateList = jest
+    .fn()
+    .mockImplementation((name: string) =>
+      Promise.resolve(lists.find((l) => l.name === name) ?? emptyFastlyList({ name })),
+    ) as any
+  MockedFastlyClient.prototype.updateListEntries = jest
+    .fn()
+    .mockImplementation((id: string, entries: string[]) => Promise.resolve(emptyFastlyList({ id, entries }))) as any
+  MockedFastlyClient.prototype.verifyCredentials = jest.fn().mockResolvedValue(true) as any
 }

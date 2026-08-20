@@ -28,22 +28,31 @@ export class CompatibilityMatrix {
     log: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full' },
+      fastly: {
+        level: 'partial',
+        notes: 'No dedicated action; maps to "allow"',
+        limitations: ['request_logging is set at the rule level, not per-action'],
+      },
     },
     deny: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'Maps to "block" action' },
+      fastly: { level: 'full', notes: 'Maps to "block" action' },
     },
     block: {
       vercel: { level: 'not-supported' },
       cloudflare: { level: 'full' },
+      fastly: { level: 'full' },
     },
     challenge: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'Maps to "managed_challenge" for better accuracy' },
+      fastly: { level: 'full', notes: 'Maps to "browser_challenge" action' },
     },
     bypass: {
       vercel: { level: 'full' },
       cloudflare: { level: 'partial', notes: 'Maps to "skip" action', limitations: ['Limited skip options'] },
+      fastly: { level: 'partial', notes: 'No equivalent action; maps to "allow"' },
     },
     rate_limit: {
       vercel: { level: 'full' },
@@ -52,14 +61,21 @@ export class CompatibilityMatrix {
         notes: 'Uses separate rate limit configuration',
         limitations: ['Different configuration format'],
       },
+      fastly: {
+        level: 'full',
+        notes: 'Uses a distinct rule type ("rate_limit") with its own rate_limit block',
+        limitations: ['Requires a pre-existing custom signal to count against'],
+      },
     },
     redirect: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full' },
+      fastly: { level: 'full' },
     },
     allow: {
       vercel: { level: 'not-supported' },
       cloudflare: { level: 'full' },
+      fastly: { level: 'full' },
     },
   }
 
@@ -70,86 +86,111 @@ export class CompatibilityMatrix {
     host: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.host' },
+      fastly: { level: 'full', notes: 'Maps to the "domain" condition field' },
     },
     path: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.request.uri.path' },
+      fastly: { level: 'full' },
     },
     method: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.request.method' },
+      fastly: { level: 'full' },
     },
     header: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.request.headers["name"]' },
+      fastly: { level: 'full', notes: 'Maps to a "request_header" multival condition' },
     },
     query: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.request.uri.query' },
+      fastly: { level: 'full', notes: 'Maps to a "query_parameter" multival condition' },
     },
     cookie: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.cookie' },
+      fastly: { level: 'full', notes: 'Maps to a "request_cookie" multival condition' },
     },
     target_path: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'Maps to http.request.uri.path' },
+      fastly: { level: 'not-supported', notes: 'No Fastly equivalent condition field' },
     },
     ip_address: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.src' },
+      fastly: { level: 'full', notes: 'Maps to the "ip" condition field' },
     },
     region: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.geoip.subdivision_1' },
+      fastly: { level: 'not-supported', notes: 'Fastly only exposes country-level geo matching' },
     },
     protocol: {
       vercel: { level: 'full' },
       cloudflare: { level: 'partial', notes: 'Maps to ssl boolean', limitations: ['Only checks HTTPS vs HTTP'] },
+      fastly: { level: 'not-supported', notes: 'No Fastly equivalent condition field' },
     },
     scheme: {
       vercel: { level: 'full' },
       cloudflare: { level: 'partial', notes: 'Maps to ssl boolean', limitations: ['Only checks HTTPS vs HTTP'] },
+      fastly: { level: 'full', notes: 'Maps to the "scheme" condition field' },
     },
     environment: {
       vercel: { level: 'full' },
       cloudflare: { level: 'not-supported', notes: 'Vercel-specific feature' },
+      fastly: { level: 'not-supported', notes: 'Vercel-specific feature' },
     },
     user_agent: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.user_agent' },
+      fastly: { level: 'full' },
     },
     geo_continent: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.geoip.continent' },
+      fastly: { level: 'not-supported', notes: 'Fastly only exposes country-level geo matching' },
     },
     geo_country: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.geoip.country' },
+      fastly: { level: 'full', notes: 'Maps to the "country" condition field' },
     },
     geo_country_region: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.geoip.subdivision_1' },
+      fastly: { level: 'not-supported', notes: 'Fastly only exposes country-level geo matching' },
     },
     geo_city: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.geoip.city' },
+      fastly: { level: 'not-supported', notes: 'Fastly only exposes country-level geo matching' },
     },
     geo_as_number: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.geoip.asnum' },
+      fastly: { level: 'not-supported', notes: 'No Fastly equivalent condition field' },
     },
     ja4_digest: {
       vercel: { level: 'full' },
       cloudflare: { level: 'not-supported', notes: 'Vercel-specific feature' },
+      fastly: { level: 'not-supported', notes: "Not currently mapped by doorman's Fastly translator" },
     },
     ja3_digest: {
       vercel: { level: 'full' },
       cloudflare: { level: 'not-supported', notes: 'Vercel-specific feature' },
+      fastly: {
+        level: 'not-supported',
+        notes:
+          "Fastly exposes a JA3 fingerprint condition field, but it is not currently mapped by doorman's translator",
+      },
     },
     rate_limit_api_id: {
       vercel: { level: 'full' },
       cloudflare: { level: 'not-supported', notes: 'Vercel-specific feature' },
+      fastly: { level: 'not-supported', notes: 'Vercel-specific feature' },
     },
   }
 

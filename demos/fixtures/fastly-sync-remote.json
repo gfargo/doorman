@@ -1,0 +1,33 @@
+{
+  "workspaceId": "workspace_demo",
+  "workspaceName": "Demo Workspace",
+  "rules": [
+    {
+      "id": "rule_block_bad_bots",
+      "type": "request",
+      "scope": { "type": "workspace", "applies_to": ["workspace_demo"] },
+      "enabled": true,
+      "description": "Block Bad Bots",
+      "group_operator": "all",
+      "request_logging": "sampled",
+      "conditions": [{ "type": "single", "field": "user_agent", "operator": "contains", "value": "bot" }],
+      "actions": [{ "type": "block" }],
+      "rate_limit": null,
+      "created_at": "2026-01-12T15:45:00.000Z",
+      "updated_at": "2026-01-12T15:45:00.000Z"
+    }
+  ],
+  "lists": [
+    {
+      "id": "list_deny_demo",
+      "name": "doorman-managed-deny",
+      "description": "Managed by doorman",
+      "type": "ip",
+      "entries": ["198.51.100.7"],
+      "reference_id": "",
+      "scope": { "type": "workspace" },
+      "created_at": "2026-01-12T15:45:00.000Z",
+      "updated_at": "2026-01-12T15:45:00.000Z"
+    }
+  ]
+}

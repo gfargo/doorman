@@ -1,6 +1,7 @@
 import type { ProviderType } from './IFirewallProvider'
 import { vercelCredentials } from './vercel/credentials'
 import { cloudflareCredentials } from './cloudflare/credentials'
+import { fastlyCredentials } from './fastly/credentials'
 
 /**
  * One credential a provider needs, described rather than hardcoded at each
@@ -94,6 +95,7 @@ export function missingRequiredCredentials(
 export const CREDENTIAL_DESCRIPTORS: Record<ProviderType, CredentialDescriptor> = {
   vercel: vercelCredentials,
   cloudflare: cloudflareCredentials,
+  fastly: fastlyCredentials,
 }
 
 /** The credential descriptor for a provider. */

@@ -62,6 +62,17 @@ export class ProviderDetector {
           reasons,
         }
       }
+
+      // Check for Fastly config
+      const fastly = (providers.fastly || {}) as Record<string, unknown>
+      if (typeof fastly.workspaceId === 'string') {
+        reasons.push('Fastly workspace ID found in config')
+        return {
+          provider: 'fastly',
+          confidence: 'high',
+          reasons,
+        }
+      }
     }
 
     // 3. Check legacy Vercel config format (v1)
@@ -144,6 +155,25 @@ export class ProviderDetector {
       }
     }
 
+    // Check Fastly env vars
+    if (process.env.FASTLY_WORKSPACE_ID && process.env.FASTLY_API_TOKEN) {
+      reasons.push('Fastly credentials found in environment variables')
+      return {
+        provider: 'fastly',
+        confidence: 'medium',
+        reasons,
+      }
+    }
+
+    if (process.env.FASTLY_WORKSPACE_ID) {
+      reasons.push('Fastly workspace ID found in environment')
+      return {
+        provider: 'fastly',
+        confidence: 'medium',
+        reasons,
+      }
+    }
+
     return {
       provider: null,
       confidence: 'low',
@@ -205,6 +235,10 @@ export class ProviderDetector {
       if (typeof vercel.projectId === 'string') {
         providers.add('vercel')
       }
+      const fastly = (providersCfg.fastly || {}) as Record<string, unknown>
+      if (typeof fastly.workspaceId === 'string') {
+        providers.add('fastly')
+      }
     }
 
     // Check legacy Vercel config
@@ -218,6 +252,9 @@ export class ProviderDetector {
     }
     if (process.env.VERCEL_PROJECT_ID) {
       providers.add('vercel')
+    }
+    if (process.env.FASTLY_WORKSPACE_ID) {
+      providers.add('fastly')
     }
 
     return Array.from(providers)

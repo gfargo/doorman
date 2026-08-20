@@ -48,18 +48,22 @@ jest.mock('../../ui/prompt', () => ({
 
 jest.mock('../vercel/VercelClient')
 jest.mock('../cloudflare/CloudflareClient')
+jest.mock('../fastly/FastlyClient')
 
 import { PROVIDER_TYPES, type ProviderType, type FeatureSet } from '../IFirewallProvider'
 import { CREDENTIAL_DESCRIPTORS, resolveCredentials } from '../credentials'
 import { getProviderInstance, type ProviderOptions } from '../../utils/providerHelper'
 import { VercelProvider } from '../vercel'
 import { CloudflareProvider } from '../cloudflare'
+import { FastlyProvider } from '../fastly'
 import { VercelClient } from '../vercel/VercelClient'
 import { CloudflareClient } from '../cloudflare/CloudflareClient'
+import { FastlyClient } from '../fastly/FastlyClient'
 import { OperationSafety } from '../../utils/operationSafety'
 import {
   mockVercelClientPrototype,
   mockCloudflareClientPrototype,
+  mockFastlyClientPrototype,
   emptyVercelConfig,
   emptyCloudflareRuleset,
 } from '../../../tests/testHelpers/providerMocks'
@@ -67,6 +71,7 @@ import type { UnifiedConfig } from '../../types/unified'
 
 const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
 const MockedCloudflareClient = CloudflareClient as jest.MockedClass<typeof CloudflareClient>
+const MockedFastlyClient = FastlyClient as jest.MockedClass<typeof FastlyClient>
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -161,6 +166,15 @@ const CREDENTIAL_CONFORMANCE_CASES: Array<{ providerType: ProviderType; options:
       config: { providers: { cloudflare: { zoneId: 'config-zone', accountId: 'config-account' } } } as UnifiedConfig,
     },
   },
+  {
+    providerType: 'fastly',
+    options: {
+      provider: 'fastly',
+      apiToken: 'explicit-token',
+      interactive: false,
+      config: { providers: { fastly: { workspaceId: 'config-workspace' } } } as UnifiedConfig,
+    },
+  },
 ]
 
 describe('provider conformance: config-declared credentials resolve without needing env vars', () => {
@@ -200,6 +214,14 @@ describe('provider conformance: getSupportedFeatures returns a complete FeatureS
       expect(typeof features[key]).toBe('boolean')
     }
   })
+
+  it('fastly: every required key is present and boolean', () => {
+    const provider = FastlyProvider.fromConfig({ apiToken: 't', workspaceId: 'w' })
+    const features = provider.getSupportedFeatures()
+    for (const key of REQUIRED_BOOLEAN_KEYS) {
+      expect(typeof features[key]).toBe('boolean')
+    }
+  })
 })
 
 describe('provider conformance: validateConfig rejects a config with no rules array', () => {
@@ -218,6 +240,13 @@ describe('provider conformance: validateConfig rejects a config with no rules ar
 
   it('cloudflare', () => {
     const provider = CloudflareProvider.fromConfig({ apiToken: 't', zoneId: 'z' })
+    const result = provider.validateConfig(configWithNoRules)
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((e) => e.code === 'RULES_REQUIRED')).toBe(true)
+  })
+
+  it('fastly', () => {
+    const provider = FastlyProvider.fromConfig({ apiToken: 't', workspaceId: 'w' })
     const result = provider.validateConfig(configWithNoRules)
     expect(result.valid).toBe(false)
     expect(result.errors.some((e) => e.code === 'RULES_REQUIRED')).toBe(true)
@@ -263,5 +292,18 @@ describe('provider conformance: syncRules never issues a mutating call when dryR
     expect(MockedCloudflareClient.prototype.updateRuleset).not.toHaveBeenCalled()
     expect(MockedCloudflareClient.prototype.addListItems).not.toHaveBeenCalled()
     expect(MockedCloudflareClient.prototype.removeListItems).not.toHaveBeenCalled()
+  })
+
+  it('fastly', async () => {
+    mockFastlyClientPrototype(MockedFastlyClient, { rules: [] })
+    const provider = FastlyProvider.fromConfig({ apiToken: 't', workspaceId: 'w' })
+
+    await provider.syncRules(makeLocalConfig('fastly'), { dryRun: true })
+
+    expect(MockedFastlyClient.prototype.createRule).not.toHaveBeenCalled()
+    expect(MockedFastlyClient.prototype.updateRule).not.toHaveBeenCalled()
+    expect(MockedFastlyClient.prototype.deleteRule).not.toHaveBeenCalled()
+    expect(MockedFastlyClient.prototype.getOrCreateList).not.toHaveBeenCalled()
+    expect(MockedFastlyClient.prototype.updateListEntries).not.toHaveBeenCalled()
   })
 })

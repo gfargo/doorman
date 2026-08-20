@@ -116,4 +116,7 @@ export interface ProvidersConfig {
     zoneId?: string
     accountId?: string
   }
+  fastly?: {
+    workspaceId?: string
+  }
 }

@@ -22,6 +22,7 @@ interface BackupOptions {
   apiToken?: string
   zoneId?: string
   accountId?: string
+  workspaceId?: string
   output?: string
   restore?: string
   list?: boolean
@@ -56,6 +57,10 @@ export const builder = {
   apiToken: { type: 'string', description: 'Cloudflare API token (defaults to CLOUDFLARE_API_TOKEN env var)' },
   zoneId: { type: 'string', description: 'Cloudflare Zone ID (defaults to CLOUDFLARE_ZONE_ID env var)' },
   accountId: { type: 'string', description: 'Cloudflare Account ID (optional)' },
+  workspaceId: {
+    type: 'string',
+    description: 'Fastly Next-Gen WAF Workspace ID (defaults to FASTLY_WORKSPACE_ID env var)',
+  },
   output: {
     alias: 'o',
     type: 'string',
@@ -170,6 +175,7 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
         apiToken: argv.apiToken,
         zoneId: argv.zoneId,
         accountId: argv.accountId,
+        workspaceId: argv.workspaceId,
         debug: argv.debug,
         ci: argv.ci,
         errorContext: 'creating backup',

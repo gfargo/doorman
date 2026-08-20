@@ -123,7 +123,7 @@ Each command uses `withCredentials()` middleware for config/credential setup:
 ### Testing (`src/tests/`)
 
 - `__mocks__/` - Test mocks (e.g., chalk mock)
-- `testHelpers/` - Shared test mocking utilities (not test files themselves — kept out of any `__tests__/` dir so Jest doesn't try to run them as suites): `providerMocks.ts` (`mockCloudflareClientPrototype`, `emptyCloudflareRuleset`) and `loggerMock.ts` (`createLoggerMock`). Reuse these for any new command-handler test that needs a mocked Cloudflare/Vercel client or logger — see the Testing Gotchas section in `tech.md` for why partial/ad-hoc mocks here are a trap.
+- `testHelpers/` - Shared test mocking utilities (not test files themselves — kept out of any `__tests__/` dir so Jest doesn't try to run them as suites): `providerMocks.ts` (`mockVercelClientPrototype`/`emptyVercelConfig`, `mockCloudflareClientPrototype`/`emptyCloudflareRuleset`, `mockFastlyClientPrototype`/`emptyFastlyList`) and `loggerMock.ts` (`createLoggerMock`). Reuse these for any new command-handler test that needs a mocked provider client or logger — see the Testing Gotchas section in `tech.md` for why partial/ad-hoc mocks here are a trap.
 - `*.test.ts` - Integration and validation tests
 - Provider tests in `src/lib/providers/cloudflare/__tests__/` and `src/lib/providers/vercel/__tests__/`, including each provider's own `translator.test.ts` (post-#196 — `RuleTranslator.test.ts` no longer exists as one file; its Vercel/Cloudflare cases moved here)
 - Provider conformance suite in `src/lib/providers/__tests__/conformance.test.ts` (#197) — invariants every `IFirewallProvider` must satisfy, run generically across `PROVIDER_TYPES`

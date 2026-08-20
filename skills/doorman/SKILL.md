@@ -1,18 +1,18 @@
 ---
 name: doorman
-description: Manage Vercel and Cloudflare WAF firewall rules as code with the Doorman CLI. Use for any firewall-as-code task — creating rules, IP blocking, rate limiting, bot protection, geo-blocking, syncing local config to providers, validating configurations, exporting documentation, CI/CD automation, or translating rules between Vercel and Cloudflare formats.
+description: Manage Vercel, Cloudflare, and Fastly WAF firewall rules as code with the Doorman CLI. Use for any firewall-as-code task — creating rules, IP blocking, rate limiting, bot protection, geo-blocking, syncing local config to providers, validating configurations, exporting documentation, CI/CD automation, or translating rules between provider formats.
 license: MIT
-compatibility: Node.js >= 20. Requires provider API tokens (VERCEL_TOKEN or CLOUDFLARE_API_TOKEN). Install globally via npm install -g @gfargo/doorman.
+compatibility: Node.js >= 20. Requires provider API tokens (VERCEL_TOKEN, CLOUDFLARE_API_TOKEN, or FASTLY_API_TOKEN). Install globally via npm install -g @gfargo/doorman.
 metadata:
   author: gfargo
-  version: "1.0"
+  version: '1.0'
   homepage: https://github.com/gfargo/doorman
-  npm: "@gfargo/doorman"
+  npm: '@gfargo/doorman'
 ---
 
 # Doorman — Firewall Rules as Code
 
-Doorman is a CLI for managing WAF (Web Application Firewall) rules as code across Vercel and Cloudflare. Configuration lives in `.doorman.json`, syncs bidirectionally with provider APIs, and integrates into CI/CD pipelines.
+Doorman is a CLI for managing WAF (Web Application Firewall) rules as code across Vercel, Cloudflare, and Fastly Next-Gen WAF. Configuration lives in `.doorman.json`, syncs bidirectionally with provider APIs, and integrates into CI/CD pipelines.
 
 ## Command Quick Reference
 
@@ -44,7 +44,7 @@ doorman export --format markdown    # Export as markdown|json|yaml|terraform
 doorman remove --name "Old Rule"    # Remove rules by name/ID
 ```
 
-All commands accept `--provider vercel|cloudflare` and `--config <path>`.
+All commands accept `--provider vercel|cloudflare|fastly` and `--config <path>`.
 
 ## Environment Variables
 
@@ -58,6 +58,10 @@ VERCEL_TEAM_ID=team_xxx
 CLOUDFLARE_API_TOKEN=your_token
 CLOUDFLARE_ZONE_ID=zone_xxx
 CLOUDFLARE_ACCOUNT_ID=acc_xxx   # optional, enables Lists API for bulk IP management
+
+# Fastly Next-Gen WAF (beta)
+FASTLY_API_TOKEN=your_token
+FASTLY_WORKSPACE_ID=workspace_xxx
 ```
 
 ## Config Structure
@@ -72,7 +76,7 @@ CLOUDFLARE_ACCOUNT_ID=acc_xxx   # optional, enables Lists API for bulk IP manage
 }
 ```
 
-For Cloudflare, add `provider` and `providers` fields instead of `projectId`/`teamId`.
+For Cloudflare or Fastly, add `provider` and `providers` fields instead of `projectId`/`teamId`.
 
 ## Core Workflow
 
@@ -93,9 +97,7 @@ doorman backup && doorman validate && doorman diff && doorman sync && doorman st
 {
   "name": "Block Admin",
   "active": true,
-  "conditionGroup": [
-    { "conditions": [{ "type": "path", "op": "pre", "value": "/admin" }] }
-  ],
+  "conditionGroup": [{ "conditions": [{ "type": "path", "op": "pre", "value": "/admin" }] }],
   "action": { "mitigate": { "action": "deny" } }
 }
 ```
@@ -112,12 +114,13 @@ doorman backup && doorman validate && doorman diff && doorman sync && doorman st
 
 Load the relevant reference file for detailed documentation:
 
-| Task | Reference |
-|------|-----------|
-| Writing rules — full field docs, operators, actions, IP blocking, patterns | [references/rules.md](references/rules.md) |
-| Cloudflare-specific setup, Lists API, expression translation, limitations | [references/cloudflare.md](references/cloudflare.md) |
-| Available templates and what they protect against | [references/templates.md](references/templates.md) |
-| CI/CD integration, automation, export formats, validation in pipelines | [references/cicd.md](references/cicd.md) |
+| Task                                                                                        | Reference                                            |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| Writing rules — full field docs, operators, actions, IP blocking, patterns                  | [references/rules.md](references/rules.md)           |
+| Cloudflare-specific setup, Lists API, expression translation, limitations                   | [references/cloudflare.md](references/cloudflare.md) |
+| Fastly-specific setup, condition/action mapping, rate-limit signal requirement, limitations | [references/fastly.md](references/fastly.md)         |
+| Available templates and what they protect against                                           | [references/templates.md](references/templates.md)   |
+| CI/CD integration, automation, export formats, validation in pipelines                      | [references/cicd.md](references/cicd.md)             |
 
 ## Principles
 
