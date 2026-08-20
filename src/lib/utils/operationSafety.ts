@@ -1,3 +1,4 @@
+import chalk from 'chalk'
 import { logger } from '../logger'
 import { prompt } from '../ui/prompt'
 import type { UnifiedConfig } from '../types/unified'
@@ -368,8 +369,6 @@ export class OperationSafety {
    * Format risk level with appropriate styling
    */
   private static formatRiskLevel(riskLevel: 'low' | 'medium' | 'high'): string {
-    const chalk = require('chalk')
-
     switch (riskLevel) {
       case 'low':
         return chalk.green('LOW')

@@ -3,8 +3,9 @@ import { Stats, watchFile, unwatchFile } from 'fs'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
 import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
-import type { UnifiedConfig } from '../lib/types/unified'
+import type { FirewallConfig } from '../lib/types'
 import { getConfig, saveConfig } from '../lib/utils/config'
+import { applySyncResultToConfig, toUnifiedConfig } from '../lib/utils/vercelConfigAdapter'
 import { withCredentials } from '../lib/utils/withCredentials'
 
 interface WatchOptions {
@@ -79,7 +80,7 @@ export const handler = async (argv: Arguments<WatchOptions>) => {
       ci: argv.ci,
       errorContext: 'setting up watch mode',
     },
-    async ({ service, provider }) => {
+    async ({ provider }) => {
       let isProcessing = false
       let lastModified = 0
 
@@ -100,48 +101,7 @@ export const handler = async (argv: Arguments<WatchOptions>) => {
           logger.start('Validating and syncing changes...')
 
           const updatedConfig = await getConfig(configPath)
-
-          if (provider.name !== 'vercel') {
-            await syncChangesWithProvider(provider, updatedConfig as unknown as UnifiedConfig)
-            logger.log(chalk.dim('Watching for more changes...'))
-            return
-          }
-
-          const { toAdd, toUpdate, toDelete, ipsToAdd, ipsToUpdate, ipsToDelete, version } =
-            await service.getChanges(updatedConfig)
-
-          const hasChanges =
-            toAdd.length > 0 ||
-            toUpdate.length > 0 ||
-            toDelete.length > 0 ||
-            ipsToAdd.length > 0 ||
-            ipsToUpdate.length > 0 ||
-            ipsToDelete.length > 0 ||
-            updatedConfig.version !== version
-
-          if (!hasChanges) {
-            logger.info(chalk.blue('No changes detected, skipping sync'))
-            return
-          }
-
-          const totalChanges =
-            toAdd.length + toUpdate.length + toDelete.length + ipsToAdd.length + ipsToUpdate.length + ipsToDelete.length
-          logger.log(chalk.cyan(`Syncing ${totalChanges} changes...`))
-
-          const syncResult = await service.syncRules(updatedConfig, { debug: argv.debug })
-
-          try {
-            const validatedConfig = await service.validateAndUpdateConfig(updatedConfig, syncResult, { dryRun: false })
-            await saveConfig(validatedConfig, configPath)
-            logger.success(chalk.green(`✅ Sync completed at ${new Date().toLocaleTimeString()}`))
-          } catch (validationError) {
-            logger.warn(
-              chalk.yellow(
-                `⚠️ Sync applied but validation failed: ${validationError instanceof Error ? validationError.message : String(validationError)}`,
-              ),
-            )
-            logger.info(chalk.dim('Run `download` to reconcile local config with remote state'))
-          }
+          await syncChangesWithProvider(provider, updatedConfig, configPath)
 
           logger.log(chalk.dim('Watching for more changes...'))
         } catch (error) {
@@ -173,18 +133,32 @@ export const handler = async (argv: Arguments<WatchOptions>) => {
 }
 
 /**
- * Mirrors the Vercel branch above but via the generic IFirewallProvider interface.
- * Always applies changes without prompting (force: true) — same as the Vercel path,
- * which goes straight from diff to sync without a confirmation prompt, since watch
- * mode is opt-in unattended auto-sync. `allowDeletions: true` is likewise deliberate
- * here (unlike plain `doorman sync --ci`): a `watch` session is opted into by an
- * actively-present developer editing the local config file, not a headless CI job,
- * so a deletion driven by their own edit is exactly what they asked for.
+ * Syncs a changed config file to the provider via the generic
+ * IFirewallProvider interface — the same path for every provider (Vercel
+ * included; a legacy-shaped local config is converted in-memory via
+ * `toUnifiedConfig`). Always applies changes without prompting (force:
+ * true), since watch mode is opt-in unattended auto-sync. `allowDeletions:
+ * true` is likewise deliberate here (unlike plain `doorman sync --ci`): a
+ * `watch` session is opted into by an actively-present developer editing the
+ * local config file, not a headless CI job, so a deletion driven by their
+ * own edit is exactly what they asked for.
+ *
+ * After a successful sync, provider-assigned rule ID changes and version/
+ * metadata drift are written back to the local config file unconditionally
+ * (no prompt, matching watch mode's unattended design).
  */
-async function syncChangesWithProvider(provider: IFirewallProvider, updatedConfig: UnifiedConfig): Promise<void> {
+async function syncChangesWithProvider(
+  provider: IFirewallProvider,
+  originalConfig: FirewallConfig,
+  configPath: string,
+): Promise<void> {
+  const updatedConfig = toUnifiedConfig(originalConfig)
   const changes = await provider.getChanges(updatedConfig)
 
-  if (!changes.hasChanges) {
+  const localVersion = updatedConfig.metadata?.version
+  const hasVersionChange = changes.version !== undefined && localVersion !== changes.version
+
+  if (!changes.hasChanges && !hasVersionChange) {
     logger.info(chalk.blue('No changes detected, skipping sync'))
     return
   }
@@ -206,4 +180,15 @@ async function syncChangesWithProvider(provider: IFirewallProvider, updatedConfi
 
   logger.success(chalk.green(`✅ Sync completed at ${new Date().toLocaleTimeString()}`))
   result.warnings?.forEach((w) => logger.warn(w))
+
+  if (result.idRemappings?.length) {
+    result.idRemappings.forEach((r) => {
+      logger.info(chalk.dim(`  Rule "${r.name}" ID updated: ${r.oldId || 'none'} -> ${r.newId}`))
+    })
+  }
+
+  const writeBack = applySyncResultToConfig(originalConfig, result)
+  if (writeBack.changed) {
+    await saveConfig(writeBack.config, configPath)
+  }
 }
