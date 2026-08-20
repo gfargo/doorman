@@ -1,3 +1,10 @@
+# [3.4.0](https://github.com/gfargo/doorman/compare/v3.3.1...v3.4.0) (2026-08-20)
+
+
+### Features
+
+* migrate sync and watch onto IFirewallProvider for Vercel ([#173](https://github.com/gfargo/doorman/issues/173)) ([03b5b5a](https://github.com/gfargo/doorman/commit/03b5b5a843a2d32dc6e0aaf631d0692947fdae5c))
+
 ## [3.3.1](https://github.com/gfargo/doorman/compare/v3.3.0...v3.3.1) (2026-08-19)
 
 
