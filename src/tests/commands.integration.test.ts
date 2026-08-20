@@ -7,12 +7,9 @@ import { handler as downloadHandler } from '../commands/download'
 import { FirewallConfig } from '../lib/types'
 import { mockVercelClientPrototype } from './testHelpers/providerMocks'
 
-// Mock external dependencies. `sync` and `download` have been migrated onto
-// the generic IFirewallProvider path, which resolves the NEW
-// `providers/vercel/VercelClient` — the legacy `services/VercelClient` mock
-// is unused by any active (non-skipped) test below, kept only so the
-// currently-skipped legacy-mock tests still compile.
-jest.mock('../lib/services/VercelClient')
+// Mock external dependencies. `sync` and `download` are both migrated onto
+// the generic IFirewallProvider path, which resolves
+// `providers/vercel/VercelClient`.
 jest.mock('../lib/providers/vercel/VercelClient')
 jest.mock('../lib/ui/prompt')
 jest.mock('../lib/ui/promptForCredentials')
@@ -86,43 +83,18 @@ describe('Command Integration Tests', () => {
     ;(prompt as jest.MockedFunction<typeof prompt>).mockResolvedValue(true)
     ;(promptForCredentials as jest.MockedFunction<typeof promptForCredentials>).mockResolvedValue(mockCredentials)
 
-    // Mock VercelClient
-    const { VercelClient } = await import('../lib/services/VercelClient')
+    // Mock providers/vercel/VercelClient — used by `sync`, `watch`,
+    // `download`, and every other Vercel command via the generic
+    // IFirewallProvider path.
+    const { VercelClient } = await import('../lib/providers/vercel/VercelClient')
     const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
-
-    // @ts-expect-error - Mock type compatibility
-    MockedVercelClient.prototype.fetchFirewallConfig = jest.fn().mockResolvedValue(mockRemoteConfig)
+    mockVercelClientPrototype(MockedVercelClient as any, { config: mockRemoteConfig as any })
     MockedVercelClient.prototype.createFirewallRule = jest
       .fn()
       .mockImplementation((rule: any) =>
         Promise.resolve({ ...rule, id: `rule_${rule.name.toLowerCase().replace(/\s+/g, '_')}` }),
       ) as any
-    MockedVercelClient.prototype.updateFirewallRule = jest
-      .fn()
-      .mockImplementation((rule: any) => Promise.resolve(rule)) as any
-    // @ts-expect-error - Mock type compatibility
-    MockedVercelClient.prototype.deleteFirewallRule = jest.fn().mockResolvedValue(undefined)
     MockedVercelClient.prototype.createIPBlockingRule = jest
-      .fn()
-      .mockImplementation((rule: any) => Promise.resolve({ ...rule, id: 'ip-new-1' })) as any
-    MockedVercelClient.prototype.updateIPBlockingRule = jest
-      .fn()
-      .mockImplementation((rule: any) => Promise.resolve(rule)) as any
-    // @ts-expect-error - Mock type compatibility
-    MockedVercelClient.prototype.deleteIPBlockingRule = jest.fn().mockResolvedValue(undefined)
-
-    // Mock the NEW providers/vercel/VercelClient with the same defaults —
-    // used by `sync`, `watch`, and `download` via the generic
-    // IFirewallProvider path.
-    const { VercelClient: NewVercelClient } = await import('../lib/providers/vercel/VercelClient')
-    const MockedNewVercelClient = NewVercelClient as jest.MockedClass<typeof NewVercelClient>
-    mockVercelClientPrototype(MockedNewVercelClient as any, { config: mockRemoteConfig as any })
-    MockedNewVercelClient.prototype.createFirewallRule = jest
-      .fn()
-      .mockImplementation((rule: any) =>
-        Promise.resolve({ ...rule, id: `rule_${rule.name.toLowerCase().replace(/\s+/g, '_')}` }),
-      ) as any
-    MockedNewVercelClient.prototype.createIPBlockingRule = jest
       .fn()
       .mockImplementation((rule: any) => Promise.resolve({ ...rule, id: 'ip-new-1' })) as any
   })
@@ -263,87 +235,6 @@ describe('Command Integration Tests', () => {
   })
 
   describe('Sync Command', () => {
-    test.skip('should sync local changes to remote', async () => {
-      // Given
-      const localConfig: FirewallConfig = {
-        version: 4, // Older version
-        projectId: 'test-project',
-        teamId: 'test-team',
-        rules: [
-          {
-            id: 'rule_local_rule',
-            name: 'Local Rule',
-            description: 'A local rule to sync',
-            conditionGroup: [
-              {
-                conditions: [
-                  {
-                    type: 'path' as const,
-                    op: 'eq' as const,
-                    value: '/local',
-                  },
-                ],
-              },
-            ],
-            action: {
-              mitigate: {
-                action: 'deny' as const,
-              },
-            },
-            active: true,
-          },
-        ],
-        ips: [
-          {
-            ip: '10.0.0.1',
-            hostname: 'local-host',
-            action: 'deny' as const,
-          },
-        ],
-      }
-
-      await fs.writeFile(configPath, JSON.stringify(localConfig, null, 2))
-
-      const { prompt } = await import('../lib/ui/prompt')
-      ;(prompt as jest.MockedFunction<typeof prompt>).mockResolvedValue(true) // Confirm sync
-
-      // Mock the post-sync validation
-      const { VercelClient } = await import('../lib/services/VercelClient')
-      const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
-
-      // First call for getChanges, subsequent calls for validation with retry
-      const postSyncConfig = {
-        // For validation after sync
-        ...mockRemoteConfig,
-        version: 6, // New version after sync
-        rules: [localConfig.rules[0]], // Should have our local rule
-        ips: [{ ...localConfig.ips![0], id: 'ip-new-1' }], // With new ID
-      }
-      // @ts-expect-error - Mock type compatibility
-      MockedVercelClient.prototype.fetchFirewallConfig = jest
-        .fn()
-        // @ts-expect-error - Mock type compatibility
-        .mockResolvedValueOnce(mockRemoteConfig) // For getChanges
-        // @ts-expect-error - Mock type compatibility
-        .mockResolvedValue(postSyncConfig) // For all validation retry attempts
-
-      // When
-      await syncHandler({
-        config: configPath,
-        debug: false,
-      } as any)
-
-      // Then
-      expect(MockedVercelClient.prototype.deleteFirewallRule).toHaveBeenCalledWith(mockRemoteConfig.rules[0]!)
-      expect(MockedVercelClient.prototype.deleteIPBlockingRule).toHaveBeenCalledWith(mockRemoteConfig.ips[0]!)
-      expect(MockedVercelClient.prototype.createFirewallRule).toHaveBeenCalledWith(localConfig.rules[0]!)
-      expect(MockedVercelClient.prototype.createIPBlockingRule).toHaveBeenCalledWith(localConfig.ips![0]!)
-
-      // Check that config file was updated with new version
-      const updatedConfig = JSON.parse(await fs.readFile(configPath, 'utf8')) as FirewallConfig
-      expect(updatedConfig.version).toBe(6)
-    })
-
     test('should handle no changes scenario', async () => {
       // Given
       const localConfig: FirewallConfig = {
@@ -373,130 +264,6 @@ describe('Command Integration Tests', () => {
       expect(MockedVercelClient.prototype.createIPBlockingRule).not.toHaveBeenCalled()
       expect(MockedVercelClient.prototype.updateIPBlockingRule).not.toHaveBeenCalled()
       expect(MockedVercelClient.prototype.deleteIPBlockingRule).not.toHaveBeenCalled()
-    })
-
-    test.skip('should handle rule ID updates', async () => {
-      // Given
-      const localConfig: FirewallConfig = {
-        version: 4,
-        projectId: 'test-project',
-        teamId: 'test-team',
-        rules: [
-          {
-            id: 'wrong-id-format', // Wrong ID format
-            name: 'Test Rule',
-            description: 'A test rule',
-            conditionGroup: [
-              {
-                conditions: [
-                  {
-                    type: 'path' as const,
-                    op: 'eq' as const,
-                    value: '/test',
-                  },
-                ],
-              },
-            ],
-            action: {
-              mitigate: {
-                action: 'deny' as const,
-              },
-            },
-            active: true,
-          },
-        ],
-        ips: [],
-      }
-
-      await fs.writeFile(configPath, JSON.stringify(localConfig, null, 2))
-
-      const { prompt } = await import('../lib/ui/prompt')
-      ;(prompt as jest.MockedFunction<typeof prompt>)
-        .mockResolvedValueOnce(true) // Confirm sync
-        .mockResolvedValueOnce(true) // Confirm ID update
-
-      const { VercelClient } = await import('../lib/services/VercelClient')
-      const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
-
-      // Mock empty remote config so our rule gets added
-      const postSyncIDConfig = {
-        // For validation
-        ...mockRemoteConfig,
-        version: 6,
-        rules: [{ ...localConfig.rules[0], id: 'rule_test_rule' }], // Correct ID
-        ips: [],
-      }
-      // @ts-expect-error - Mock type compatibility
-      MockedVercelClient.prototype.fetchFirewallConfig = jest
-        .fn()
-        // @ts-expect-error - Mock type compatibility
-        .mockResolvedValueOnce({ ...mockRemoteConfig, rules: [], ips: [] }) // For getChanges
-        // @ts-expect-error - Mock type compatibility
-        .mockResolvedValue(postSyncIDConfig) // For all validation retry attempts
-
-      // When
-      await syncHandler({
-        config: configPath,
-        debug: false,
-      } as any)
-
-      // Then
-      const updatedConfig = JSON.parse(await fs.readFile(configPath, 'utf8')) as FirewallConfig
-      expect(updatedConfig.rules[0]?.id).toBe('rule_test_rule') // Should be updated
-    })
-
-    test.skip('should handle sync cancellation', async () => {
-      // Given
-      const localConfig: FirewallConfig = {
-        version: 4,
-        projectId: 'test-project',
-        teamId: 'test-team',
-        rules: [
-          {
-            id: 'rule_new_rule',
-            name: 'New Rule',
-            description: 'A new rule',
-            conditionGroup: [
-              {
-                conditions: [
-                  {
-                    type: 'path' as const,
-                    op: 'eq' as const,
-                    value: '/new',
-                  },
-                ],
-              },
-            ],
-            action: {
-              mitigate: {
-                action: 'deny' as const,
-              },
-            },
-            active: true,
-          },
-        ],
-        ips: [],
-      }
-
-      await fs.writeFile(configPath, JSON.stringify(localConfig, null, 2))
-
-      const { prompt } = await import('../lib/ui/prompt')
-      ;(prompt as jest.MockedFunction<typeof prompt>).mockResolvedValue(false) // Cancel sync
-
-      // When
-      await syncHandler({
-        config: configPath,
-        debug: false,
-      } as any)
-
-      // Then
-      const { VercelClient } = await import('../lib/services/VercelClient')
-      const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
-
-      // Should not call any modification methods
-      expect(MockedVercelClient.prototype.createFirewallRule).not.toHaveBeenCalled()
-      expect(MockedVercelClient.prototype.updateFirewallRule).not.toHaveBeenCalled()
-      expect(MockedVercelClient.prototype.deleteFirewallRule).not.toHaveBeenCalled()
     })
   })
 
@@ -539,12 +306,10 @@ describe('Command Integration Tests', () => {
       const { prompt } = await import('../lib/ui/prompt')
       ;(prompt as jest.MockedFunction<typeof prompt>).mockResolvedValue(true)
 
-      // `sync` goes through the NEW providers/vercel/VercelClient (generic
-      // IFirewallProvider path); `download` still uses the legacy client.
+      // Both `sync` and `download` go through the generic IFirewallProvider
+      // path now, resolving the same providers/vercel/VercelClient instance.
       const { VercelClient: NewVercelClient } = await import('../lib/providers/vercel/VercelClient')
       const MockedNewVercelClient = NewVercelClient as jest.MockedClass<typeof NewVercelClient>
-      const { VercelClient } = await import('../lib/services/VercelClient')
-      const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
 
       // Step 1: Sync the initial config. `sync.ts`'s pre-sync diff, syncRules'
       // internal re-diff, and syncRules' post-sync re-fetch each call
@@ -572,17 +337,10 @@ describe('Command Integration Tests', () => {
         debug: false,
       } as any)
 
-      // Step 2: Download should get the same config back
-      const postSyncConfig = {
-        ...mockRemoteConfig,
-        version: 6,
-        rules: [initialConfig.rules[0]],
-        ips: [],
-      }
-
-      // @ts-expect-error - Mock type compatibility
-      MockedVercelClient.prototype.fetchFirewallConfig = jest.fn().mockResolvedValue(postSyncConfig)
-
+      // Step 2: Download should get the same config back. No further
+      // fetchFirewallConfig override needed — the sticky
+      // `mockResolvedValue(firstSyncPostConfig)` fallback set above already
+      // covers this call too, and matches the expected post-sync state.
       await downloadHandler({
         config: configPath,
         dryRun: false,

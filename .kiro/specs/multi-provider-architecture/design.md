@@ -148,7 +148,7 @@ Single entry point for all commands:
 2. Detect provider (ProviderDetector with config + env signals)
 3. Resolve credentials (env vars, config, interactive prompts)
 4. Instantiate provider via registry
-5. Build `CommandContext` with provider + legacy compat fields
+5. Build `CommandContext` with the resolved provider and credentials
 6. Wrap handler in try/catch with `handleCommandError()`
 
 ## Unified Type System
