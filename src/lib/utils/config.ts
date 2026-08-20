@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs'
+import { randomBytes } from 'crypto'
 import { dirname } from 'path'
 import { logger } from '../logger'
 import { ValidationService } from '../services/ValidationService'
@@ -89,18 +90,24 @@ export async function getConfig(
 export async function saveConfig(
   config: FirewallConfig,
   configPath?: string,
-  options: ConfigSaveOptions = { validate: true, throwOnError: true },
+  options: ConfigSaveOptions = {},
 ): Promise<void> {
+  // Destructured defaults rather than a default object literal: a caller
+  // passing `{ throwOnError: false }` alone used to leave `validate`
+  // undefined, silently skipping validation entirely instead of the
+  // "validate but don't throw" it asked for.
+  const { validate = true, throwOnError = true } = options
+
   const filePath = configPath || (await ConfigFinder.findConfig()) || ConfigFinder.getDefaultConfigPath()
 
   // Validate config before saving if requested
-  if (options.validate) {
+  if (validate) {
     try {
       const validator: ValidationService = ValidationService.getInstance()
       validator.validateConfig(config)
     } catch (validationError) {
       logger.error('Config validation failed:', validationError)
-      if (options.throwOnError) {
+      if (throwOnError) {
         throw validationError
       }
     }
@@ -112,7 +119,30 @@ export async function saveConfig(
     mkdirSync(configDir, { recursive: true })
   }
 
-  writeFileSync(filePath, JSON.stringify(config, null, 2))
+  // Write atomically — temp file in the same directory, then rename (atomic
+  // on POSIX within one filesystem).
+  //
+  // A truncated config is worse than no write at all here: `sync` saves this
+  // file *after* mutating the remote firewall, so an interrupted plain write
+  // (Ctrl+C, crash, disk full) would leave the live firewall changed and the
+  // user's source of truth destroyed — the worst possible state to reconcile
+  // from, for a tool whose whole premise is that this file *is* the config.
+  const tempPath = `${filePath}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`
+  try {
+    writeFileSync(tempPath, JSON.stringify(config, null, 2))
+    renameSync(tempPath, filePath)
+  } catch (error) {
+    try {
+      if (existsSync(tempPath)) {
+        unlinkSync(tempPath)
+      }
+    } catch {
+      // Best-effort cleanup; surfacing the original write failure matters more
+      // than a leftover temp file.
+    }
+    throw error
+  }
+
   logger.debug(`Config saved to ${filePath}`)
 }
 
