@@ -182,7 +182,7 @@ export class FastlyFirewallService extends BaseFirewallService implements IFirew
         )
       }
 
-      const toAdd = rulesToAdd.map((rule) => RuleTranslator.unifiedToFastly(rule))
+      const toAdd = rulesToAdd.map((rule) => ({ rule, translated: RuleTranslator.unifiedToFastly(rule) }))
       const toUpdate = rulesToUpdate.map((rule) => ({ rule, translated: RuleTranslator.unifiedToFastly(rule) }))
 
       const errors: string[] = []
@@ -211,13 +211,20 @@ export class FastlyFirewallService extends BaseFirewallService implements IFirew
         }
       }
 
-      for (const translation of toAdd) {
-        const input: FastlyRuleInput = translation.result
+      for (const { rule, translated } of toAdd) {
+        const input: FastlyRuleInput = translated.result
         try {
           logger.debug(`Adding new Fastly rule: ${input.description}`)
           const newRule = await this.client.createRule(input)
           addedRules.push(newRule)
-          idRemappings.push({ newId: newRule.id, name: input.description })
+          // `oldId` is the local rule's id even if that id was only ever a
+          // local placeholder that never existed remotely — omitting it
+          // whenever the local rule already had *some* id (matching Vercel's
+          // `idRemappings.push({ oldId: rule.id || undefined, ... })`) is
+          // what lets `applySyncResultToConfig`'s write-back correct it via
+          // `remapByOldId` instead of falling through to a name-keyed lookup
+          // it would never reach because `rule.id` is truthy.
+          idRemappings.push({ oldId: rule.id || undefined, newId: newRule.id, name: input.description })
         } catch (error) {
           logger.error(`Failed to add Fastly rule "${input.description}":`, error)
           errors.push(describeError(`Failed to add rule "${input.description}"`, error))

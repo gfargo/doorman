@@ -276,13 +276,42 @@ describe('FastlyFirewallService', () => {
       expect(result.rulesAdded).toBe(1)
     })
 
-    it('reports an id remapping when the server assigns a new id', async () => {
+    // Regression coverage for a bug found while building the Fastly demo
+    // tape (follow-up to #186/#204): `applySyncResultToConfig`'s write-back
+    // only corrects a rule's local id via its name-keyed map when the local
+    // rule had *no* id at all — a rule that already had some id (even a
+    // local-only placeholder that never existed remotely) needs `oldId` set
+    // so the id-keyed map can find it instead. Mirrors the equivalent
+    // `VercelFirewallService.test.ts` describe block.
+    it('reports an id remapping with oldId when the local rule already had an id', async () => {
       jest.spyOn(client, 'fetchRules').mockResolvedValue([])
       jest.spyOn(client, 'createRule').mockResolvedValue({ ...mockRequestRule, id: 'server-assigned-id' })
 
       const result = await service.syncRules(configWithOneRule, { force: true })
 
-      expect(result.idRemappings).toEqual([{ newId: 'server-assigned-id', name: 'New Rule' }])
+      expect(result.idRemappings).toEqual([{ oldId: 'new-rule', newId: 'server-assigned-id', name: 'New Rule' }])
+    })
+
+    it('omits oldId when the local rule had no id at all', async () => {
+      const configWithUnidentifiedRule: UnifiedConfig = {
+        version: '2.0',
+        provider: 'fastly',
+        rules: [
+          {
+            name: 'Brand New Rule',
+            enabled: true,
+            conditions: [{ field: 'path', operator: 'eq', value: '/new' }],
+            action: { type: 'block' },
+          },
+        ],
+        ips: [],
+      }
+      jest.spyOn(client, 'fetchRules').mockResolvedValue([])
+      jest.spyOn(client, 'createRule').mockResolvedValue({ ...mockRequestRule, id: 'server-assigned-id' })
+
+      const result = await service.syncRules(configWithUnidentifiedRule, { force: true })
+
+      expect(result.idRemappings).toEqual([{ newId: 'server-assigned-id', name: 'Brand New Rule' }])
     })
 
     it('deletes stale rules before creating new ones', async () => {
