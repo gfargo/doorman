@@ -300,6 +300,12 @@ export class RuleTranslator {
       )
     }
 
+    // Custom block-response body, if this rule carries one. Recovered so
+    // `download`/`backup` capture it and a Cloudflare→unified→Cloudflare
+    // round trip doesn't silently drop the user's custom block page.
+    const blockResponse =
+      rule.action_parameters && 'response' in rule.action_parameters ? rule.action_parameters.response : undefined
+
     const action: UnifiedAction = {
       type: this.mapCloudflareActionToUnified(rule.action),
       rateLimit: rule.ratelimit
@@ -309,6 +315,13 @@ export class RuleTranslator {
             characteristics: rule.ratelimit.characteristics,
             mitigationTimeout: rule.ratelimit.mitigation_timeout,
             countingExpression: rule.ratelimit.counting_expression,
+          }
+        : undefined,
+      response: blockResponse
+        ? {
+            statusCode: blockResponse.status_code,
+            content: blockResponse.content,
+            contentType: blockResponse.content_type,
           }
         : undefined,
     }
@@ -363,6 +376,44 @@ export class RuleTranslator {
       }
     }
 
+    // Custom response body. Cloudflare only accepts this on `block` actions,
+    // and requires all three fields together — so `content` is the trigger
+    // (there's no custom response without a body) and the other two get
+    // Cloudflare's own defaults when omitted.
+    if (rule.action.response) {
+      const { TranslationWarningSystem } = require('./TranslationWarningSystem')
+
+      if (cloudflareRule.action !== 'block') {
+        warnings.push(
+          TranslationWarningSystem.createUnsupportedFeatureWarning(
+            `custom response on a '${cloudflareRule.action}' action`,
+            'unified config',
+            'Cloudflare',
+            rule.id,
+            'action.response',
+          ),
+        )
+      } else if (!rule.action.response.content) {
+        warnings.push(
+          TranslationWarningSystem.createWarning(
+            'lossy_conversion',
+            rule.id,
+            'action.response',
+            'Custom response declared without `content`; Cloudflare requires a response body, so it was dropped.',
+            'Set action.response.content to the body you want returned.',
+          ),
+        )
+      } else {
+        cloudflareRule.action_parameters = {
+          response: {
+            status_code: rule.action.response.statusCode ?? 403,
+            content: rule.action.response.content,
+            content_type: rule.action.response.contentType ?? 'text/plain',
+          },
+        }
+      }
+    }
+
     return { result: cloudflareRule, warnings }
   }
 
@@ -373,6 +424,22 @@ export class RuleTranslator {
     const warnings: TranslationWarning[] = []
 
     const conditionGroups = this.buildVercelConditionGroups(rule.conditions, rule.id, warnings)
+
+    // Vercel's mitigate action has no custom-response-body concept, so a
+    // rule carrying one loses it here. Warn rather than drop silently —
+    // same contract as an unmappable condition field above.
+    if (rule.action.response) {
+      const { TranslationWarningSystem } = require('./TranslationWarningSystem')
+      warnings.push(
+        TranslationWarningSystem.createUnsupportedFeatureWarning(
+          'custom response body',
+          'unified config',
+          'Vercel',
+          rule.id,
+          'action.response',
+        ),
+      )
+    }
 
     if (conditionGroups.length === 0) {
       throw new Error(

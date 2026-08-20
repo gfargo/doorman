@@ -470,6 +470,54 @@ describe('CloudflareFirewallService', () => {
   // Regression coverage for #179: `UnifiedRule.priority` used to feed the
   // dedup/diff hash while never affecting the order rules were written, so
   // setting it changed nothing about actual firewall evaluation order.
+  // Regression coverage for #180 at the service level — the translator
+  // tests cover the mapping itself, this asserts it survives all the way to
+  // the ruleset write rather than being dropped somewhere in syncRules.
+  describe('custom response body reaches the ruleset write', () => {
+    it('includes action_parameters.response in the synced rule', async () => {
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue({
+        id: 'ruleset-1',
+        name: 'rs',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        last_updated: '2024-01-01T00:00:00Z',
+        rules: [],
+      })
+      const updateSpy = jest.spyOn(mockClient, 'updateRuleset').mockResolvedValue({
+        id: 'ruleset-1',
+        name: 'rs',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '2',
+        last_updated: '2024-01-01T00:00:00Z',
+        rules: [],
+      })
+
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [
+          {
+            id: 'r1',
+            name: 'Blocked',
+            enabled: true,
+            conditions: [{ field: 'path', operator: 'eq', value: '/api' }],
+            action: { type: 'deny', response: { statusCode: 429, content: 'Slow down', contentType: 'text/html' } },
+          },
+        ],
+        ips: [],
+      }
+
+      await service.syncRules(config, { force: true })
+
+      const [, payload] = updateSpy.mock.calls[0]!
+      expect(payload.rules![0]!.action_parameters).toEqual({
+        response: { status_code: 429, content: 'Slow down', content_type: 'text/html' },
+      })
+    })
+  })
+
   describe('rule priority ordering', () => {
     const ruleWith = (name: string, priority?: number): UnifiedRule => ({
       id: name,
