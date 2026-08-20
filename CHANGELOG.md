@@ -1,3 +1,10 @@
+# [3.5.0](https://github.com/gfargo/doorman/compare/v3.4.0...v3.5.0) (2026-08-20)
+
+
+### Features
+
+* migrate diff, list, status, and download onto IFirewallProvider for Vercel ([#174](https://github.com/gfargo/doorman/issues/174)) ([80c65d4](https://github.com/gfargo/doorman/commit/80c65d46375bba6419b1e0fd31f4964bec493bd0))
+
 # [3.4.0](https://github.com/gfargo/doorman/compare/v3.3.1...v3.4.0) (2026-08-20)
 
 
