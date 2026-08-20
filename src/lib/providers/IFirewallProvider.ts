@@ -100,6 +100,17 @@ export interface FeatureSet {
   supportsCustomRules: boolean
   supportsIPBlocking: boolean
   supportsRateLimiting: boolean
+  /**
+   * Whether the provider offers vendor-managed rule groups (Cloudflare
+   * Managed Rulesets, AWS Managed Rules, GCP preconfigured WAF, …).
+   *
+   * **Reserved — declared but not yet actionable.** Nothing consumes this
+   * today because `UnifiedConfig` has no surface for declaring *which*
+   * managed rulesets to enable or how to override individual rules within
+   * them. Kept as the capability signal the config surface will gate on
+   * once that lands; see the managed-rule-groups issue. Do not treat a
+   * `true` here as meaning doorman can currently manage those rules.
+   */
   supportsManagedRules: boolean
   supportsGeoBlocking: boolean
   supportsRedirect: boolean

@@ -480,6 +480,94 @@ describe('RuleTranslator', () => {
     })
   })
 
+  // Regression coverage for #180: UnifiedAction.response was declared in the
+  // public type and unified schema but had zero consumers anywhere — a user
+  // could set a custom block page, pass validation, sync cleanly, and get
+  // nothing.
+  describe('custom response body (UnifiedAction.response)', () => {
+    const denyRuleWithResponse = (response: UnifiedRule['action']['response']): UnifiedRule => ({
+      id: 'r1',
+      name: 'Blocked',
+      enabled: true,
+      conditions: [{ field: 'path', operator: 'eq', value: '/api' }],
+      action: { type: 'deny', response },
+    })
+
+    it('emits action_parameters.response for a block action', () => {
+      const { result, warnings } = RuleTranslator.unifiedToCloudflare(
+        denyRuleWithResponse({ statusCode: 429, content: 'Slow down', contentType: 'text/plain' }),
+      )
+
+      expect(result.action_parameters).toEqual({
+        response: { status_code: 429, content: 'Slow down', content_type: 'text/plain' },
+      })
+      expect(warnings).toEqual([])
+    })
+
+    it('defaults statusCode to 403 and contentType to text/plain when only content is given', () => {
+      const { result } = RuleTranslator.unifiedToCloudflare(denyRuleWithResponse({ content: 'Denied' }))
+
+      expect(result.action_parameters).toEqual({
+        response: { status_code: 403, content: 'Denied', content_type: 'text/plain' },
+      })
+    })
+
+    it('warns and drops the response when content is missing (Cloudflare requires a body)', () => {
+      const { result, warnings } = RuleTranslator.unifiedToCloudflare(denyRuleWithResponse({ statusCode: 418 }))
+
+      expect(result.action_parameters).toBeUndefined()
+      expect(warnings.length).toBeGreaterThan(0)
+      expect(warnings.some((w) => w.field === 'action.response')).toBe(true)
+    })
+
+    it('warns when a custom response is set on a non-block action', () => {
+      const rule: UnifiedRule = {
+        id: 'r2',
+        name: 'Challenged',
+        enabled: true,
+        conditions: [{ field: 'path', operator: 'eq', value: '/api' }],
+        action: { type: 'challenge', response: { content: 'nope' } },
+      }
+
+      const { result, warnings } = RuleTranslator.unifiedToCloudflare(rule)
+
+      expect(result.action_parameters).toBeUndefined()
+      expect(warnings.some((w) => w.field === 'action.response')).toBe(true)
+    })
+
+    it('recovers the response when translating a Cloudflare rule back to unified', () => {
+      const cfRule = makeCloudflareRule({
+        action: 'block',
+        action_parameters: { response: { status_code: 429, content: 'Slow down', content_type: 'text/html' } },
+      })
+
+      const { result } = RuleTranslator.cloudflareToUnified(cfRule)
+
+      expect(result.action.response).toEqual({ statusCode: 429, content: 'Slow down', contentType: 'text/html' })
+    })
+
+    it('round-trips a custom response through unified -> Cloudflare -> unified', () => {
+      const original = denyRuleWithResponse({ statusCode: 429, content: 'Slow down', contentType: 'text/html' })
+
+      const cf = RuleTranslator.unifiedToCloudflare(original).result
+      const back = RuleTranslator.cloudflareToUnified(cf).result
+
+      expect(back.action.response).toEqual(original.action.response)
+    })
+
+    it('leaves action.response undefined for a Cloudflare rule that has none', () => {
+      const { result } = RuleTranslator.cloudflareToUnified(makeCloudflareRule())
+
+      expect(result.action.response).toBeUndefined()
+    })
+
+    it('warns that a custom response is unsupported when translating to Vercel', () => {
+      const { warnings } = RuleTranslator.unifiedToVercel(denyRuleWithResponse({ content: 'Denied' }))
+
+      expect(warnings.some((w) => w.field === 'action.response')).toBe(true)
+    })
+  })
+
   describe('unifiedToCloudflare', () => {
     it('translates a basic deny rule', () => {
       const unified = makeUnifiedRule()

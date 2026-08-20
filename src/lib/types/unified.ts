@@ -46,6 +46,20 @@ export interface UnifiedAction {
     permanent?: boolean
     preserveQueryString?: boolean
   }
+  /**
+   * Custom response body returned when the rule matches.
+   *
+   * Only meaningful on a **deny/block** action, and only on providers that
+   * support it — currently Cloudflare, which requires all three fields
+   * together. `content` is therefore the trigger: without a body there's no
+   * custom response to send, and `statusCode`/`contentType` fall back to
+   * Cloudflare's defaults (403, `text/plain`) when omitted.
+   *
+   * Translating a rule that carries this to Vercel emits an
+   * unsupported-feature warning — Vercel's mitigate action has no
+   * equivalent, so the custom response is dropped rather than silently
+   * pretended-at.
+   */
   response?: {
     statusCode?: number
     content?: string
