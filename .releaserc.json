@@ -22,3 +22,4 @@
     "@semantic-release/git"
   ]
 }
+# bounty-fix-ref: https://github.com/gfargo/doorman/issues/217
