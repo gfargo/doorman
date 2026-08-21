@@ -41,4 +41,19 @@ describe('promptForCredentials', () => {
 
     expect(promptSecretMock).not.toHaveBeenCalled()
   })
+
+  // Regression test for #207: a blank answer means "use my Vercel default
+  // team" (every account has one), not an invalid/incomplete answer — it
+  // must resolve to `undefined`, not the literal empty string.
+  it('resolves teamId to undefined when the user leaves the prompt blank', async () => {
+    promptMock.mockImplementation((message: string) => {
+      if (message.includes('Team ID')) return Promise.resolve('')
+      if (message.includes('Project ID')) return Promise.resolve('typed-project')
+      throw new Error(`Unexpected prompt: ${message}`)
+    })
+
+    const result = await promptForCredentials({})
+
+    expect(result).toEqual({ token: 'typed-token', teamId: undefined, projectId: 'typed-project' })
+  })
 })

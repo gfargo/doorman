@@ -96,11 +96,11 @@ export function mockVercelClientPrototype(
   MockedVercelClient.mockImplementation(function (
     this: VercelClient,
     projectId: string,
-    teamId: string,
+    teamId: string | undefined,
     token: string,
   ) {
     Object.assign(this, { projectId, teamId, token })
-  } as unknown as (projectId: string, teamId: string, token: string) => VercelClient)
+  } as unknown as (projectId: string, teamId: string | undefined, token: string) => VercelClient)
 
   MockedVercelClient.prototype.fetchFirewallConfig = jest.fn().mockResolvedValue(config) as any
   MockedVercelClient.prototype.createFirewallRule = jest

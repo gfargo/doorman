@@ -46,7 +46,7 @@ export interface ProviderInstanceResult {
    * prompted the user interactively, and prompting again would ask for the
    * same values a second time.
    */
-  vercelCredentials?: { token: string; projectId: string; teamId: string }
+  vercelCredentials?: { token: string; projectId: string; teamId?: string }
 }
 
 /**
@@ -123,9 +123,13 @@ async function getVercelProvider(options: ProviderOptions): Promise<ProviderInst
     },
   })
 
-  if (!token || !projectId || !teamId) {
+  // teamId is deliberately excluded from this completeness check — omitting
+  // it just means "use my Vercel default team" (every account has one), so
+  // its absence alone must never block a user or force a re-prompt (see
+  // issue #207).
+  if (!token || !projectId) {
     if (options.interactive === false) {
-      throw new Error('Vercel credentials missing. Provide token, projectId, and teamId.')
+      throw new Error('Vercel credentials missing. Provide token and projectId.')
     }
 
     logger.warn('Missing Vercel credentials')

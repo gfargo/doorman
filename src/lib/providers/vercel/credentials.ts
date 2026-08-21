@@ -27,7 +27,11 @@ export const vercelCredentials: CredentialDescriptor = {
       key: 'teamId',
       envVar: 'VERCEL_TEAM_ID',
       label: 'Vercel Team ID',
-      required: true,
+      // Omitting it is safe — Vercel resolves the request against the
+      // token's default team, and doorman's own config schema already
+      // treats it as optional (see issue #207). Only needed explicitly by
+      // callers who belong to more than one team and want a non-default one.
+      required: false,
       configKey: 'teamId',
     },
   ],

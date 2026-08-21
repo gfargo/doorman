@@ -105,6 +105,22 @@ describe('VercelClient', () => {
       expect(calledUrl).toContain(`teamId=${teamId}`)
     })
 
+    // Regression test for #207: a client constructed with no teamId (every
+    // Vercel account has a default team, so omitting it is valid) must omit
+    // the query param entirely rather than sending the literal string
+    // `teamId=undefined`, which would not resolve to the intended team.
+    it('omits teamId from the URL entirely when the client was constructed without one', async () => {
+      const clientWithoutTeam = new VercelClient(projectId, undefined, token)
+      jest.spyOn(clientWithoutTeam as any, 'delay').mockResolvedValue(undefined)
+      fetchSpy.mockResolvedValue(createMockResponse(mockVercelConfig))
+
+      await clientWithoutTeam.fetchFirewallConfig()
+
+      const calledUrl = fetchSpy.mock.calls[0]![0] as string
+      expect(calledUrl).toContain(`projectId=${projectId}`)
+      expect(calledUrl).not.toContain('teamId')
+    })
+
     it('should fetch a specific config version', async () => {
       const versionConfig = { ...mockVercelConfig.active, version: 5 }
       fetchSpy.mockResolvedValue(createMockResponse(versionConfig))

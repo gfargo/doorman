@@ -131,6 +131,22 @@ describe('VercelFirewallService', () => {
       expect(result.providers?.vercel).toEqual({ projectId: 'proj_123', teamId: 'team_456' })
     })
 
+    // Regression test for #207: a client with no teamId (every Vercel
+    // account has a default team, so this is a normal, supported case) must
+    // omit the key entirely from providers.vercel rather than setting it to
+    // `undefined` — an unconditionally-set optional key is exactly the
+    // isDeepEqual/diffing pitfall documented in #199/#203.
+    it('omits teamId from providers.vercel when the client has none', async () => {
+      const clientWithoutTeam = new VercelClient('proj_123', undefined, 'test-token')
+      const serviceWithoutTeam = new VercelFirewallService(clientWithoutTeam)
+      jest.spyOn(clientWithoutTeam, 'fetchFirewallConfig').mockResolvedValue(mockVercelConfig)
+
+      const result = await serviceWithoutTeam.fetchConfig()
+
+      expect(result.providers?.vercel).toEqual({ projectId: 'proj_123' })
+      expect(result.providers?.vercel).not.toHaveProperty('teamId')
+    })
+
     it('should pass version parameter to client', async () => {
       const spy = jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue(mockVercelConfig)
 

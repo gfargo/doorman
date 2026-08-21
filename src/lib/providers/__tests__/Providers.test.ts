@@ -108,10 +108,11 @@ describe('VercelProvider', () => {
       expect(() => VercelProvider.fromEnv()).toThrow(/VERCEL_PROJECT_ID/)
     })
 
-    it('throws when VERCEL_TEAM_ID is missing', () => {
+    it('creates a provider when VERCEL_TEAM_ID is missing — every Vercel account has a default team (regression test for #207)', () => {
       process.env.VERCEL_TOKEN = 'token'
       process.env.VERCEL_PROJECT_ID = 'project'
-      expect(() => VercelProvider.fromEnv()).toThrow(/VERCEL_TEAM_ID/)
+      const provider = VercelProvider.fromEnv()
+      expect(provider.name).toBe('vercel')
     })
   })
 
@@ -135,6 +136,11 @@ describe('VercelProvider', () => {
 
     it('throws when token is missing from both config and env', () => {
       expect(() => VercelProvider.fromConfig({})).toThrow(/token/)
+    })
+
+    it('creates a provider without a teamId (regression test for #207)', () => {
+      const provider = VercelProvider.fromConfig({ token: 'token', projectId: 'project' })
+      expect(provider.name).toBe('vercel')
     })
   })
 

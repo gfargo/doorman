@@ -56,12 +56,12 @@ export class VercelClient extends BaseFirewallClient {
   /**
    * Creates an instance of VercelClient.
    * @param projectId - The ID of the Vercel project.
-   * @param teamId - The ID of the Vercel team.
+   * @param teamId - The ID of the Vercel team. Omit for a personal (non-team) account.
    * @param token - The authentication token for the Vercel API.
    */
   constructor(
     private projectId: string,
-    private teamId: string,
+    private teamId: string | undefined,
     private token: string,
   ) {
     // No static base path because URLs are constructed per-request with query params
@@ -85,7 +85,13 @@ export class VercelClient extends BaseFirewallClient {
   private getUrl(configVersion?: number): string {
     const baseUrl = configVersion !== undefined ? `${VERCEL_API_BASE_URL}/${configVersion}` : VERCEL_API_BASE_URL
     logger.debug('API URL:', baseUrl)
-    return `${baseUrl}?projectId=${this.projectId}&teamId=${this.teamId}`
+    // teamId is omitted entirely (not sent as an empty/`undefined` literal)
+    // when absent. Every Vercel account — including a Hobby account — is a
+    // team with its own Team ID; omitting the param doesn't mean "no team",
+    // it tells Vercel to resolve the request against the token's *default*
+    // team. Only matters if the caller belongs to more than one team.
+    const teamParam = this.teamId ? `&teamId=${this.teamId}` : ''
+    return `${baseUrl}?projectId=${this.projectId}${teamParam}`
   }
 
   // Note: response handling is centralized in BaseFirewallClient.makeRequest

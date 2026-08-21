@@ -30,10 +30,10 @@ export class VercelProvider {
       throw new Error('VERCEL_PROJECT_ID environment variable is required')
     }
 
-    if (!teamId) {
-      throw new Error('VERCEL_TEAM_ID environment variable is required')
-    }
-
+    // teamId is intentionally not validated here — omitting it lets Vercel
+    // resolve the request against the token's default team, which is fine
+    // for anyone with just one team. Explicit teamId only matters for
+    // callers that belong to more than one and want a non-default one.
     const client = new VercelClient(projectId, teamId, token)
     return new VercelFirewallService(client)
   }
@@ -54,10 +54,7 @@ export class VercelProvider {
       throw new Error('Vercel project ID is required (provide projectId or set VERCEL_PROJECT_ID env var)')
     }
 
-    if (!teamId) {
-      throw new Error('Vercel team ID is required (provide teamId or set VERCEL_TEAM_ID env var)')
-    }
-
+    // teamId is intentionally not validated here — see fromEnv() above.
     logger.debug('Creating Vercel provider with config:', {
       projectId,
       teamId,

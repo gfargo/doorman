@@ -66,7 +66,11 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
         providers: {
           vercel: {
             projectId: this.client['projectId'],
-            teamId: this.client['teamId'],
+            // Omitted entirely (not set to `undefined`/`''`) when the client
+            // has no explicit team ID — an unconditionally-set optional
+            // field is exactly the isDeepEqual/diffing pitfall documented
+            // in #199/#203.
+            ...(this.client['teamId'] ? { teamId: this.client['teamId'] } : {}),
           },
         },
         rules,
