@@ -1,3 +1,10 @@
+## [3.10.1](https://github.com/gfargo/doorman/compare/v3.10.0...v3.10.1) (2026-08-21)
+
+
+### Bug Fixes
+
+* stop hard-requiring VERCEL_TEAM_ID for Vercel provider ([#208](https://github.com/gfargo/doorman/issues/208)) ([acec4c5](https://github.com/gfargo/doorman/commit/acec4c5c3df56c0e97a1cd2acc0aadc427d58cea)), closes [#207](https://github.com/gfargo/doorman/issues/207)
+
 # [3.10.0](https://github.com/gfargo/doorman/compare/v3.9.2...v3.10.0) (2026-08-20)
 
 
