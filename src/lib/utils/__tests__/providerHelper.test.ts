@@ -234,6 +234,25 @@ describe('providerHelper', () => {
       )
     })
 
+    // Regression test for #207: token + projectId alone must be enough in
+    // non-interactive mode (e.g. CI). A missing teamId just means "use my
+    // Vercel default team" and must never throw or block on its own.
+    it('does not throw for Vercel in non-interactive mode when only teamId is missing', async () => {
+      process.env.VERCEL_TOKEN = 'token'
+      process.env.VERCEL_PROJECT_ID = 'proj'
+
+      const { provider, vercelCredentials } = await getProviderInstance({
+        provider: 'vercel',
+        interactive: false,
+      })
+
+      expect(provider.name).toBe('vercel')
+      expect(vercelCredentials?.teamId).toBeUndefined()
+      expect(VercelProvider.fromConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ token: 'token', projectId: 'proj', teamId: undefined }),
+      )
+    })
+
     it('throws for Cloudflare when credentials missing and non-interactive', async () => {
       await expect(getProviderInstance({ provider: 'cloudflare', interactive: false })).rejects.toThrow(
         /credentials missing/,

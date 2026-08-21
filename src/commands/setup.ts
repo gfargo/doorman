@@ -36,7 +36,8 @@ export const handler = async (_argv: Arguments<SetupOptions>) => {
   logger.log('   • Click on your team name in the top-left')
   logger.log('   • Go to Team Settings → General')
   logger.log('   • Copy the Team ID')
-  logger.log('   • Leave empty if using personal account')
+  logger.log('   • Leave empty to use your Vercel default team (every account has one)')
+  logger.log('   • Belong to more than one team? Set this explicitly, or doorman will use whichever is your default')
   logger.log('')
 
   // Step 3: API Token
