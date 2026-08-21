@@ -3,6 +3,7 @@ import { logger } from '../../lib/logger'
 import { VercelClient } from '../../lib/providers/vercel/VercelClient'
 import { CloudflareClient } from '../../lib/providers/cloudflare/CloudflareClient'
 import { mockCloudflareClientPrototype, mockVercelClientPrototype } from '../../tests/testHelpers/providerMocks'
+import { getStdoutText } from '../../tests/testHelpers/loggerMock'
 import { handler } from '../diff'
 
 jest.mock('../../lib/logger', () => ({ logger: require('../../tests/testHelpers/loggerMock').createLoggerMock() }))
@@ -27,6 +28,27 @@ describe('diff command', () => {
     await handler({ provider: 'vercel', token: 't', projectId: 'prj', teamId: 'team', debug: false, ci: true } as any)
 
     expect(logger.success).toHaveBeenCalledWith(expect.stringContaining('No differences found'))
+  })
+
+  it('still outputs valid JSON when format is json and configs match (regression test for #209)', async () => {
+    mockedGetConfig.mockResolvedValue({ version: 5, rules: [], ips: [] } as any)
+
+    await handler({
+      provider: 'vercel',
+      token: 't',
+      projectId: 'prj',
+      teamId: 'team',
+      format: 'json',
+      debug: false,
+      ci: true,
+    } as any)
+
+    // Previously this case never reached the format check at all — the
+    // no-changes branch returned a plain sentence regardless of --format.
+    expect(logger.success).not.toHaveBeenCalled()
+    const stdout = getStdoutText(logger as any)
+    const parsed = JSON.parse(stdout)
+    expect(parsed.summary.hasChanges).toBe(false)
   })
 
   it('prints rule changes for the Vercel provider as JSON when format is json', async () => {
@@ -57,6 +79,11 @@ describe('diff command', () => {
     expect(jsonCall).toBeDefined()
     const parsed = JSON.parse(jsonCall![0])
     expect(parsed.rules.toAdd).toHaveLength(1)
+
+    // Whole-stream check — the "Calculating differences..." spinner used to
+    // print unconditionally ahead of this, on the same stdout stream.
+    const stdout = getStdoutText(logger as any)
+    expect(() => JSON.parse(stdout)).not.toThrow()
   })
 
   it('reports differences for the Cloudflare provider without crashing (regression test for #82)', async () => {

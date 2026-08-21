@@ -3,6 +3,7 @@ import { logger } from '../../lib/logger'
 import { VercelClient } from '../../lib/providers/vercel/VercelClient'
 import { CloudflareClient } from '../../lib/providers/cloudflare/CloudflareClient'
 import { mockCloudflareClientPrototype, mockVercelClientPrototype } from '../../tests/testHelpers/providerMocks'
+import { getStdoutText } from '../../tests/testHelpers/loggerMock'
 import { handler } from '../export'
 
 jest.mock('../../lib/logger', () => ({ logger: require('../../tests/testHelpers/loggerMock').createLoggerMock() }))
@@ -59,6 +60,21 @@ describe('export command', () => {
 
     const logged = (logger.log as unknown as jest.Mock).mock.calls.map((c) => String(c[0])).join('\n')
     expect(JSON.parse(logged)).toEqual(localVercelConfig)
+  })
+
+  it('writes nothing but the payload to stdout for any format when no --output is given (regression test for #209)', async () => {
+    mockedGetConfig.mockResolvedValue(localVercelConfig as any)
+
+    // Whole-stream check across every logger method — the "Exporting
+    // configuration in ... format..." spinner used to print unconditionally
+    // on stdout ahead of the payload, for every format, not just json.
+    await handler({ source: 'local', format: 'json', debug: false, ci: true } as any)
+    expect(() => JSON.parse(getStdoutText(logger as any))).not.toThrow()
+
+    jest.clearAllMocks()
+    mockedGetConfig.mockResolvedValue(localVercelConfig as any)
+    await handler({ source: 'local', format: 'markdown', debug: false, ci: true } as any)
+    expect(getStdoutText(logger as any)).not.toContain('Exporting configuration')
   })
 
   it('exports the local config as markdown to stdout', async () => {
