@@ -59,6 +59,7 @@ describe('backup command', () => {
   let tempDir: string
   let backupDir: string
   let configPath: string
+  const originalCwd = process.cwd()
 
   beforeEach(async () => {
     jest.clearAllMocks()
@@ -79,6 +80,7 @@ describe('backup command', () => {
 
   afterEach(async () => {
     jest.restoreAllMocks()
+    process.chdir(originalCwd)
     await fs.rm(tempDir, { recursive: true, force: true })
   })
 
@@ -128,6 +130,81 @@ describe('backup command', () => {
     expect(content.ips[0].hostname).toBe('example.com')
     expect(content.ips[0].notes).toBe('Known bad actor')
     expect(content.ips[0].action).toBe('deny')
+  })
+
+  it('warns when the output dir is not gitignored in a git repo (regression test for #211)', async () => {
+    await fs.mkdir(join(tempDir, '.git'))
+    process.chdir(tempDir)
+
+    await handler({
+      provider: 'vercel',
+      token: 't',
+      projectId: 'prj',
+      teamId: 'team',
+      config: configPath,
+      output: 'backups',
+      debug: false,
+      ci: true,
+    } as any)
+
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("isn't in .gitignore"))
+  })
+
+  it('does not warn when the output dir is already covered by .gitignore', async () => {
+    await fs.mkdir(join(tempDir, '.git'))
+    await fs.writeFile(join(tempDir, '.gitignore'), 'backups/\n')
+    process.chdir(tempDir)
+
+    await handler({
+      provider: 'vercel',
+      token: 't',
+      projectId: 'prj',
+      teamId: 'team',
+      config: configPath,
+      output: 'backups',
+      debug: false,
+      ci: true,
+    } as any)
+
+    const warnTexts = (logger.warn as unknown as jest.Mock).mock.calls.map((c) => String(c[0]))
+    expect(warnTexts.some((t) => t.includes("isn't in .gitignore"))).toBe(false)
+  })
+
+  it('does not warn outside a git repo', async () => {
+    process.chdir(tempDir) // no .git created
+
+    await handler({
+      provider: 'vercel',
+      token: 't',
+      projectId: 'prj',
+      teamId: 'team',
+      config: configPath,
+      output: 'backups',
+      debug: false,
+      ci: true,
+    } as any)
+
+    const warnTexts = (logger.warn as unknown as jest.Mock).mock.calls.map((c) => String(c[0]))
+    expect(warnTexts.some((t) => t.includes("isn't in .gitignore"))).toBe(false)
+  })
+
+  it('does not warn for an absolute --output path, even unignored in a git repo', async () => {
+    await fs.mkdir(join(tempDir, '.git'))
+    process.chdir(tempDir)
+
+    await handler({
+      provider: 'vercel',
+      token: 't',
+      projectId: 'prj',
+      teamId: 'team',
+      config: configPath,
+      output: backupDir, // absolute, from the outer beforeEach
+      debug: false,
+      ci: true,
+    } as any)
+
+    const warnTexts = (logger.warn as unknown as jest.Mock).mock.calls.map((c) => String(c[0]))
+    expect(warnTexts.some((t) => t.includes("isn't in .gitignore"))).toBe(false)
   })
 
   it('creates a backup file for the Cloudflare provider without crashing (regression test for #82)', async () => {

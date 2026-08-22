@@ -1,6 +1,6 @@
 import chalk from 'chalk'
 import { existsSync, mkdirSync, readdirSync, statSync } from 'fs'
-import { join } from 'path'
+import { isAbsolute, join } from 'path'
 import { LogLevels } from 'consola'
 import { Arguments } from 'yargs'
 import { logger } from '../lib/logger'
@@ -9,6 +9,7 @@ import { FirewallConfig } from '../lib/types'
 import { prompt } from '../lib/ui/prompt'
 import { getConfig, saveConfig } from '../lib/utils/config'
 import { handleCommandError } from '../lib/utils/handleCommandError'
+import { isDirGitignored, isGitRepo } from '../lib/utils/gitignoreCheck'
 import type { ProviderType } from '../lib/providers/IFirewallProvider'
 import { providerOption } from '../lib/utils/providerOption'
 import { withCredentials } from '../lib/utils/withCredentials'
@@ -236,6 +237,23 @@ export const handler = async (argv: Arguments<BackupOptions>) => {
           `${chalk.dim('Rules:')} ${remoteConfig.rules.length} custom, ${remoteConfig.ips?.length ?? 0} IP blocking`,
         )
         logger.log(`${chalk.dim('Created:')} ${new Date().toLocaleString()}`)
+
+        // A firewall backup is a full snapshot of rule names/conditions/regex
+        // patterns — reasonable to keep out of git history by default. Only
+        // warn when we can positively tell we're in a git repo without an
+        // ignore entry already covering it; see gitignoreCheck.ts for why
+        // this is a best-effort literal match, not full gitignore semantics.
+        // Skipped for an absolute --output: it isn't meaningfully "relative
+        // to the repo root" the way the default `./backups` is, so a root
+        // .gitignore literal-match can't say anything useful about it.
+        if (!isAbsolute(backupDir) && isGitRepo() && !isDirGitignored(backupDir)) {
+          logger.warn(
+            chalk.yellow(
+              `💡 ${backupDir} isn't in .gitignore — firewall backups may contain rule details you don't want in git history.`,
+            ),
+          )
+        }
+
         logger.log('')
         logger.log(chalk.dim('To restore this backup later, run:'))
         logger.log(chalk.cyan(`doorman backup --restore ${backupFilename}`))
