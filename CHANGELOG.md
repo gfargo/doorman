@@ -1,3 +1,10 @@
+## [3.13.3](https://github.com/gfargo/doorman/compare/v3.13.2...v3.13.3) (2026-08-22)
+
+
+### Bug Fixes
+
+* parse negated starts_with/ends_with/matches/gt/ge/lt/le CEL back correctly ([#241](https://github.com/gfargo/doorman/issues/241)) ([68de9a2](https://github.com/gfargo/doorman/commit/68de9a279a3e04e87abb3d4c11f068ae52119f22)), closes [#240](https://github.com/gfargo/doorman/issues/240) [#239](https://github.com/gfargo/doorman/issues/239)
+
 ## [3.13.2](https://github.com/gfargo/doorman/compare/v3.13.1...v3.13.2) (2026-08-22)
 
 
