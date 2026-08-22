@@ -236,6 +236,28 @@ describe('VercelClient', () => {
 
       await expect(client.updateFirewallRule(rule)).rejects.toThrow()
     })
+
+    // Regression tests for #195: rules.insert is not idempotent — retrying
+    // it after a response is lost (the request reached Vercel and created
+    // the rule, but the client never saw the success) creates a duplicate.
+    // rules.update is safe to retry (keyed by id).
+    it('does not retry a create (rules.insert) after a network failure', async () => {
+      const newRule = { ...rule, id: '-' }
+      fetchSpy.mockRejectedValue(new Error('fetch failed'))
+
+      await expect(client.updateFirewallRule(newRule)).rejects.toThrow()
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('still retries an update (rules.update) after a network failure', async () => {
+      fetchSpy.mockRejectedValue(new Error('fetch failed'))
+
+      await expect(client.updateFirewallRule(rule)).rejects.toThrow()
+
+      // Default `retries: 3` -> up to 4 attempts total.
+      expect(fetchSpy.mock.calls.length).toBeGreaterThan(1)
+    })
   })
 
   describe('createFirewallRule', () => {
@@ -329,6 +351,25 @@ describe('VercelClient', () => {
       const body = JSON.parse(calledOptions.body as string)
       expect(body.action).toBe('ip.insert')
       expect(body.id).toBeNull()
+    })
+
+    // Regression tests for #195 — same non-idempotency risk as
+    // updateFirewallRule's rules.insert.
+    it('does not retry a create (ip.insert) after a network failure', async () => {
+      const newIpRule = { ...ipRule, id: '-' }
+      fetchSpy.mockRejectedValue(new Error('fetch failed'))
+
+      await expect(client.updateIPBlockingRule(newIpRule)).rejects.toThrow()
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1)
+    })
+
+    it('still retries an update (ip.update) after a network failure', async () => {
+      fetchSpy.mockRejectedValue(new Error('fetch failed'))
+
+      await expect(client.updateIPBlockingRule(ipRule)).rejects.toThrow()
+
+      expect(fetchSpy.mock.calls.length).toBeGreaterThan(1)
     })
 
     it('should create an IP blocking rule via createIPBlockingRule', async () => {
