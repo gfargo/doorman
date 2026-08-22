@@ -1,3 +1,10 @@
+## [3.11.1](https://github.com/gfargo/doorman/compare/v3.11.0...v3.11.1) (2026-08-22)
+
+
+### Bug Fixes
+
+* warn when doorman backup's output dir isn't gitignored ([#222](https://github.com/gfargo/doorman/issues/222)) ([11e46bc](https://github.com/gfargo/doorman/commit/11e46bc6fc76d83b88a18fc87da4d2c445ecd646)), closes [#211](https://github.com/gfargo/doorman/issues/211)
+
 # [3.11.0](https://github.com/gfargo/doorman/compare/v3.10.2...v3.11.0) (2026-08-22)
 
 
