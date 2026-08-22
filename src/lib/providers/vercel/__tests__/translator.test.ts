@@ -160,13 +160,20 @@ describe('vercel/translator', () => {
       expect(result.action.duration).toBe('1h')
     })
 
-    it('generates warning for regex patterns', () => {
+    // Regression test for #214 — vercelToUnified is the provider-agnostic
+    // Vercel-native -> Unified step every command (list/status/diff/backup/
+    // sync) runs on every fetch, with no destination provider in play. It
+    // previously warned "may need adjustment for target provider" on any
+    // regex condition unconditionally, which fired on ordinary single-
+    // provider Vercel usage with no migration happening at all — there's no
+    // call site today where this result feeds a different provider's
+    // unifiedToX translator, so the warning had no target to be about.
+    it('does not warn about regex patterns on ordinary (non-migration) translation', () => {
       const rule = makeVercelRule({
         conditionGroup: [{ conditions: [{ type: 'path', op: 're', value: '^/api/v[0-9]+' }] }],
       })
       const { warnings } = vercelToUnified(rule)
-      expect(warnings.length).toBeGreaterThan(0)
-      expect(warnings.some((w) => w.category === 'syntax_limitation')).toBe(true)
+      expect(warnings.some((w) => w.category === 'syntax_limitation')).toBe(false)
     })
 
     it('flattens multiple condition groups', () => {

@@ -42,14 +42,14 @@ describe('Translation Warning Integration', () => {
 
       const result = RuleTranslator.vercelToUnified(complexRule)
 
-      expect(result.warnings).toHaveLength(3) // 2 regex warnings + many conditions warning
-
-      // Check for regex pattern warnings
-      const regexWarnings = result.warnings.filter((w) => w.category === 'syntax_limitation')
-      expect(regexWarnings).toHaveLength(2) // user_agent and header regex patterns
-      expect(regexWarnings[0]?.message).toContain('Regular expression pattern')
-      expect(regexWarnings[0]?.severity).toBe('warning')
-      expect(regexWarnings[0]?.suggestion).toContain('Test the regex pattern')
+      // vercelToUnified is the provider-agnostic Vercel-native -> Unified
+      // step every command runs on every fetch, with no destination
+      // provider in play — it no longer warns about regex syntax here (see
+      // #214); that warning only makes sense once there's an actual target
+      // provider to translate into, which no current call site of this
+      // function has.
+      expect(result.warnings).toHaveLength(1) // many conditions warning only
+      expect(result.warnings.some((w) => w.category === 'syntax_limitation')).toBe(false)
 
       // Check for many conditions warning
       const performanceWarning = result.warnings.find((w) => w.category === 'performance_impact')
