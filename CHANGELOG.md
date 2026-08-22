@@ -1,3 +1,10 @@
+## [3.11.3](https://github.com/gfargo/doorman/compare/v3.11.2...v3.11.3) (2026-08-22)
+
+
+### Bug Fixes
+
+* reconcile native/unified schema drift on redirect, ex/nex, hostname ([#224](https://github.com/gfargo/doorman/issues/224)) ([a4a2b6f](https://github.com/gfargo/doorman/commit/a4a2b6f3a25fe785cc890cfc1e99d7de6878e4f3)), closes [#212](https://github.com/gfargo/doorman/issues/212) [#213](https://github.com/gfargo/doorman/issues/213) [#85](https://github.com/gfargo/doorman/issues/85) [#219](https://github.com/gfargo/doorman/issues/219) [#219](https://github.com/gfargo/doorman/issues/219) [#213](https://github.com/gfargo/doorman/issues/213) [#219](https://github.com/gfargo/doorman/issues/219) [#212](https://github.com/gfargo/doorman/issues/212) [#213](https://github.com/gfargo/doorman/issues/213)
+
 ## [3.11.2](https://github.com/gfargo/doorman/compare/v3.11.1...v3.11.2) (2026-08-22)
 
 
