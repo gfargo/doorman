@@ -16,6 +16,8 @@ describe('ProviderDetector', () => {
     delete process.env.CLOUDFLARE_API_TOKEN
     delete process.env.VERCEL_PROJECT_ID
     delete process.env.VERCEL_TOKEN
+    delete process.env.FASTLY_WORKSPACE_ID
+    delete process.env.FASTLY_API_TOKEN
   })
 
   afterAll(() => {
@@ -48,7 +50,10 @@ describe('ProviderDetector', () => {
       })
       expect(result.provider).toBe('cloudflare')
       expect(result.confidence).toBe('high')
-      expect(result.reasons).toContainEqual(expect.stringContaining('Cloudflare zone ID'))
+      // Reason text now comes straight from the credential descriptor's
+      // `label` (single source of truth, see #182) rather than a separately
+      // hand-typed phrase — hence "Zone ID" rather than "zone ID".
+      expect(result.reasons).toContainEqual(expect.stringContaining('Cloudflare Zone ID'))
     })
 
     it('detects Vercel from providers.vercel.projectId', () => {
@@ -57,7 +62,7 @@ describe('ProviderDetector', () => {
       })
       expect(result.provider).toBe('vercel')
       expect(result.confidence).toBe('high')
-      expect(result.reasons).toContainEqual(expect.stringContaining('Vercel project ID'))
+      expect(result.reasons).toContainEqual(expect.stringContaining('Vercel Project ID'))
     })
 
     it('detects Vercel from legacy projectId field', () => {
@@ -101,6 +106,37 @@ describe('ProviderDetector', () => {
       process.env.VERCEL_PROJECT_ID = 'proj-123'
       const result = ProviderDetector.detect()
       expect(result.provider).toBe('vercel')
+      expect(result.confidence).toBe('medium')
+    })
+
+    // Fastly-specific detection had no test coverage at all before this —
+    // real gap, and the most meaningful regression test for #182's actual
+    // point: detect()/detectFromEnvironment() are now generic over
+    // CREDENTIAL_DESCRIPTORS rather than hand-coding each provider, so
+    // correctly detecting the one provider added *after* this detector was
+    // originally written (with zero Fastly-specific code in this file) is
+    // real evidence the genericity works, not just that it compiles.
+    it('detects Fastly from providers.fastly.workspaceId', () => {
+      const result = ProviderDetector.detect({
+        providers: { fastly: { workspaceId: 'workspace-123' } },
+      })
+      expect(result.provider).toBe('fastly')
+      expect(result.confidence).toBe('high')
+      expect(result.reasons).toContainEqual(expect.stringContaining('Fastly Next-Gen WAF Workspace ID'))
+    })
+
+    it('detects Fastly from FASTLY_WORKSPACE_ID env var alone', () => {
+      process.env.FASTLY_WORKSPACE_ID = 'workspace-123'
+      const result = ProviderDetector.detect()
+      expect(result.provider).toBe('fastly')
+      expect(result.confidence).toBe('medium')
+    })
+
+    it('detects Fastly from FASTLY_WORKSPACE_ID + FASTLY_API_TOKEN env vars', () => {
+      process.env.FASTLY_WORKSPACE_ID = 'workspace-123'
+      process.env.FASTLY_API_TOKEN = 'token-123'
+      const result = ProviderDetector.detect()
+      expect(result.provider).toBe('fastly')
       expect(result.confidence).toBe('medium')
     })
 
