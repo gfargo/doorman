@@ -500,18 +500,23 @@ function mapFieldToUnified(
   return null
 }
 
-function leafToCondition(node: CelNode, group: number): UnifiedCondition | null {
+function leafToCondition(node: CelNode, group: number | undefined): UnifiedCondition | null {
   const negated = node.type === 'not'
   const inner = node.type === 'not' ? node.child : node
 
   if (isIpOrGroup(inner)) {
     const values = inner.children.map((c) => ipCheckValue(c as Extract<CelNode, { type: 'inIpRange' | 'comparison' }>))
-    return { field: 'ip', operator: negated ? 'not_in' : 'in', value: values, group }
+    return {
+      field: 'ip',
+      operator: negated ? 'not_in' : 'in',
+      value: values,
+      ...(group !== undefined ? { group } : {}),
+    }
   }
 
   if (inner.type === 'inIpRange' || (inner.type === 'comparison' && inner.field === 'origin.ip')) {
     const value = inner.type === 'inIpRange' ? inner.value : String(inner.value)
-    return { field: 'ip', operator: negated ? 'ne' : 'eq', value, group }
+    return { field: 'ip', operator: negated ? 'ne' : 'eq', value, ...(group !== undefined ? { group } : {}) }
   }
 
   if (inner.type === 'and' && isGuardedLeaf(inner)) {
@@ -539,8 +544,8 @@ function leafToCondition(node: CelNode, group: number): UnifiedCondition | null 
       field: mapped.unifiedField,
       operator: negated ? 'not_exists' : 'exists',
       value: '',
-      key: mapped.unifiedKey,
-      group,
+      ...(mapped.unifiedKey !== undefined ? { key: mapped.unifiedKey } : {}),
+      ...(group !== undefined ? { group } : {}),
     }
   }
 
@@ -552,7 +557,7 @@ function comparisonToCondition(
   negated: boolean,
   refField: string,
   refKey: string | undefined,
-  group: number,
+  group: number | undefined,
 ): UnifiedCondition | null {
   const mapped = mapFieldToUnified(refField, refKey)
   if (!mapped) return null
@@ -581,8 +586,8 @@ function comparisonToCondition(
     field: mapped.unifiedField,
     operator,
     value,
-    key: mapped.unifiedKey,
-    group,
+    ...(mapped.unifiedKey !== undefined ? { key: mapped.unifiedKey } : {}),
+    ...(group !== undefined ? { group } : {}),
   }
 }
 
@@ -604,8 +609,17 @@ function negateSimpleOperator(op: 'eq' | 'ne' | 'gt' | 'ge' | 'lt' | 'le'): Unif
  * reported as `null`.
  */
 function astToConditions(node: CelNode): { conditions: UnifiedCondition[]; conditionLogic: 'AND' | 'OR' } | null {
+  // isLeaf/flat-AND both describe a single implicit group — `group` carries
+  // no information there (there's only ever one), so it's omitted entirely
+  // rather than hardcoded to 0. Only the `or` branch below has more than
+  // one group to actually distinguish, and passes a real index. Matters for
+  // round-tripping: a local config never sets `group` on an ungrouped
+  // condition (there's nothing to distinguish it from), so an unconditional
+  // `group: 0` here would make every such rule look changed on every sync,
+  // forever — the same isDeepEqual key-count issue documented on
+  // gcpToUnified.
   if (isLeaf(node)) {
-    const condition = leafToCondition(node, 0)
+    const condition = leafToCondition(node, undefined)
     return condition ? { conditions: [condition], conditionLogic: 'AND' } : null
   }
 
@@ -613,7 +627,7 @@ function astToConditions(node: CelNode): { conditions: UnifiedCondition[]; condi
     const conditions: UnifiedCondition[] = []
     for (const child of node.children) {
       if (!isLeaf(child)) return null
-      const condition = leafToCondition(child, 0)
+      const condition = leafToCondition(child, undefined)
       if (!condition) return null
       conditions.push(condition)
     }

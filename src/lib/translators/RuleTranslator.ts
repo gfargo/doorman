@@ -6,6 +6,13 @@ import {
   fastlyListEntriesToUnified,
   unifiedIPsToFastlyEntries,
 } from '../providers/fastly/translator'
+import {
+  gcpToUnified,
+  unifiedToGcp,
+  gcpToUnifiedIP,
+  unifiedIPToGcp,
+  looksLikeIpRule as gcpLooksLikeIpRule,
+} from '../providers/gcp/translator'
 
 export type {
   TranslationWarningSeverity,
@@ -44,4 +51,10 @@ export class RuleTranslator {
   static unifiedToFastly = unifiedToFastly
   static fastlyListEntriesToUnified = fastlyListEntriesToUnified
   static unifiedIPsToFastlyEntries = unifiedIPsToFastlyEntries
+
+  static gcpToUnified = gcpToUnified
+  static unifiedToGcp = unifiedToGcp
+  static gcpToUnifiedIP = gcpToUnifiedIP
+  static unifiedIPToGcp = unifiedIPToGcp
+  static gcpLooksLikeIpRule = gcpLooksLikeIpRule
 }

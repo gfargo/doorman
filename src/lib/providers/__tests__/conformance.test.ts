@@ -49,6 +49,7 @@ jest.mock('../../ui/prompt', () => ({
 jest.mock('../vercel/VercelClient')
 jest.mock('../cloudflare/CloudflareClient')
 jest.mock('../fastly/FastlyClient')
+jest.mock('../gcp/CloudArmorClient')
 
 import { PROVIDER_TYPES, type ProviderType, type FeatureSet } from '../IFirewallProvider'
 import { CREDENTIAL_DESCRIPTORS, resolveCredentials } from '../credentials'
@@ -56,14 +57,17 @@ import { getProviderInstance, type ProviderOptions } from '../../utils/providerH
 import { VercelProvider } from '../vercel'
 import { CloudflareProvider } from '../cloudflare'
 import { FastlyProvider } from '../fastly'
+import { CloudArmorProvider } from '../gcp'
 import { VercelClient } from '../vercel/VercelClient'
 import { CloudflareClient } from '../cloudflare/CloudflareClient'
 import { FastlyClient } from '../fastly/FastlyClient'
+import { CloudArmorClient } from '../gcp/CloudArmorClient'
 import { OperationSafety } from '../../utils/operationSafety'
 import {
   mockVercelClientPrototype,
   mockCloudflareClientPrototype,
   mockFastlyClientPrototype,
+  mockCloudArmorClientPrototype,
   emptyVercelConfig,
   emptyCloudflareRuleset,
 } from '../../../tests/testHelpers/providerMocks'
@@ -72,6 +76,7 @@ import type { UnifiedConfig } from '../../types/unified'
 const MockedVercelClient = VercelClient as jest.MockedClass<typeof VercelClient>
 const MockedCloudflareClient = CloudflareClient as jest.MockedClass<typeof CloudflareClient>
 const MockedFastlyClient = FastlyClient as jest.MockedClass<typeof FastlyClient>
+const MockedCloudArmorClient = CloudArmorClient as jest.MockedClass<typeof CloudArmorClient>
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -175,6 +180,17 @@ const CREDENTIAL_CONFORMANCE_CASES: Array<{ providerType: ProviderType; options:
       config: { providers: { fastly: { workspaceId: 'config-workspace' } } } as UnifiedConfig,
     },
   },
+  {
+    providerType: 'gcp',
+    options: {
+      provider: 'gcp',
+      // serviceAccountKeyPath is optional (falls through to Application
+      // Default Credentials, see gcp/credentials.ts) — projectId/policyName
+      // are the two required, config-declarable fields.
+      interactive: false,
+      config: { providers: { gcp: { projectId: 'config-project', policyName: 'config-policy' } } } as UnifiedConfig,
+    },
+  },
 ]
 
 describe('provider conformance: config-declared credentials resolve without needing env vars', () => {
@@ -222,6 +238,14 @@ describe('provider conformance: getSupportedFeatures returns a complete FeatureS
       expect(typeof features[key]).toBe('boolean')
     }
   })
+
+  it('gcp: every required key is present and boolean', () => {
+    const provider = CloudArmorProvider.fromConfig({ projectId: 'p', policyName: 'pol' })
+    const features = provider.getSupportedFeatures()
+    for (const key of REQUIRED_BOOLEAN_KEYS) {
+      expect(typeof features[key]).toBe('boolean')
+    }
+  })
 })
 
 describe('provider conformance: validateConfig rejects a config with no rules array', () => {
@@ -247,6 +271,13 @@ describe('provider conformance: validateConfig rejects a config with no rules ar
 
   it('fastly', () => {
     const provider = FastlyProvider.fromConfig({ apiToken: 't', workspaceId: 'w' })
+    const result = provider.validateConfig(configWithNoRules)
+    expect(result.valid).toBe(false)
+    expect(result.errors.some((e) => e.code === 'RULES_REQUIRED')).toBe(true)
+  })
+
+  it('gcp', () => {
+    const provider = CloudArmorProvider.fromConfig({ projectId: 'p', policyName: 'pol' })
     const result = provider.validateConfig(configWithNoRules)
     expect(result.valid).toBe(false)
     expect(result.errors.some((e) => e.code === 'RULES_REQUIRED')).toBe(true)
@@ -305,5 +336,16 @@ describe('provider conformance: syncRules never issues a mutating call when dryR
     expect(MockedFastlyClient.prototype.deleteRule).not.toHaveBeenCalled()
     expect(MockedFastlyClient.prototype.getOrCreateList).not.toHaveBeenCalled()
     expect(MockedFastlyClient.prototype.updateListEntries).not.toHaveBeenCalled()
+  })
+
+  it('gcp', async () => {
+    mockCloudArmorClientPrototype(MockedCloudArmorClient, { rules: [] })
+    const provider = CloudArmorProvider.fromConfig({ projectId: 'p', policyName: 'pol' })
+
+    await provider.syncRules(makeLocalConfig('gcp'), { dryRun: true })
+
+    expect(MockedCloudArmorClient.prototype.addRule).not.toHaveBeenCalled()
+    expect(MockedCloudArmorClient.prototype.patchRule).not.toHaveBeenCalled()
+    expect(MockedCloudArmorClient.prototype.removeRule).not.toHaveBeenCalled()
   })
 })

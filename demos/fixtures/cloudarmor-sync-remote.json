@@ -1,0 +1,21 @@
+{
+  "projectId": "demo-project",
+  "policyName": "doorman-demo-policy",
+  "policyId": "1234567890",
+  "rules": [
+    {
+      "priority": 1000,
+      "description": "Block Bad Bots",
+      "match": {
+        "expr": { "expression": "(has(request.headers['user-agent']) && request.headers['user-agent'].contains('bot'))" }
+      },
+      "action": "deny(403)"
+    },
+    {
+      "priority": 2000,
+      "description": "IP deny: 198.51.100.7",
+      "match": { "expr": { "expression": "origin.ip == '198.51.100.7'" } },
+      "action": "deny(403)"
+    }
+  ]
+}

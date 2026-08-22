@@ -6,6 +6,7 @@ import { ProviderDetector } from '../providers/ProviderDetector'
 import { VercelProvider } from '../providers/vercel'
 import { CloudflareProvider } from '../providers/cloudflare'
 import { FastlyProvider } from '../providers/fastly'
+import { CloudArmorProvider } from '../providers/gcp'
 import { PROVIDER_TYPES, type IFirewallProvider, type ProviderType } from '../providers/IFirewallProvider'
 import { CREDENTIAL_DESCRIPTORS, missingRequiredCredentials, resolveCredentials } from '../providers/credentials'
 import type { CredentialField } from '../providers/credentials'
@@ -191,6 +192,14 @@ function buildProvider(
       return {
         provider: FastlyProvider.fromConfig({ apiToken: resolved.apiToken!, workspaceId: resolved.workspaceId! }),
       }
+    case 'gcp':
+      return {
+        provider: CloudArmorProvider.fromConfig({
+          projectId: resolved.projectId!,
+          policyName: resolved.policyName!,
+          serviceAccountKeyPath: resolved.serviceAccountKeyPath,
+        }),
+      }
     default:
       throw new Error(`Unknown provider: ${providerType as string}`)
   }
@@ -263,6 +272,8 @@ export function getProviderDisplayName(providerType: ProviderType): string {
       return 'Cloudflare WAF'
     case 'fastly':
       return 'Fastly Next-Gen WAF'
+    case 'gcp':
+      return 'Google Cloud Armor'
     default:
       return providerType
   }

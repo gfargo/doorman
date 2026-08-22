@@ -8,8 +8,20 @@ describe('parseCelExpression', () => {
 
     expect(result).not.toBeNull()
     expect(result!.conditions).toHaveLength(1)
-    expect(result!.conditions[0]).toMatchObject({ field: 'path', operator: 'eq', value: '/api', group: 0 })
+    expect(result!.conditions[0]).toMatchObject({ field: 'path', operator: 'eq', value: '/api' })
     expect(result!.conditionLogic).toBe('AND')
+  })
+
+  it('omits group on an ungrouped condition rather than defaulting it to 0 (regression guard)', () => {
+    // A single implicit group carries no information in `group` — a real
+    // local config never sets it for the common ungrouped case, so an
+    // unconditional `group: 0` here would make isDeepEqual see an extra key
+    // that isn't there locally and report a phantom "changed" on every
+    // sync. See translator.ts's gcpToUnified for the same fix applied one
+    // level up (rateLimit/redirect/conditionLogic).
+    const result = parseCelExpression("request.path == '/api'")
+    expect(result!.conditions[0]!.group).toBeUndefined()
+    expect(Object.keys(result!.conditions[0]!)).not.toContain('group')
   })
 
   it('parses a flat AND of multiple conditions into a single group', () => {
@@ -18,7 +30,7 @@ describe('parseCelExpression', () => {
     expect(result).not.toBeNull()
     expect(result!.conditionLogic).toBe('AND')
     expect(result!.conditions).toHaveLength(2)
-    expect(result!.conditions.every((c) => c.group === 0)).toBe(true)
+    expect(result!.conditions.every((c) => c.group === undefined)).toBe(true)
   })
 
   it('parses a flat OR of single-condition groups, one group per branch', () => {

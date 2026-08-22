@@ -2,6 +2,7 @@ import { getProviderRegistry } from './ProviderRegistry'
 import { CloudflareProvider } from './cloudflare'
 import { VercelProvider } from './vercel'
 import { FastlyProvider } from './fastly'
+import { CloudArmorProvider } from './gcp'
 import { logger } from '../logger'
 import type { ProviderType } from './IFirewallProvider'
 
@@ -28,6 +29,12 @@ export function initProviders(): void {
   registry.register('fastly', () => {
     logger.debug('Initializing Fastly provider')
     return FastlyProvider.fromEnv()
+  })
+
+  // Register GCP Cloud Armor provider factory
+  registry.register('gcp', () => {
+    logger.debug('Initializing GCP Cloud Armor provider')
+    return CloudArmorProvider.fromEnv()
   })
 
   logger.debug('Provider registry initialized')
@@ -63,6 +70,12 @@ export async function getProvider(
   if (providerType === 'fastly' && config) {
     const fastlyConfig = config as { apiToken?: string; workspaceId?: string }
     return FastlyProvider.fromConfig(fastlyConfig)
+  }
+
+  // For GCP with custom config
+  if (providerType === 'gcp' && config) {
+    const gcpConfig = config as { projectId?: string; policyName?: string; serviceAccountKeyPath?: string }
+    return CloudArmorProvider.fromConfig(gcpConfig)
   }
 
   // Get from registry

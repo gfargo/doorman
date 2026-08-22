@@ -33,26 +33,39 @@ export class CompatibilityMatrix {
         notes: 'No dedicated action; maps to "allow"',
         limitations: ['request_logging is set at the rule level, not per-action'],
       },
+      gcp: {
+        level: 'partial',
+        notes: 'No dedicated log action; represented via preview: true on a rule',
+        limitations: ['A previewed rule evaluates and logs but never enforces, regardless of its actual action'],
+      },
     },
     deny: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'Maps to "block" action' },
       fastly: { level: 'full', notes: 'Maps to "block" action' },
+      gcp: { level: 'full', notes: 'Maps to "deny(403)"' },
     },
     block: {
       vercel: { level: 'not-supported' },
       cloudflare: { level: 'full' },
       fastly: { level: 'full' },
+      gcp: { level: 'full', notes: 'Maps to "deny(403)"' },
     },
     challenge: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'Maps to "managed_challenge" for better accuracy' },
       fastly: { level: 'full', notes: 'Maps to "browser_challenge" action' },
+      gcp: {
+        level: 'not-supported',
+        notes:
+          'Cloud Armor has reCAPTCHA integration via redirectOptions/rateLimitOptions.exceedRedirectOptions, but no standalone challenge action for ordinary custom rules',
+      },
     },
     bypass: {
       vercel: { level: 'full' },
       cloudflare: { level: 'partial', notes: 'Maps to "skip" action', limitations: ['Limited skip options'] },
       fastly: { level: 'partial', notes: 'No equivalent action; maps to "allow"' },
+      gcp: { level: 'partial', notes: 'No dedicated bypass action; maps to "allow"' },
     },
     rate_limit: {
       vercel: { level: 'full' },
@@ -66,16 +79,22 @@ export class CompatibilityMatrix {
         notes: 'Uses a distinct rule type ("rate_limit") with its own rate_limit block',
         limitations: ['Requires a pre-existing custom signal to count against'],
       },
+      gcp: {
+        level: 'full',
+        notes: 'Uses "throttle" or "rate_based_ban" action with a rateLimitOptions block',
+      },
     },
     redirect: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full' },
       fastly: { level: 'full' },
+      gcp: { level: 'full', notes: 'Uses "redirect" action with a redirectOptions block' },
     },
     allow: {
       vercel: { level: 'not-supported' },
       cloudflare: { level: 'full' },
       fastly: { level: 'full' },
+      gcp: { level: 'full' },
     },
   }
 
@@ -87,96 +106,123 @@ export class CompatibilityMatrix {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.host' },
       fastly: { level: 'full', notes: 'Maps to the "domain" condition field' },
+      gcp: { level: 'full', notes: "request.headers['host'], guarded by has()" },
     },
     path: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.request.uri.path' },
       fastly: { level: 'full' },
+      gcp: { level: 'full', notes: 'request.path' },
     },
     method: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.request.method' },
       fastly: { level: 'full' },
+      gcp: { level: 'full', notes: 'request.method' },
     },
     header: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.request.headers["name"]' },
       fastly: { level: 'full', notes: 'Maps to a "request_header" multival condition' },
+      gcp: { level: 'full', notes: "request.headers['name'], guarded by has()" },
     },
     query: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.request.uri.query' },
       fastly: { level: 'full', notes: 'Maps to a "query_parameter" multival condition' },
+      gcp: { level: 'full', notes: 'request.query — raw, undecoded query string, same shape as Cloudflare’s' },
     },
     cookie: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.cookie' },
       fastly: { level: 'full', notes: 'Maps to a "request_cookie" multival condition' },
+      gcp: {
+        level: 'partial',
+        notes:
+          "No parsed cookie map — a keyed condition composes a 'key=value' substring search against the raw Cookie header",
+        limitations: ['Only eq/ne/contains/not_contains are representable for a condition naming a specific cookie'],
+      },
     },
     target_path: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'Maps to http.request.uri.path' },
       fastly: { level: 'not-supported', notes: 'No Fastly equivalent condition field' },
+      gcp: { level: 'not-supported', notes: "Not currently mapped by doorman's Cloud Armor translator" },
     },
     ip_address: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.src' },
       fastly: { level: 'full', notes: 'Maps to the "ip" condition field' },
+      gcp: { level: 'full', notes: 'origin.ip / inIpRange(origin.ip, cidr)' },
     },
     region: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.geoip.subdivision_1' },
       fastly: { level: 'not-supported', notes: 'Fastly only exposes country-level geo matching' },
+      gcp: { level: 'not-supported', notes: 'Cloud Armor has no region/subdivision-level geo attribute' },
     },
     protocol: {
       vercel: { level: 'full' },
       cloudflare: { level: 'partial', notes: 'Maps to ssl boolean', limitations: ['Only checks HTTPS vs HTTP'] },
       fastly: { level: 'not-supported', notes: 'No Fastly equivalent condition field' },
+      gcp: { level: 'not-supported', notes: 'No confirmed Cloud Armor CEL field for scheme/protocol' },
     },
     scheme: {
       vercel: { level: 'full' },
       cloudflare: { level: 'partial', notes: 'Maps to ssl boolean', limitations: ['Only checks HTTPS vs HTTP'] },
       fastly: { level: 'full', notes: 'Maps to the "scheme" condition field' },
+      gcp: { level: 'not-supported', notes: 'No confirmed Cloud Armor CEL field for scheme/protocol' },
     },
     environment: {
       vercel: { level: 'full' },
       cloudflare: { level: 'not-supported', notes: 'Vercel-specific feature' },
       fastly: { level: 'not-supported', notes: 'Vercel-specific feature' },
+      gcp: { level: 'not-supported', notes: 'Vercel-specific feature' },
     },
     user_agent: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'http.user_agent' },
       fastly: { level: 'full' },
+      gcp: { level: 'full', notes: "request.headers['user-agent'], guarded by has()" },
     },
     geo_continent: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.geoip.continent' },
       fastly: { level: 'not-supported', notes: 'Fastly only exposes country-level geo matching' },
+      gcp: { level: 'not-supported', notes: 'Cloud Armor has no continent-level geo attribute' },
     },
     geo_country: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.geoip.country' },
       fastly: { level: 'full', notes: 'Maps to the "country" condition field' },
+      gcp: { level: 'full', notes: 'origin.region_code' },
     },
     geo_country_region: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.geoip.subdivision_1' },
       fastly: { level: 'not-supported', notes: 'Fastly only exposes country-level geo matching' },
+      gcp: { level: 'not-supported', notes: 'Cloud Armor has no region/subdivision-level geo attribute' },
     },
     geo_city: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.geoip.city' },
       fastly: { level: 'not-supported', notes: 'Fastly only exposes country-level geo matching' },
+      gcp: { level: 'not-supported', notes: 'Cloud Armor has no city-level geo attribute' },
     },
     geo_as_number: {
       vercel: { level: 'full' },
       cloudflare: { level: 'full', notes: 'ip.geoip.asnum' },
       fastly: { level: 'not-supported', notes: 'No Fastly equivalent condition field' },
+      gcp: { level: 'full', notes: 'origin.asn' },
     },
     ja4_digest: {
       vercel: { level: 'full' },
       cloudflare: { level: 'not-supported', notes: 'Vercel-specific feature' },
       fastly: { level: 'not-supported', notes: "Not currently mapped by doorman's Fastly translator" },
+      gcp: {
+        level: 'not-supported',
+        notes: "Cloud Armor exposes origin.tls_ja4_fingerprint, but it is not currently mapped by doorman's translator",
+      },
     },
     ja3_digest: {
       vercel: { level: 'full' },
@@ -186,11 +232,16 @@ export class CompatibilityMatrix {
         notes:
           "Fastly exposes a JA3 fingerprint condition field, but it is not currently mapped by doorman's translator",
       },
+      gcp: {
+        level: 'not-supported',
+        notes: "Cloud Armor exposes origin.tls_ja3_fingerprint, but it is not currently mapped by doorman's translator",
+      },
     },
     rate_limit_api_id: {
       vercel: { level: 'full' },
       cloudflare: { level: 'not-supported', notes: 'Vercel-specific feature' },
       fastly: { level: 'not-supported', notes: 'Vercel-specific feature' },
+      gcp: { level: 'not-supported', notes: 'Vercel-specific feature' },
     },
   }
 

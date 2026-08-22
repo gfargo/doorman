@@ -1,7 +1,6 @@
 import { PROVIDER_TYPES, type ProviderType } from '../providers/IFirewallProvider'
 import { CREDENTIAL_DESCRIPTORS } from '../providers/credentials'
 import type { CredentialField } from '../providers/credentials'
-import { getProviderDisplayName } from './providerHelper'
 
 /**
  * Every provider's credential flags, flattened onto one options shape.
@@ -11,11 +10,16 @@ import { getProviderDisplayName } from './providerHelper'
  * `accountId`, `workspaceId`) in its own local options interface — pure
  * duplication with a real chance of one being missed when a provider's
  * credentials changed (see #182). `apiToken` is deliberately shared by both
- * Cloudflare and Fastly (one flag, resolved against whichever provider is
- * active), the same way it always has been.
+ * Cloudflare and Fastly, and `projectId` by both Vercel and GCP — one flag
+ * each, resolved against whichever provider is active — the same way
+ * `apiToken` always has been; two providers happening to use the same
+ * credential *key* doesn't imply their values mean the same thing (a Vercel
+ * project ID and a GCP project ID are unrelated strings), only that they
+ * share a CLI flag name and are never both in play in the same command.
  *
  * Adding a provider whose credentials don't fit this exact field set still
- * means editing this interface once — but once, here, instead of 8 times.
+ * means editing this interface (and `pickCredentialOptions` below) once —
+ * but once, here, instead of 8 times.
  */
 export interface CredentialOptions {
   provider?: ProviderType
@@ -26,6 +30,8 @@ export interface CredentialOptions {
   zoneId?: string
   accountId?: string
   workspaceId?: string
+  policyName?: string
+  serviceAccountKeyPath?: string
 }
 
 interface YargsCredentialOption {
@@ -42,11 +48,13 @@ function describeField(entries: { provider: ProviderType; field: CredentialField
     return `${field.label}${optional} (defaults to ${field.envVar} env var${configFallback})`
   }
 
-  // A CLI flag shared by more than one provider's descriptor (today: just
-  // `apiToken`, for Cloudflare and Fastly) — describe every provider's env
-  // var rather than just whichever provider happened to be listed first.
-  const perProvider = entries.map((e) => `${getProviderDisplayName(e.provider)}: ${e.field.envVar}`).join(', ')
-  return `API token — resolved against whichever provider is active (${perProvider})`
+  // A CLI flag shared by more than one provider's descriptor (`apiToken`
+  // for Cloudflare/Fastly, `projectId` for Vercel/GCP) — describe every
+  // provider's own field generically rather than assuming what's being
+  // shared. Every field's `label` already names its provider (e.g. "GCP
+  // Project ID"), so no need to also prefix `getProviderDisplayName` here.
+  const perField = entries.map((e) => `${e.field.label} (${e.field.envVar})`).join(' / ')
+  return `Resolved against whichever provider is active: ${perField}`
 }
 
 const fieldsByKey = new Map<string, { provider: ProviderType; field: CredentialField }[]>()
@@ -72,14 +80,22 @@ for (const providerType of PROVIDER_TYPES) {
  * ```
  */
 export const credentialOptions: Record<string, YargsCredentialOption> = Object.fromEntries(
-  Array.from(fieldsByKey.entries()).map(([key, entries]) => [
-    key,
-    {
-      type: 'string' as const,
-      ...(entries.length === 1 && entries[0]!.field.cliAlias ? { alias: entries[0]!.field.cliAlias } : {}),
-      description: describeField(entries),
-    },
-  ]),
+  Array.from(fieldsByKey.entries()).map(([key, entries]) => {
+    // An alias is a shortcut for the flag itself, not a claim about what it
+    // means — harmless to keep even when the key is shared, and dropping it
+    // just because a second provider's same-named field doesn't declare one
+    // would silently take away an existing shortcut (e.g. -p for
+    // --projectId) the moment a colliding provider is added.
+    const cliAlias = entries.map((e) => e.field.cliAlias).find((alias): alias is string => !!alias)
+    return [
+      key,
+      {
+        type: 'string' as const,
+        ...(cliAlias ? { alias: cliAlias } : {}),
+        description: describeField(entries),
+      },
+    ]
+  }),
 )
 
 /**
@@ -99,5 +115,7 @@ export function pickCredentialOptions(argv: CredentialOptions): Record<string, s
     zoneId: argv.zoneId,
     accountId: argv.accountId,
     workspaceId: argv.workspaceId,
+    policyName: argv.policyName,
+    serviceAccountKeyPath: argv.serviceAccountKeyPath,
   }
 }

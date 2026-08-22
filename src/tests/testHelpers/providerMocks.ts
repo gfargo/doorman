@@ -4,6 +4,8 @@ import type { CloudflareRuleset } from '../../lib/types/cloudflare'
 import type { VercelClient, VercelConfig } from '../../lib/providers/vercel/VercelClient'
 import type { FastlyClient } from '../../lib/providers/fastly/FastlyClient'
 import type { FastlyRule, FastlyRuleInput, FastlyList } from '../../lib/types/fastly'
+import type { CloudArmorClient } from '../../lib/providers/gcp/CloudArmorClient'
+import type { CloudArmorRule, CloudArmorSecurityPolicy } from '../../lib/types/gcp'
 
 /**
  * Default empty Cloudflare ruleset used by tests that don't care about its contents.
@@ -203,4 +205,70 @@ export function mockFastlyClientPrototype(
     .fn()
     .mockImplementation((id: string, entries: string[]) => Promise.resolve(emptyFastlyList({ id, entries }))) as any
   MockedFastlyClient.prototype.verifyCredentials = jest.fn().mockResolvedValue(true) as any
+}
+
+/**
+ * Default empty Cloud Armor security policy used by tests that don't care about its contents.
+ */
+export function emptyCloudArmorPolicy(overrides: Partial<CloudArmorSecurityPolicy> = {}): CloudArmorSecurityPolicy {
+  return {
+    id: 'policy-1',
+    name: 'doorman-managed-policy',
+    description: 'Managed by doorman',
+    rules: [],
+    fingerprint: 'fp-1',
+    ...overrides,
+  }
+}
+
+/**
+ * Wires up a mocked `CloudArmorClient` class (from `jest.mock('.../providers/gcp/CloudArmorClient')`)
+ * with sensible defaults so commands that resolve a GCP provider don't make
+ * real network calls. Unlike the other providers' mocks, this keeps a real
+ * in-memory `rules[]` array that `addRule`/`patchRule`/`removeRule` actually
+ * mutate and `getPolicy` reflects — `CloudArmorFirewallService.syncRules`
+ * re-fetches the policy mid-sync (to compute unoccupied priorities), so a
+ * mock that always returns the same static snapshot would silently hide
+ * priority-collision bugs a stateful one catches. Call this after
+ * `jest.mock('.../providers/gcp/CloudArmorClient')` in the test file; pass
+ * the mocked class itself.
+ */
+export function mockCloudArmorClientPrototype(
+  MockedCloudArmorClient: jest.MockedClass<typeof CloudArmorClient>,
+  options: { rules?: CloudArmorRule[] } = {},
+): void {
+  const state: { rules: CloudArmorRule[] } = { rules: [...(options.rules ?? [])] }
+
+  // See the equivalent note on `mockVercelClientPrototype`/`mockFastlyClientPrototype`
+  // — an automock doesn't run the real constructor, so `this.projectId`
+  // (read via the real, public `client.projectId`) would otherwise be undefined.
+  MockedCloudArmorClient.mockImplementation(function (this: CloudArmorClient, projectId: string, policyName: string) {
+    Object.assign(this, { projectId, policyName })
+  } as unknown as (projectId: string, policyName: string) => CloudArmorClient)
+
+  MockedCloudArmorClient.prototype.getPolicy = jest
+    .fn()
+    .mockImplementation(() => Promise.resolve(emptyCloudArmorPolicy({ rules: state.rules }))) as any
+  MockedCloudArmorClient.prototype.addRule = jest.fn().mockImplementation((rule: CloudArmorRule) => {
+    if (state.rules.some((r) => r.priority === rule.priority)) {
+      return Promise.reject(new Error(`gcp API error: 400 Bad Request - priority ${rule.priority} already in use`))
+    }
+    state.rules.push(rule)
+    return Promise.resolve(undefined)
+  }) as any
+  MockedCloudArmorClient.prototype.patchRule = jest
+    .fn()
+    .mockImplementation((priority: number, rule: CloudArmorRule) => {
+      const index = state.rules.findIndex((r) => r.priority === priority)
+      if (index === -1) {
+        return Promise.reject(new Error(`gcp API error: 404 Not Found - no rule at priority ${priority}`))
+      }
+      state.rules[index] = rule
+      return Promise.resolve(undefined)
+    }) as any
+  MockedCloudArmorClient.prototype.removeRule = jest.fn().mockImplementation((priority: number) => {
+    state.rules = state.rules.filter((r) => r.priority !== priority)
+    return Promise.resolve(undefined)
+  }) as any
+  MockedCloudArmorClient.prototype.verifyCredentials = jest.fn().mockResolvedValue(true) as any
 }
