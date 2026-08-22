@@ -111,6 +111,7 @@
     "consola": "^3.4.2",
     "dotenv": "^16.4.5",
     "find-up": "^6.3.0",
+    "google-auth-library": "^11.0.2",
     "yargs": "^17.7.2",
     "zod": "^3.23.8"
   },

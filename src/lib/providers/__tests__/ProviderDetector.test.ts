@@ -18,6 +18,9 @@ describe('ProviderDetector', () => {
     delete process.env.VERCEL_TOKEN
     delete process.env.FASTLY_WORKSPACE_ID
     delete process.env.FASTLY_API_TOKEN
+    delete process.env.GOOGLE_CLOUD_PROJECT
+    delete process.env.GCP_POLICY_NAME
+    delete process.env.GOOGLE_APPLICATION_CREDENTIALS
   })
 
   afterAll(() => {
@@ -137,6 +140,30 @@ describe('ProviderDetector', () => {
       process.env.FASTLY_API_TOKEN = 'token-123'
       const result = ProviderDetector.detect()
       expect(result.provider).toBe('fastly')
+      expect(result.confidence).toBe('medium')
+    })
+
+    it('detects GCP from providers.gcp.projectId', () => {
+      const result = ProviderDetector.detect({
+        providers: { gcp: { projectId: 'my-gcp-project' } },
+      })
+      expect(result.provider).toBe('gcp')
+      expect(result.confidence).toBe('high')
+      expect(result.reasons).toContainEqual(expect.stringContaining('GCP Project ID'))
+    })
+
+    it('detects GCP from GOOGLE_CLOUD_PROJECT env var alone', () => {
+      process.env.GOOGLE_CLOUD_PROJECT = 'my-gcp-project'
+      const result = ProviderDetector.detect()
+      expect(result.provider).toBe('gcp')
+      expect(result.confidence).toBe('medium')
+    })
+
+    it('detects GCP from GOOGLE_CLOUD_PROJECT + GCP_POLICY_NAME env vars', () => {
+      process.env.GOOGLE_CLOUD_PROJECT = 'my-gcp-project'
+      process.env.GCP_POLICY_NAME = 'my-policy'
+      const result = ProviderDetector.detect()
+      expect(result.provider).toBe('gcp')
       expect(result.confidence).toBe('medium')
     })
 

@@ -131,6 +131,12 @@ export const providersConfigSchema = z.object({
       workspaceId: z.string().optional(),
     })
     .optional(),
+  gcp: z
+    .object({
+      projectId: z.string().optional(),
+      policyName: z.string().optional(),
+    })
+    .optional(),
 }) satisfies z.ZodType<ProvidersConfig>
 
 // Base config schema

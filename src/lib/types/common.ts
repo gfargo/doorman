@@ -119,4 +119,8 @@ export interface ProvidersConfig {
   fastly?: {
     workspaceId?: string
   }
+  gcp?: {
+    projectId?: string
+    policyName?: string
+  }
 }
