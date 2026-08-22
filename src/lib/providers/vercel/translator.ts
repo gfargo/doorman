@@ -36,19 +36,6 @@ export function vercelToUnified(rule: VercelCustomRule): TranslationResult<Unifi
     for (const condition of group.conditions) {
       const operator = mapVercelOperatorToUnified(condition.op)
 
-      // Check for regex patterns and warn about potential compatibility issues
-      if (condition.op === 're' && typeof condition.value === 'string') {
-        warnings.push(
-          TranslationWarningSystem.createWarning(
-            'regex_patterns',
-            rule.id,
-            condition.type,
-            `Regular expression pattern may need adjustment for target provider: ${condition.value}`,
-            'Test the regex pattern in the target provider and adjust syntax if needed',
-          ),
-        )
-      }
-
       conditions.push({
         field: mapVercelTypeToUnified(condition.type),
         operator,
