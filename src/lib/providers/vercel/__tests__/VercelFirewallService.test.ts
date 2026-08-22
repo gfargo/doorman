@@ -898,12 +898,94 @@ describe('VercelFirewallService', () => {
             // and `conditionLogic: 'AND'` are included because
             // vercelToUnified legitimately always sets both (source group
             // index; single-group default) — they're not part of the
-            // undefined-vs-absent bug this test targets, and omitting them
-            // here would fail the comparison for an unrelated reason
-            // (getChanges compares configRule as-authored, without applying
-            // unifiedRuleSchema's conditionLogic default first — a separate,
-            // real gap, filed as its own issue rather than folded in here).
+            // undefined-vs-absent bug this test targets. (`conditionLogic`
+            // can be omitted safely too now — see the #225 regression test
+            // below — but it's kept explicit here to isolate this test to
+            // the one bug it targets.)
             conditionLogic: 'AND',
+            conditions: [{ field: 'user_agent', operator: 'contains', value: 'BadBot', group: 0 }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+
+      const changes = await service.getChanges(config)
+
+      expect(changes.rulesToUpdate).toHaveLength(0)
+      expect(changes.hasChanges).toBe(false)
+    })
+
+    it('should detect no changes for an ex/nex condition with no value (regression test for #231)', async () => {
+      // Same bug class as #203 above, one field over: vercelToUnified wrote
+      // `value: condition.value` unconditionally, which is `undefined` for
+      // an `ex`/`nex` condition by design (#213) — so the in-memory
+      // translated remote rule had a real `value: undefined` key that a
+      // local config (loaded from disk, where JSON.stringify already
+      // dropped it) could never match structurally.
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+        ...mockVercelConfig,
+        rules: [
+          {
+            id: 'rule_3',
+            name: 'Allow Supabase Cookies',
+            active: true,
+            conditionGroup: [{ conditions: [{ type: 'cookie' as const, op: 'nex' as const, key: 'supabase_auth' }] }],
+            action: { mitigate: { action: 'bypass' as const } },
+          },
+        ],
+        ips: [],
+      })
+
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'rule_3',
+            name: 'Allow Supabase Cookies',
+            enabled: true,
+            conditionLogic: 'AND',
+            // No `value` key — matches what vercelToUnified now produces,
+            // and what a real ex/nex rule looks like once saved to disk.
+            conditions: [{ field: 'cookie', operator: 'not_exists', key: 'supabase_auth', group: 0 }],
+            action: { type: 'bypass' },
+          },
+        ],
+        ips: [],
+      }
+
+      const changes = await service.getChanges(config)
+
+      expect(changes.rulesToUpdate).toHaveLength(0)
+      expect(changes.hasChanges).toBe(false)
+    })
+
+    it('should detect no changes for a local rule that omits conditionLogic (regression test for #225)', async () => {
+      // getChanges previously diffed the raw `config` parameter rather than
+      // `unifiedConfigSchema.safeParse(config).data` — so a local rule
+      // relying on the documented `conditionLogic` default ('AND') never
+      // actually got it applied before comparison, while the translated
+      // remote side (vercelToUnified) always sets it explicitly. One fewer
+      // key on the local side made isDeepEqual flag every such rule as a
+      // phantom "update".
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+        ...mockVercelConfig,
+        rules: [mockVercelConfig.rules[0]!],
+        ips: [],
+      })
+
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'rule_1',
+            name: 'Block bots',
+            description: 'Block bad bots',
+            enabled: true,
+            // No `conditionLogic` key at all — relies entirely on the
+            // schema's documented default.
             conditions: [{ field: 'user_agent', operator: 'contains', value: 'BadBot', group: 0 }],
             action: { type: 'deny' },
           },
