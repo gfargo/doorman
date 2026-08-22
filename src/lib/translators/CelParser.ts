@@ -562,20 +562,56 @@ function comparisonToCondition(
   const mapped = mapFieldToUnified(refField, refKey)
   if (!mapped) return null
 
+  // Known, accepted lossiness (same category as this file's keyed-cookie
+  // note above): for eq/ne, contains/not_contains, and in/not_in, a local
+  // condition using the *flag* convention (`{ operator: 'eq', negated:
+  // true }`, Vercel's/Fastly's own convention) round-trips through Cloud
+  // Armor as the *distinct-operator* convention (`{ operator: 'ne' }`,
+  // no flag) instead — same CEL either way, but a cosmetically different
+  // shape, so a local config written with the flag form for one of these
+  // three pairs will show a one-time no-op "update" on its first sync.
+  // Not fixed here: doing so would mean threading the *original* condition's
+  // negation style through the diff, not just re-deriving correct CEL from
+  // it, and the operators that actually had a correctness bug (produced
+  // wrong CEL, not just a cosmetic mismatch — see #239) are the ones with
+  // no distinct operator pair, handled by `resultNegated` below.
   let operator: UnifiedCondition['operator']
   let value: string | number | string[] | number[]
+  // Set only for an operator with no distinct negative form in the unified
+  // Operator union (starts_with/ends_with/matches/gt/ge/lt/le) — mirrors
+  // CelExpressionBuilder's own fallback (flip to the paired operator where
+  // one exists, else keep the base operator and carry `negated: true`
+  // instead of fabricating an operator value like `not_starts_with` that
+  // doesn't exist in the type). Before this, a `!(...)`-wrapped comparison
+  // on one of these operators — which the builder now legitimately
+  // produces for a `negated: true` condition (see #239) — parsed back to
+  // `null` (unsupported), turning every such rule into a permanent phantom
+  // diff the moment it round-tripped through a fetch.
+  let resultNegated = false
 
   if (node.type === 'comparison') {
-    operator = negated ? negateSimpleOperator(node.operator) : node.operator
+    if (!negated) {
+      operator = node.operator
+    } else if (node.operator === 'eq') {
+      operator = 'ne'
+    } else if (node.operator === 'ne') {
+      operator = 'eq'
+    } else {
+      operator = node.operator
+      resultNegated = true
+    }
     value = node.value
   } else if (node.type === 'methodCall') {
     const base = METHOD_TO_OPERATOR[node.method]
     if (!base) return null
-    operator = negated ? (`not_${base}` as UnifiedCondition['operator']) : base
-    // Only 'contains'/'not_contains' have a dedicated negative form in the
-    // unified operator set — the builder never negates startsWith/endsWith/
-    // matches, so this is unreachable for those methods in practice.
-    if (negated && operator !== 'not_contains') return null
+    if (!negated) {
+      operator = base
+    } else if (base === 'contains') {
+      operator = 'not_contains'
+    } else {
+      operator = base
+      resultNegated = true
+    }
     value = node.value
   } else {
     operator = negated ? 'not_in' : 'in'
@@ -586,20 +622,10 @@ function comparisonToCondition(
     field: mapped.unifiedField,
     operator,
     value,
+    ...(resultNegated ? { negated: true } : {}),
     ...(mapped.unifiedKey !== undefined ? { key: mapped.unifiedKey } : {}),
     ...(group !== undefined ? { group } : {}),
   }
-}
-
-function negateSimpleOperator(op: 'eq' | 'ne' | 'gt' | 'ge' | 'lt' | 'le'): UnifiedCondition['operator'] {
-  // CelExpressionBuilder never emits a `not`-wrapped bare comparison (`eq`
-  // negates to the native `!=` operator, not `!(field == x)`) — reachable
-  // only for a hand-authored expression using this codebase's grammar
-  // subset in a way the builder itself wouldn't. `ne` is the sole case with
-  // an obvious inverse; anything else has no single-operator negation.
-  if (op === 'eq') return 'ne'
-  if (op === 'ne') return 'eq'
-  throw new ParseError(`No negated form for comparison operator '${op}'`)
 }
 
 /**
