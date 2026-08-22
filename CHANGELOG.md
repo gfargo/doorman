@@ -1,3 +1,10 @@
+## [3.11.4](https://github.com/gfargo/doorman/compare/v3.11.3...v3.11.4) (2026-08-22)
+
+
+### Bug Fixes
+
+* stop vercelToUnified writing undefined-valued keys, breaking diffs ([#226](https://github.com/gfargo/doorman/issues/226)) ([ebef187](https://github.com/gfargo/doorman/commit/ebef18763725b2513cb4daad7ee27d697c2e3ce4)), closes [#203](https://github.com/gfargo/doorman/issues/203) [#219](https://github.com/gfargo/doorman/issues/219) [#203](https://github.com/gfargo/doorman/issues/203) [#225](https://github.com/gfargo/doorman/issues/225)
+
 ## [3.11.3](https://github.com/gfargo/doorman/compare/v3.11.2...v3.11.3) (2026-08-22)
 
 
