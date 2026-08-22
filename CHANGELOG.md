@@ -1,3 +1,10 @@
+## [3.11.6](https://github.com/gfargo/doorman/compare/v3.11.5...v3.11.6) (2026-08-22)
+
+
+### Bug Fixes
+
+* stop retrying non-idempotent rule/IP creation on Vercel ([#228](https://github.com/gfargo/doorman/issues/228)) ([fe3597b](https://github.com/gfargo/doorman/commit/fe3597b36b782f3ac81db63070dc26366849cd38)), closes [#195](https://github.com/gfargo/doorman/issues/195) [#199](https://github.com/gfargo/doorman/issues/199)
+
 ## [3.11.5](https://github.com/gfargo/doorman/compare/v3.11.4...v3.11.5) (2026-08-22)
 
 
