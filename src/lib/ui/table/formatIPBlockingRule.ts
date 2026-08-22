@@ -16,7 +16,7 @@ export function formatIPBlockingRule(rule: IPBlockingRule & { changeStatus?: str
   return {
     id: rule.id || '-',
     ip: rule.ip,
-    hostname: rule.hostname,
+    hostname: rule.hostname || '-',
     notes: rule.notes || '-',
     status: rule.changeStatus ? chalk.yellow(rule.changeStatus) : chalk.red('deny'),
   }

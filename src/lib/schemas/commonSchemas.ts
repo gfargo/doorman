@@ -78,7 +78,17 @@ export const rateLimitSchema = z.object({
 
 // Redirect schema
 export const redirectSchema = z.object({
-  location: z.string().url(),
+  // Accepts an absolute URL or a relative path (e.g. "/v2/api/") — the
+  // native Vercel schema (firewallSchemas.ts's redirectSchema) never
+  // constrained this at all, and relative paths are both documented
+  // (references/rules.md) and used by real deployed rules. A bare
+  // `.url()` here rejected both. See #212.
+  location: z
+    .string()
+    .refine(
+      (value) => value.startsWith('/') || z.string().url().safeParse(value).success,
+      'location must be an absolute URL or a path starting with "/"',
+    ),
   statusCode: z.number().int().min(300).max(399).optional(),
   permanent: z.boolean().optional(),
   preserveQueryString: z.boolean().optional(),

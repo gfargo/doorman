@@ -18,13 +18,25 @@ import {
  */
 
 // Unified condition schema
-export const unifiedConditionSchema = z.object({
-  field: fieldTypeSchema.or(z.string()), // Allow custom fields
-  operator: operatorSchema,
-  value: z.union([z.string(), z.number(), z.array(z.string()), z.array(z.number())]),
-  negated: z.boolean().optional(),
-  key: z.string().optional(), // For header, query, cookie
-}) satisfies z.ZodType<UnifiedCondition>
+export const unifiedConditionSchema = z
+  .object({
+    field: fieldTypeSchema.or(z.string()), // Allow custom fields
+    operator: operatorSchema,
+    value: z.union([z.string(), z.number(), z.array(z.string()), z.array(z.number())]).optional(),
+    negated: z.boolean().optional(),
+    key: z.string().optional(), // For header, query, cookie
+  })
+  .refine(
+    // `exists`/`not_exists` (unified's equivalent of Vercel's `ex`/`nex` —
+    // see providers/vercel/translator.ts's operator map) carry no value by
+    // design, per #85. ruleConditionSchema (firewallSchemas.ts) already
+    // gets this right; this schema never did, so a real rule translated
+    // from a valid native config (any `ex`/`nex` condition) failed
+    // status/diff/backup even though `doorman validate` accepted it. #213.
+    (condition) =>
+      condition.operator === 'exists' || condition.operator === 'not_exists' || condition.value !== undefined,
+    { message: 'value is required unless operator is "exists" or "not_exists"', path: ['value'] },
+  ) satisfies z.ZodType<UnifiedCondition>
 
 // Unified action schema
 export const unifiedActionSchema = z.object({

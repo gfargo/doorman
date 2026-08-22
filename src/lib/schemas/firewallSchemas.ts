@@ -180,7 +180,10 @@ export { ruleActionSchema }
 export const ipBlockingRuleSchema = z.object({
   id: idSchema,
   ip: ipAddressSchema,
-  hostname: z.string(),
+  // Optional: purely informational (references/rules.md), matching
+  // unifiedIPRuleSchema and the documented behavior — Vercel's API doesn't
+  // need it. See #219.
+  hostname: z.string().optional(),
   notes: z.string().optional(),
   action: z.literal('deny'),
 }) satisfies z.ZodType<IPBlockingRule>

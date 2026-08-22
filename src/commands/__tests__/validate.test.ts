@@ -82,6 +82,28 @@ describe('validate command', () => {
     expect(logger.success).not.toHaveBeenCalled()
   })
 
+  it('includes the actual validation failure detail even without --verbose (regression test for #219)', async () => {
+    mockedGetConfig.mockResolvedValue({
+      rules: [
+        {
+          name: 'Broken Rule',
+          conditionGroup: [{ conditions: [] }],
+          action: { mitigate: { action: 'deny' } },
+          active: true,
+        },
+      ],
+      ips: [],
+    } as any)
+
+    await expect(handler({ verbose: false } as any)).rejects.toThrow('process.exit called with "1"')
+
+    // Previously this was just "Configuration validation failed" with
+    // nothing else — the only way to see *why* was to pass --verbose.
+    const errorText = (logger.error as unknown as jest.Mock).mock.calls.map((c) => String(c[0])).join('\n')
+    expect(errorText).toContain('conditionGroup')
+    expect(errorText).not.toBe('Configuration validation failed')
+  })
+
   it('exits with an error when a Cloudflare config is missing required rule fields', async () => {
     mockedGetConfig.mockResolvedValue({
       provider: 'cloudflare',
