@@ -64,6 +64,25 @@ describe('unifiedSchemas', () => {
       })
       expect(result.success).toBe(false)
     })
+
+    it.each(['exists', 'not_exists'])(
+      'accepts a %s condition with no value at all, matching ruleConditionSchema (regression test for #213)',
+      (operator) => {
+        // The exact real-world case from #213 (a deployed griffen.codes rule,
+        // translated from Vercel's `op: "nex"` via mapVercelOperatorToUnified).
+        const result = unifiedConditionSchema.safeParse({
+          field: 'cookie',
+          operator,
+          key: 'supabase_auth',
+        })
+        expect(result.success).toBe(true)
+      },
+    )
+
+    it('still requires a value for every other operator', () => {
+      const result = unifiedConditionSchema.safeParse({ field: 'path', operator: 'eq' })
+      expect(result.success).toBe(false)
+    })
   })
 
   describe('unifiedActionSchema', () => {

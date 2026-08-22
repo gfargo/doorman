@@ -175,6 +175,16 @@ describe('commonSchemas', () => {
     it('rejects invalid URL', () => {
       expect(redirectSchema.safeParse({ location: 'not-a-url' }).success).toBe(false)
     })
+
+    it('accepts a relative path, matching the native schema and documented behavior (regression test for #212)', () => {
+      expect(redirectSchema.safeParse({ location: '/v2/api/' }).success).toBe(true)
+      // The exact real-world case from #212 (a deployed griffen.codes rule).
+      expect(redirectSchema.safeParse({ location: '/correct-path' }).success).toBe(true)
+    })
+
+    it('still rejects a bare string that is neither an absolute URL nor a path', () => {
+      expect(redirectSchema.safeParse({ location: 'just some text' }).success).toBe(false)
+    })
   })
 
   describe('providerTypeSchema', () => {

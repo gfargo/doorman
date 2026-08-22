@@ -261,7 +261,7 @@ export const schema = {
           const: 'deny',
         },
       },
-      required: ['ip', 'hostname', 'action'],
+      required: ['ip', 'action'],
       additionalProperties: false,
     },
   },

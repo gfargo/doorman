@@ -118,8 +118,22 @@ export const handler = async (argv: Arguments<ValidateOptions>) => {
     // Final result
     if (zodResult.success && ajvValid) {
       logger.success(chalk.green('Configuration is valid'))
-    } else {
+    } else if (argv.verbose) {
+      // The detailed breakdown was already printed above — a bare message
+      // here avoids showing every failure twice.
       throw new Error('Configuration validation failed')
+    } else {
+      // Surface *why*, not just *that* it failed, even without --verbose —
+      // previously this was the only path to any detail at all, which made
+      // a real failure (e.g. #219) meaningfully harder to diagnose than it
+      // needed to be.
+      const details = [
+        ...(!zodResult.success
+          ? zodResult.error.errors.map((err) => `${err.path.join('.') || '(root)'}: ${err.message}`)
+          : []),
+        ...(!ajvValid ? ajvErrors.map((err) => `${err.instancePath || '(root)'}: ${err.message}`) : []),
+      ]
+      throw new Error(`Configuration validation failed:\n  ${details.join('\n  ')}`)
     }
   } catch (error) {
     handleCommandError(error, 'validating configuration')

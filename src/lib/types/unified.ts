@@ -13,7 +13,8 @@ import type { ProviderType } from '../providers/IFirewallProvider'
 export interface UnifiedCondition {
   field: FieldType | string
   operator: Operator
-  value: string | number | string[] | number[]
+  // Optional: `exists`/`not_exists` operators carry no value by design (#85, #213).
+  value?: string | number | string[] | number[]
   negated?: boolean
   key?: string // For header, query, cookie conditions
   /**

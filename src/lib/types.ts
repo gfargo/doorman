@@ -90,7 +90,7 @@ export interface CustomRule {
 export interface IPBlockingRule {
   id?: string
   ip: string
-  hostname: string
+  hostname?: string // Informational only — not required by Vercel's API (#219)
   notes?: string
   action: 'deny' // Currently only 'deny' is supported for IP blocking
 }
