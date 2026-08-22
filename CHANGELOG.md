@@ -1,3 +1,10 @@
+## [3.10.2](https://github.com/gfargo/doorman/compare/v3.10.1...v3.10.2) (2026-08-22)
+
+
+### Bug Fixes
+
+* stop polluting stdout so --format json is actually valid JSON ([#215](https://github.com/gfargo/doorman/issues/215)) ([932336b](https://github.com/gfargo/doorman/commit/932336bddcad56443f15a09c184c8e748854feee)), closes [#209](https://github.com/gfargo/doorman/issues/209)
+
 ## [3.10.1](https://github.com/gfargo/doorman/compare/v3.10.0...v3.10.1) (2026-08-21)
 
 
