@@ -1,3 +1,10 @@
+## [3.11.5](https://github.com/gfargo/doorman/compare/v3.11.4...v3.11.5) (2026-08-22)
+
+
+### Bug Fixes
+
+* unifiedToCloudflare never populated redirect action_parameters ([#227](https://github.com/gfargo/doorman/issues/227)) ([5ec6083](https://github.com/gfargo/doorman/commit/5ec6083d8096892609bdc0229396f05a5ff22874)), closes [#196](https://github.com/gfargo/doorman/issues/196)
+
 ## [3.11.4](https://github.com/gfargo/doorman/compare/v3.11.3...v3.11.4) (2026-08-22)
 
 
