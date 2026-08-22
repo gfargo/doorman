@@ -1,3 +1,10 @@
+## [3.11.2](https://github.com/gfargo/doorman/compare/v3.11.1...v3.11.2) (2026-08-22)
+
+
+### Bug Fixes
+
+* guard prompt() against TTY crashes, add --ci to init/template/add ([#223](https://github.com/gfargo/doorman/issues/223)) ([6bb10d1](https://github.com/gfargo/doorman/commit/6bb10d1c91f5dfd6b35ed60346b9d6a19bad4526)), closes [#221](https://github.com/gfargo/doorman/issues/221) [#216](https://github.com/gfargo/doorman/issues/216) [#221](https://github.com/gfargo/doorman/issues/221) [#216](https://github.com/gfargo/doorman/issues/216)
+
 ## [3.11.1](https://github.com/gfargo/doorman/compare/v3.11.0...v3.11.1) (2026-08-22)
 
 
