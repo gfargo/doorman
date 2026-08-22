@@ -457,12 +457,25 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       // time via `rules.insert`, so insertion order is the only ordering
       // lever available here. See syncRules for why that's best-effort
       // rather than a guarantee.
-      const { toAdd, toUpdate, toDelete } = this.diffRules(sortRulesByPriority(config.rules), remoteRules)
+      //
+      // Diff against `configValidation.data`, not the raw `config` param —
+      // `diffRules`/`diffIPRules` both require already-normalized input (see
+      // their docstrings), but the raw config a user writes by hand is
+      // allowed to omit fields the schema defaults for them (e.g. a rule's
+      // `conditionLogic`). Reading from the unparsed `config` silently
+      // violated that contract: a local rule relying on the documented
+      // default had one fewer key than the always-explicit translated
+      // remote side, so `isDeepEqual` (which compares key count) flagged it
+      // as a phantom "update" forever. See #225.
+      const { toAdd, toUpdate, toDelete } = this.diffRules(
+        sortRulesByPriority(configValidation.data.rules),
+        remoteRules,
+      )
 
       const remoteIPs: UnifiedIPRule[] = activeConfig.ips.map((ip) => RuleTranslator.vercelIPToUnified(ip))
 
       // Handle IP blocking rules
-      const { ipsToAdd, ipsToUpdate, ipsToDelete } = this.diffIPRules(config.ips || [], remoteIPs)
+      const { ipsToAdd, ipsToUpdate, ipsToDelete } = this.diffIPRules(configValidation.data.ips || [], remoteIPs)
 
       return {
         version: activeConfig.version,
