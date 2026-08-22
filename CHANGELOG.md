@@ -1,3 +1,10 @@
+# [3.11.0](https://github.com/gfargo/doorman/compare/v3.10.2...v3.11.0) (2026-08-22)
+
+
+### Features
+
+* add --format json to status, matching list/diff/export ([#220](https://github.com/gfargo/doorman/issues/220)) ([670168b](https://github.com/gfargo/doorman/commit/670168bf7d3606b222caf7f1faaf689bfb2893f2)), closes [#210](https://github.com/gfargo/doorman/issues/210) [#209](https://github.com/gfargo/doorman/issues/209) [#215](https://github.com/gfargo/doorman/issues/215)
+
 ## [3.10.2](https://github.com/gfargo/doorman/compare/v3.10.1...v3.10.2) (2026-08-22)
 
 
