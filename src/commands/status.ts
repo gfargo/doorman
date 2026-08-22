@@ -18,6 +18,7 @@ interface StatusOptions {
   zoneId?: string
   accountId?: string
   workspaceId?: string
+  format?: 'table' | 'json'
   debug?: boolean
   ci?: boolean
 }
@@ -53,6 +54,7 @@ export const builder = {
     type: 'string',
     description: 'Fastly Next-Gen WAF Workspace ID (defaults to FASTLY_WORKSPACE_ID env var)',
   },
+  format: { alias: 'f', type: 'string', choices: ['table', 'json'], description: 'Output format', default: 'table' },
   debug: {
     type: 'boolean',
     description: 'Enable debug logging',
@@ -78,14 +80,23 @@ export const handler = async (argv: Arguments<StatusOptions>) => {
       errorContext: 'checking status',
     },
     async ({ config, provider }) => {
-      await statusWithProvider(provider, toUnifiedConfig(config))
+      await statusWithProvider(provider, toUnifiedConfig(config), argv)
     },
   )
 }
 
-async function statusWithProvider(provider: IFirewallProvider, config: UnifiedConfig): Promise<void> {
-  logger.start('Checking sync status...')
+async function statusWithProvider(
+  provider: IFirewallProvider,
+  config: UnifiedConfig,
+  argv: Arguments<StatusOptions>,
+): Promise<void> {
+  const isJson = argv.format === 'json'
+
+  if (!isJson) {
+    logger.start('Checking sync status...')
+  }
   const changes = await provider.getChanges(config)
+  const health = provider.getHealthScore(config)
 
   const localVersion = config.metadata?.version
   // Only flag a mismatch when a local version was actually tracked before —
@@ -93,6 +104,37 @@ async function statusWithProvider(provider: IFirewallProvider, config: UnifiedCo
   // absence isn't itself a drift signal.
   const hasVersionChange =
     changes.version !== undefined && localVersion !== undefined && localVersion !== changes.version
+  const inSync = !changes.hasChanges && !hasVersionChange
+
+  if (isJson) {
+    logger.log(
+      JSON.stringify(
+        {
+          provider: provider.name,
+          inSync,
+          version: {
+            local: localVersion ?? null,
+            remote: changes.version ?? null,
+            matches: changes.version !== undefined ? !hasVersionChange : null,
+          },
+          rules: {
+            toAdd: changes.rulesToAdd.length,
+            toUpdate: changes.rulesToUpdate.length,
+            toDelete: changes.rulesToDelete.length,
+          },
+          ips: {
+            toAdd: changes.ipsToAdd?.length ?? 0,
+            toUpdate: changes.ipsToUpdate?.length ?? 0,
+            toDelete: changes.ipsToDelete?.length ?? 0,
+          },
+          health,
+        },
+        null,
+        2,
+      ),
+    )
+    return
+  }
 
   logger.log(chalk.bold(`\n📊 ${provider.name} Sync Status Summary\n`))
 
@@ -115,14 +157,13 @@ async function statusWithProvider(provider: IFirewallProvider, config: UnifiedCo
   logger.log(`  ${chalk.red('-')} ${changes.ipsToDelete?.length ?? 0} to delete`)
   logger.log('')
 
-  if (!changes.hasChanges && !hasVersionChange) {
+  if (inSync) {
     logger.success(chalk.green('✅ Everything is in sync!'))
   } else {
     logger.warn(chalk.yellow('⚠️  Changes detected. Run `sync` to apply changes.'))
   }
 
   logger.log('\n' + chalk.bold('🏥 Configuration Health Check'))
-  const health = provider.getHealthScore(config)
   logger.log(`${chalk.dim('Score:')} ${health.score}/100 (${health.grade})`)
   health.issues.forEach((issue) => {
     const marker =
