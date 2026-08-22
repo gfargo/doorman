@@ -7,33 +7,23 @@ import { VercelProvider } from '../providers/vercel'
 import { CloudflareProvider } from '../providers/cloudflare'
 import { FastlyProvider } from '../providers/fastly'
 import { PROVIDER_TYPES, type IFirewallProvider, type ProviderType } from '../providers/IFirewallProvider'
-import { resolveCredentials } from '../providers/credentials'
-import { vercelCredentials } from '../providers/vercel/credentials'
-import { cloudflareCredentials } from '../providers/cloudflare/credentials'
-import { fastlyCredentials } from '../providers/fastly/credentials'
+import { CREDENTIAL_DESCRIPTORS, missingRequiredCredentials, resolveCredentials } from '../providers/credentials'
+import type { CredentialField } from '../providers/credentials'
 import type { FirewallConfig, UnifiedConfig } from '../types'
 
 export interface ProviderOptions {
-  // Common options
   provider?: ProviderType
   config?: FirewallConfig | UnifiedConfig | Partial<FirewallConfig> | Partial<UnifiedConfig>
   interactive?: boolean
-
-  // Vercel-specific
-  token?: string
-  projectId?: string
-  teamId?: string
-
-  // Cloudflare-specific
-  apiToken?: string
-  zoneId?: string
-  accountId?: string
-
-  // Fastly-specific (note: `apiToken` above is shared with Cloudflare's
-  // flag — both mean "this provider's API token" and are resolved against
-  // whichever provider is actually selected, same as Cloudflare/Vercel
-  // never colliding today because only one provider is active per command)
-  workspaceId?: string
+  /**
+   * Explicit credential values (typically CLI flags), keyed by each field's
+   * `key` from that provider's `CredentialDescriptor` — e.g. `token`,
+   * `projectId`, `apiToken`, `zoneId`, `workspaceId`. A key belonging to a
+   * provider other than the one actually resolved is simply never read; the
+   * same `apiToken` key is shared by both Cloudflare and Fastly, resolved
+   * against whichever provider is active, the same way it always has been.
+   */
+  credentials?: Record<string, string | undefined>
 }
 
 export interface ProviderInstanceResult {
@@ -82,19 +72,11 @@ export async function getProviderInstance(options: ProviderOptions): Promise<Pro
     }
   }
 
-  // 2. Get provider instance with credentials
+  // 2. Resolve credentials generically against the provider's descriptor,
+  // then construct the concrete provider instance.
   try {
-    if (providerType === 'vercel') {
-      return await getVercelProvider(options)
-    } else if (providerType === 'cloudflare') {
-      const provider = await getCloudflareProvider(options)
-      return { provider }
-    } else if (providerType === 'fastly') {
-      const provider = await getFastlyProvider(options)
-      return { provider }
-    } else {
-      throw new Error(`Unknown provider: ${providerType}`)
-    }
+    const resolved = await resolveAndPromptCredentials(providerType, options)
+    return buildProvider(providerType, resolved)
   } catch (error) {
     logger.error(`Failed to initialize ${providerType} provider:`, error)
     throw error
@@ -102,151 +84,116 @@ export async function getProviderInstance(options: ProviderOptions): Promise<Pro
 }
 
 /**
- * Get Vercel provider instance
+ * A field's value as declared in the config file, checking both the
+ * multi-provider `providers.<name>.<configKey>` location and — only for
+ * fields that declare one — the legacy top-level location predating that
+ * shape (see `CredentialField.legacyConfigKey`).
  */
-async function getVercelProvider(options: ProviderOptions): Promise<ProviderInstanceResult> {
-  // Vercel credentials may live directly on the config (legacy `.doorman.json`
-  // shape) or under `providers.vercel` (unified config shape). Both are
-  // checked since a config's shape can't be reliably inferred from `rules`
-  // alone (both legacy and unified configs have a top-level `rules` array).
+function extractConfigValue(
+  config: (Partial<FirewallConfig> & Partial<UnifiedConfig>) | undefined,
+  providerType: ProviderType,
+  field: CredentialField,
+): string | undefined {
+  if (!field.configKey) return undefined
+
+  const providersBlock = config?.providers as Record<string, Record<string, unknown>> | undefined
+  const nested = providersBlock?.[providerType]?.[field.configKey]
+  if (typeof nested === 'string') return nested
+
+  if (field.legacyConfigKey) {
+    const legacy = (config as Record<string, unknown> | undefined)?.[field.legacyConfigKey]
+    if (typeof legacy === 'string') return legacy
+  }
+
+  return undefined
+}
+
+/**
+ * Resolve a provider's credentials (explicit -> config -> env), prompting
+ * interactively for whatever's still missing once a required field turns up
+ * absent. The one generic implementation every provider goes through —
+ * adding a provider means adding its `CredentialDescriptor`, not a new
+ * branch here.
+ */
+async function resolveAndPromptCredentials(
+  providerType: ProviderType,
+  options: ProviderOptions,
+): Promise<Record<string, string | undefined>> {
+  const descriptor = CREDENTIAL_DESCRIPTORS[providerType]
   const config = options.config as (Partial<FirewallConfig> & Partial<UnifiedConfig>) | undefined
 
-  // Resolution order (explicit flag -> config -> env) comes from the shared
-  // descriptor rather than being spelled out per credential here; the env
-  // var names live with the Vercel adapter. Precedence is pinned by the
-  // tests in providerHelper.test.ts.
-  const { token, projectId, teamId } = resolveCredentials(vercelCredentials, {
-    explicit: { token: options.token, projectId: options.projectId, teamId: options.teamId },
-    config: {
-      projectId: config?.providers?.vercel?.projectId ?? config?.projectId,
-      teamId: config?.providers?.vercel?.teamId ?? config?.teamId,
-    },
-  })
-
-  // teamId is deliberately excluded from this completeness check — omitting
-  // it just means "use my Vercel default team" (every account has one), so
-  // its absence alone must never block a user or force a re-prompt (see
-  // issue #207).
-  if (!token || !projectId) {
-    if (options.interactive === false) {
-      throw new Error('Vercel credentials missing. Provide token and projectId.')
-    }
-
-    logger.warn('Missing Vercel credentials')
-    logger.info('Please provide your Vercel credentials:')
-
-    // Import promptForCredentials only when needed
-    const { promptForCredentials } = await import('../ui/promptForCredentials')
-    const credentials = await promptForCredentials({
-      token,
-      projectId,
-      teamId,
-    })
-
-    const provider = VercelProvider.fromConfig({
-      token: credentials.token,
-      projectId: credentials.projectId,
-      teamId: credentials.teamId,
-    })
-    return { provider, vercelCredentials: credentials }
+  const configValues: Record<string, string | undefined> = {}
+  for (const field of descriptor.fields) {
+    configValues[field.key] = extractConfigValue(config, providerType, field)
   }
 
-  const provider = VercelProvider.fromConfig({
-    token,
-    projectId,
-    teamId,
+  const resolved = resolveCredentials(descriptor, {
+    explicit: options.credentials,
+    config: configValues,
   })
-  return { provider, vercelCredentials: { token, projectId, teamId } }
+
+  const missing = missingRequiredCredentials(descriptor, resolved)
+  if (missing.length === 0) {
+    return resolved
+  }
+
+  if (options.interactive === false) {
+    const flags = missing.map((field) => `--${field.key}`).join(', ')
+    throw new Error(`${getProviderDisplayName(providerType)} credentials missing. Provide ${flags}.`)
+  }
+
+  logger.warn(`Missing ${getProviderDisplayName(providerType)} credentials`)
+  logger.info(`Please provide your ${getProviderDisplayName(providerType)} credentials:`)
+
+  for (const field of descriptor.fields) {
+    if (resolved[field.key]) continue
+    const message = field.promptMessage ?? defaultPromptMessage(field)
+    const answer = field.secret ? await promptSecret(message) : await prompt(message, { type: 'text' })
+    resolved[field.key] = (answer as string) || undefined
+  }
+
+  return resolved
+}
+
+function defaultPromptMessage(field: CredentialField): string {
+  const suffix = field.required ? '' : ' (optional)'
+  // promptSecret writes its message straight to stdout ahead of masked
+  // input on the same line, so it needs a trailing space; prompt() renders
+  // its message as a styled label and doesn't.
+  const trailingSpace = field.secret ? ' ' : ''
+  return `${field.label}${suffix}:${trailingSpace}`
 }
 
 /**
- * Get Cloudflare provider instance
+ * Construct the concrete provider from its resolved credentials. The one
+ * place that maps a generic bag onto each provider's distinctly-typed
+ * `fromConfig` — an unavoidable boundary, since a `Record<string, string>`
+ * isn't itself a valid argument to any of them.
  */
-async function getCloudflareProvider(options: ProviderOptions): Promise<IFirewallProvider> {
-  const config = options.config as Partial<UnifiedConfig> | undefined
-
-  const { apiToken, zoneId, accountId } = resolveCredentials(cloudflareCredentials, {
-    explicit: { apiToken: options.apiToken, zoneId: options.zoneId, accountId: options.accountId },
-    config: {
-      zoneId: config?.providers?.cloudflare?.zoneId,
-      accountId: config?.providers?.cloudflare?.accountId,
-    },
-  })
-
-  if (!apiToken || !zoneId) {
-    if (options.interactive === false) {
-      throw new Error('Cloudflare credentials missing. Provide apiToken and zoneId.')
+function buildProvider(
+  providerType: ProviderType,
+  resolved: Record<string, string | undefined>,
+): ProviderInstanceResult {
+  switch (providerType) {
+    case 'vercel': {
+      const credentials = { token: resolved.token!, projectId: resolved.projectId!, teamId: resolved.teamId }
+      return { provider: VercelProvider.fromConfig(credentials), vercelCredentials: credentials }
     }
-
-    logger.warn('Missing Cloudflare credentials')
-    logger.info('Please provide your Cloudflare credentials:')
-
-    const apiTokenInput = apiToken || (await promptSecret('Cloudflare API Token: '))
-
-    const zoneIdInput =
-      zoneId ||
-      (await prompt('Cloudflare Zone ID:', {
-        type: 'text',
-      }))
-
-    const accountIdInput =
-      accountId ||
-      (await prompt('Cloudflare Account ID (optional):', {
-        type: 'text',
-      }))
-
-    return CloudflareProvider.fromConfig({
-      apiToken: apiTokenInput as string,
-      zoneId: zoneIdInput as string,
-      accountId: (accountIdInput as string) || undefined,
-    })
+    case 'cloudflare':
+      return {
+        provider: CloudflareProvider.fromConfig({
+          apiToken: resolved.apiToken!,
+          zoneId: resolved.zoneId!,
+          accountId: resolved.accountId,
+        }),
+      }
+    case 'fastly':
+      return {
+        provider: FastlyProvider.fromConfig({ apiToken: resolved.apiToken!, workspaceId: resolved.workspaceId! }),
+      }
+    default:
+      throw new Error(`Unknown provider: ${providerType as string}`)
   }
-
-  return CloudflareProvider.fromConfig({
-    apiToken,
-    zoneId,
-    accountId,
-  })
-}
-
-/**
- * Get Fastly provider instance
- */
-async function getFastlyProvider(options: ProviderOptions): Promise<IFirewallProvider> {
-  const config = options.config as Partial<UnifiedConfig> | undefined
-
-  const { apiToken, workspaceId } = resolveCredentials(fastlyCredentials, {
-    explicit: { apiToken: options.apiToken, workspaceId: options.workspaceId },
-    config: {
-      workspaceId: config?.providers?.fastly?.workspaceId,
-    },
-  })
-
-  if (!apiToken || !workspaceId) {
-    if (options.interactive === false) {
-      throw new Error('Fastly credentials missing. Provide apiToken and workspaceId.')
-    }
-
-    logger.warn('Missing Fastly credentials')
-    logger.info('Please provide your Fastly credentials:')
-
-    const apiTokenInput = apiToken || (await promptSecret('Fastly API Token: '))
-    const workspaceIdInput =
-      workspaceId ||
-      (await prompt('Fastly Next-Gen WAF Workspace ID:', {
-        type: 'text',
-      }))
-
-    return FastlyProvider.fromConfig({
-      apiToken: apiTokenInput as string,
-      workspaceId: workspaceIdInput as string,
-    })
-  }
-
-  return FastlyProvider.fromConfig({
-    apiToken,
-    workspaceId,
-  })
 }
 
 /**

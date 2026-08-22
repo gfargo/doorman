@@ -152,7 +152,7 @@ const CREDENTIAL_CONFORMANCE_CASES: Array<{ providerType: ProviderType; options:
     providerType: 'vercel',
     options: {
       provider: 'vercel',
-      token: 'explicit-token',
+      credentials: { token: 'explicit-token' },
       interactive: false,
       config: { providers: { vercel: { projectId: 'config-project', teamId: 'config-team' } } } as UnifiedConfig,
     },
@@ -161,7 +161,7 @@ const CREDENTIAL_CONFORMANCE_CASES: Array<{ providerType: ProviderType; options:
     providerType: 'cloudflare',
     options: {
       provider: 'cloudflare',
-      apiToken: 'explicit-token',
+      credentials: { apiToken: 'explicit-token' },
       interactive: false,
       config: { providers: { cloudflare: { zoneId: 'config-zone', accountId: 'config-account' } } } as UnifiedConfig,
     },
@@ -170,7 +170,7 @@ const CREDENTIAL_CONFORMANCE_CASES: Array<{ providerType: ProviderType; options:
     providerType: 'fastly',
     options: {
       provider: 'fastly',
-      apiToken: 'explicit-token',
+      credentials: { apiToken: 'explicit-token' },
       interactive: false,
       config: { providers: { fastly: { workspaceId: 'config-workspace' } } } as UnifiedConfig,
     },

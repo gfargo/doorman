@@ -10,10 +10,6 @@ jest.mock('../../ui/promptSecret', () => ({
   promptSecret: jest.fn(),
 }))
 
-jest.mock('../../ui/promptForCredentials', () => ({
-  promptForCredentials: jest.fn(),
-}))
-
 // Mock the providers
 jest.mock('../../providers/vercel', () => ({
   VercelProvider: {
@@ -39,7 +35,6 @@ import { CloudflareProvider } from '../../providers/cloudflare'
 import { ProviderDetector } from '../../providers/ProviderDetector'
 import { prompt } from '../../ui/prompt'
 import { promptSecret } from '../../ui/promptSecret'
-import { promptForCredentials } from '../../ui/promptForCredentials'
 import type { IFirewallProvider } from '../../providers/IFirewallProvider'
 
 describe('providerHelper', () => {
@@ -117,9 +112,7 @@ describe('providerHelper', () => {
     it('returns the resolved Vercel credentials so callers do not have to re-prompt (regression test for #93)', async () => {
       const { provider, vercelCredentials } = await getProviderInstance({
         provider: 'vercel',
-        token: 'my-token',
-        projectId: 'my-project',
-        teamId: 'my-team',
+        credentials: { token: 'my-token', projectId: 'my-project', teamId: 'my-team' },
         interactive: false,
       })
       expect(provider.name).toBe('vercel')
@@ -133,8 +126,7 @@ describe('providerHelper', () => {
     it('does not populate vercelCredentials for the Cloudflare provider', async () => {
       const { vercelCredentials } = await getProviderInstance({
         provider: 'cloudflare',
-        apiToken: 'cf-token',
-        zoneId: 'cf-zone',
+        credentials: { apiToken: 'cf-token', zoneId: 'cf-zone' },
         interactive: false,
       })
       expect(vercelCredentials).toBeUndefined()
@@ -143,9 +135,7 @@ describe('providerHelper', () => {
     it('passes explicit credentials to Vercel provider', async () => {
       await getProviderInstance({
         provider: 'vercel',
-        token: 'my-token',
-        projectId: 'my-project',
-        teamId: 'my-team',
+        credentials: { token: 'my-token', projectId: 'my-project', teamId: 'my-team' },
         interactive: false,
       })
       expect(VercelProvider.fromConfig).toHaveBeenCalledWith(
@@ -160,9 +150,7 @@ describe('providerHelper', () => {
     it('passes explicit credentials to Cloudflare provider', async () => {
       await getProviderInstance({
         provider: 'cloudflare',
-        apiToken: 'cf-token',
-        zoneId: 'cf-zone',
-        accountId: 'cf-account',
+        credentials: { apiToken: 'cf-token', zoneId: 'cf-zone', accountId: 'cf-account' },
         interactive: false,
       })
       expect(CloudflareProvider.fromConfig).toHaveBeenCalledWith(
@@ -183,7 +171,7 @@ describe('providerHelper', () => {
 
       const { provider } = await getProviderInstance({
         provider: 'vercel',
-        token: 'my-token',
+        credentials: { token: 'my-token' },
         config: legacyConfig,
         interactive: true,
       })
@@ -196,7 +184,7 @@ describe('providerHelper', () => {
           teamId: 'legacy-team',
         }),
       )
-      expect(promptForCredentials).not.toHaveBeenCalled()
+      expect(promptSecret).not.toHaveBeenCalled()
     })
 
     it('resolves projectId/teamId from a unified config file without prompting (regression test)', async () => {
@@ -212,7 +200,7 @@ describe('providerHelper', () => {
 
       const { provider } = await getProviderInstance({
         provider: 'vercel',
-        token: 'my-token',
+        credentials: { token: 'my-token' },
         config: unifiedConfig,
         interactive: true,
       })
@@ -225,7 +213,7 @@ describe('providerHelper', () => {
           teamId: 'unified-team',
         }),
       )
-      expect(promptForCredentials).not.toHaveBeenCalled()
+      expect(promptSecret).not.toHaveBeenCalled()
     })
 
     it('throws for Vercel when credentials missing and non-interactive', async () => {
@@ -308,9 +296,7 @@ describe('providerHelper', () => {
 
         await getProviderInstance({
           provider: 'vercel',
-          token: 'flag-token',
-          projectId: 'flag-project',
-          teamId: 'flag-team',
+          credentials: { token: 'flag-token', projectId: 'flag-project', teamId: 'flag-team' },
           config: { projectId: 'config-project', teamId: 'config-team' } as never,
           interactive: false,
         })
@@ -362,7 +348,7 @@ describe('providerHelper', () => {
 
         await getProviderInstance({
           provider: 'vercel',
-          projectId: 'flag-project',
+          credentials: { projectId: 'flag-project' },
           interactive: false,
         })
 
@@ -398,9 +384,7 @@ describe('providerHelper', () => {
 
         await getProviderInstance({
           provider: 'cloudflare',
-          apiToken: 'flag-api-token',
-          zoneId: 'flag-zone',
-          accountId: 'flag-account',
+          credentials: { apiToken: 'flag-api-token', zoneId: 'flag-zone', accountId: 'flag-account' },
           interactive: false,
         })
 
@@ -418,7 +402,7 @@ describe('providerHelper', () => {
 
         await getProviderInstance({
           provider: 'cloudflare',
-          zoneId: 'flag-zone',
+          credentials: { zoneId: 'flag-zone' },
           interactive: false,
         })
 
@@ -456,7 +440,7 @@ describe('providerHelper', () => {
 
         await getProviderInstance({
           provider: 'cloudflare',
-          zoneId: 'flag-zone',
+          credentials: { zoneId: 'flag-zone' },
           config: { providers: { cloudflare: { zoneId: 'config-zone' } } } as never,
           interactive: false,
         })
