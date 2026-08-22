@@ -6,7 +6,7 @@ class TestClient extends BaseFirewallClient {
   constructor(baseUrl = 'https://api.example.com') {
     super(baseUrl, 'vercel')
   }
-  protected getAuthHeaders(): Record<string, string> {
+  protected async getAuthHeaders(): Promise<Record<string, string>> {
     return { Authorization: 'Bearer TEST' }
   }
   // Avoid real delays during tests

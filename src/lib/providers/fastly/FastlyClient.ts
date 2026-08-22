@@ -36,7 +36,7 @@ export class FastlyClient extends BaseFirewallClient {
     super(FASTLY_API_BASE_URL, 'fastly')
   }
 
-  protected getAuthHeaders(): Record<string, string> {
+  protected async getAuthHeaders(): Promise<Record<string, string>> {
     return {
       'Fastly-Key': this.apiToken,
     }

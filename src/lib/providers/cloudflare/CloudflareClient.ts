@@ -76,7 +76,7 @@ export class CloudflareClient extends BaseFirewallClient {
   /**
    * Get authentication headers
    */
-  protected getAuthHeaders(): Record<string, string> {
+  protected async getAuthHeaders(): Promise<Record<string, string>> {
     return {
       Authorization: `Bearer ${this.apiToken}`,
       ...this.optimizer.getConnectionHeaders(),

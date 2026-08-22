@@ -72,7 +72,7 @@ export class VercelClient extends BaseFirewallClient {
    * Generates the headers required for the Vercel API requests.
    * @returns An object containing the headers.
    */
-  protected getAuthHeaders(): Record<string, string> {
+  protected async getAuthHeaders(): Promise<Record<string, string>> {
     return {
       Authorization: `Bearer ${this.token}`,
     }
