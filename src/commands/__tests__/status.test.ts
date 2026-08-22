@@ -3,6 +3,7 @@ import { logger } from '../../lib/logger'
 import { VercelClient } from '../../lib/providers/vercel/VercelClient'
 import { CloudflareClient } from '../../lib/providers/cloudflare/CloudflareClient'
 import { mockCloudflareClientPrototype, mockVercelClientPrototype } from '../../tests/testHelpers/providerMocks'
+import { getStdoutText } from '../../tests/testHelpers/loggerMock'
 import { handler } from '../status'
 
 jest.mock('../../lib/logger', () => ({ logger: require('../../tests/testHelpers/loggerMock').createLoggerMock() }))
@@ -76,6 +77,58 @@ describe('status command', () => {
     } as any)
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Changes detected'))
+  })
+
+  it('outputs valid JSON on stdout when format is json and configs match (#210)', async () => {
+    mockedGetConfig.mockResolvedValue({ version: 5, rules: [], ips: [] } as any)
+
+    await handler({
+      provider: 'vercel',
+      token: 'test-token',
+      projectId: 'prj_test',
+      teamId: 'team_test',
+      format: 'json',
+      debug: false,
+      ci: true,
+    } as any)
+
+    // Whole-stream check (see getStdoutText docstring) — this is the same
+    // shape of bug fixed for list/diff/export in #209: a command that prints
+    // progress chrome ahead of --format json output on the same stdout
+    // stream.
+    const stdout = getStdoutText(logger as any)
+    const parsed = JSON.parse(stdout)
+    expect(parsed.inSync).toBe(true)
+    expect(parsed.health.score).toEqual(expect.any(Number))
+  })
+
+  it('reflects drift in JSON output when local differs from remote (#210)', async () => {
+    mockedGetConfig.mockResolvedValue({
+      version: 3,
+      rules: [
+        {
+          name: 'New Rule',
+          conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/new' }] }],
+          action: { mitigate: { action: 'deny' } },
+          active: true,
+        },
+      ],
+      ips: [],
+    } as any)
+
+    await handler({
+      provider: 'vercel',
+      token: 'test-token',
+      projectId: 'prj_test',
+      teamId: 'team_test',
+      format: 'json',
+      debug: false,
+      ci: true,
+    } as any)
+
+    const parsed = JSON.parse(getStdoutText(logger as any))
+    expect(parsed.inSync).toBe(false)
+    expect(parsed.rules.toAdd).toBe(1)
   })
 
   it('reports status for the Cloudflare provider without crashing (regression test for #82)', async () => {
