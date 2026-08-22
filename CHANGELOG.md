@@ -1,3 +1,10 @@
+## [3.11.7](https://github.com/gfargo/doorman/compare/v3.11.6...v3.11.7) (2026-08-22)
+
+
+### Bug Fixes
+
+* noisy single-provider regex warnings, missing wordpress template id ([#233](https://github.com/gfargo/doorman/issues/233)) ([ce77ae8](https://github.com/gfargo/doorman/commit/ce77ae8a38ace605c305f20869815e0dcac95471)), closes [#217](https://github.com/gfargo/doorman/issues/217) [#214](https://github.com/gfargo/doorman/issues/214)
+
 ## [3.11.6](https://github.com/gfargo/doorman/compare/v3.11.5...v3.11.6) (2026-08-22)
 
 
