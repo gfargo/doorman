@@ -202,6 +202,14 @@ export const handler = async (argv: Arguments<ExportOptions>) => {
     // (for every provider), so a remote JSON export no longer leaks
     // API-only fields (id, crs, projectKey, ownerId, valid,
     // validationErrors) the way a raw Vercel API response used to.
+    // No `--output` (or `-`) means the payload itself goes to stdout, so any
+    // progress chrome printed ahead of it would land in the same stream a
+    // caller might pipe or redirect (`doorman export --format json | jq`,
+    // `... --format markdown > report.md`) — confirmed this isn't json-only,
+    // every format is affected when redirected. Suppressed rather than moved
+    // to stderr, matching list.ts/diff.ts; see #209.
+    const isStdout = argv.output === '-' || !argv.output
+
     let config: FirewallConfig | UnifiedConfig
 
     if (argv.source === 'remote') {
@@ -222,7 +230,7 @@ export const handler = async (argv: Arguments<ExportOptions>) => {
           errorContext: 'exporting configuration',
         },
         async ({ provider }) => {
-          logger.start('Fetching remote configuration...')
+          if (!isStdout) logger.start('Fetching remote configuration...')
           config = await provider.fetchConfig()
         },
       )
@@ -230,7 +238,7 @@ export const handler = async (argv: Arguments<ExportOptions>) => {
       config = await getConfig(argv.config)
     }
 
-    logger.start(`Exporting configuration in ${argv.format} format...`)
+    if (!isStdout) logger.start(`Exporting configuration in ${argv.format} format...`)
 
     let output: string
     let defaultExtension: string
@@ -273,7 +281,7 @@ export const handler = async (argv: Arguments<ExportOptions>) => {
 
     const outputPath = argv.output || `firewall-export.${defaultExtension}`
 
-    if (argv.output === '-' || !argv.output) {
+    if (isStdout) {
       logger.log(output)
     } else {
       writeFileSync(outputPath, output, 'utf8')

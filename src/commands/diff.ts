@@ -71,19 +71,21 @@ async function diffWithProvider(
   config: UnifiedConfig,
   argv: Arguments<DiffOptions>,
 ): Promise<void> {
-  logger.start('Calculating differences...')
-  const changes = await provider.getChanges(config)
+  const isJson = argv.format === 'json'
 
-  if (!changes.hasChanges) {
-    logger.success(chalk.green('No differences found. Local and remote configurations are in sync.'))
-    return
+  if (!isJson) {
+    logger.start('Calculating differences...')
   }
+  const changes = await provider.getChanges(config)
 
   const ipsToAdd = changes.ipsToAdd ?? []
   const ipsToUpdate = changes.ipsToUpdate ?? []
   const ipsToDelete = changes.ipsToDelete ?? []
 
-  if (argv.format === 'json') {
+  // Checked before the no-changes early return below — an in-sync config is
+  // a valid, common result, and `--format json` must produce parseable JSON
+  // for it too, not silently fall back to a human sentence. See #209.
+  if (isJson) {
     logger.log(
       JSON.stringify(
         {
@@ -103,6 +105,11 @@ async function diffWithProvider(
         2,
       ),
     )
+    return
+  }
+
+  if (!changes.hasChanges) {
+    logger.success(chalk.green('No differences found. Local and remote configurations are in sync.'))
     return
   }
 

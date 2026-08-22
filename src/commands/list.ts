@@ -110,7 +110,15 @@ export const handler = async (argv: Arguments<ListOptions>) => {
  * assume the Vercel-specific rule shape (conditionGroup/action.mitigate).
  */
 async function listWithProvider(provider: IFirewallProvider, argv: Arguments<ListOptions>): Promise<void> {
-  logger.start(`Fetching firewall configuration${argv.configVersion ? ` version ${argv.configVersion}` : ''} ...`)
+  const isJson = argv.format === 'json'
+
+  // Progress/status lines are human-facing chrome, not part of the `json`
+  // contract — `doorman list --format json | jq .` needs stdout to contain
+  // nothing but the payload. Suppressed rather than moved to stderr to avoid
+  // a second logger stream just for this; see #209.
+  if (!isJson) {
+    logger.start(`Fetching firewall configuration${argv.configVersion ? ` version ${argv.configVersion}` : ''} ...`)
+  }
 
   const liveConfig = await provider.fetchConfig(argv.configVersion)
   const rules = liveConfig.rules
@@ -118,17 +126,19 @@ async function listWithProvider(provider: IFirewallProvider, argv: Arguments<Lis
   const version = liveConfig.metadata?.version ?? liveConfig.version
   const updatedAt = liveConfig.metadata?.updatedAt
 
+  if (isJson) {
+    // logger.log (not logger.info) — info prepends consola's ℹ icon, which
+    // would corrupt the payload the same way the suppressed lines above did.
+    logger.log(JSON.stringify({ version, updatedAt, rules, ips }, null, 2))
+    return
+  }
+
   logger.info(
     `Found ${chalk.cyan(rules.length)} custom rules and ${chalk.cyan(ips.length)} IP blocking rules\n` +
       chalk.dim(
         `Version: ${chalk.yellow(version ?? 'unknown')}${updatedAt ? ` • Last Updated: ${chalk.yellow(updatedAt)}` : ''}`,
       ),
   )
-
-  if (argv.format === 'json') {
-    logger.info(JSON.stringify({ version, updatedAt, rules, ips }, null, 2))
-    return
-  }
 
   if (rules.length === 0 && ips.length === 0) {
     logger.info(chalk.yellow('No rules found'))

@@ -6,6 +6,7 @@ import {
   mockVercelClientPrototype,
   emptyCloudflareRuleset,
 } from '../../tests/testHelpers/providerMocks'
+import { getStdoutText } from '../../tests/testHelpers/loggerMock'
 import { handler } from '../list'
 
 jest.mock('../../lib/logger', () => ({ logger: require('../../tests/testHelpers/loggerMock').createLoggerMock() }))
@@ -90,12 +91,28 @@ describe('list command', () => {
       ci: true,
     } as any)
 
-    const jsonCall = (logger.info as unknown as jest.Mock).mock.calls.find((call) =>
-      String(call[0]).includes('"rules"'),
-    )
+    const jsonCall = (logger.log as unknown as jest.Mock).mock.calls.find((call) => String(call[0]).includes('"rules"'))
     expect(jsonCall).toBeDefined()
     const parsed = JSON.parse(jsonCall![0])
     expect(parsed.rules).toHaveLength(1)
+  })
+
+  it('writes nothing but the JSON payload to stdout when format is json (regression test for #209)', async () => {
+    await handler({
+      provider: 'vercel',
+      token: 't',
+      projectId: 'prj',
+      teamId: 'team',
+      format: 'json',
+      debug: false,
+      ci: true,
+    } as any)
+
+    // Whole-stream check, not a single mock call — see getStdoutText's
+    // docstring for why the bug this guards against shipped past
+    // per-call-only assertions in the first place.
+    const stdout = getStdoutText(logger as any)
+    expect(() => JSON.parse(stdout)).not.toThrow()
   })
 
   it('lists rules for the Cloudflare provider without crashing (regression test for #82)', async () => {
