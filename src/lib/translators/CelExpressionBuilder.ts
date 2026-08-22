@@ -1,4 +1,5 @@
 import type { UnifiedCondition } from '../types/unified'
+import type { Operator } from '../types/common'
 import { escapeCelString } from './celEscape'
 import { ipAddressSchema } from '../schemas/commonSchemas'
 
@@ -143,7 +144,7 @@ export class CelExpressionBuilder {
         : `origin.ip == '${escapeCelString(value)}'`
     })
 
-    const negated = condition.operator === 'not_in' || condition.operator === 'ne'
+    const negated = this.isNegated(condition, condition.operator === 'not_in' || condition.operator === 'ne')
 
     if (checks.length > 1) {
       const combined = `(${checks.join(' || ')})`
@@ -178,8 +179,9 @@ export class CelExpressionBuilder {
     const field = `request.headers['${escapeCelString(headerKey)}']`
     const guard = `has(${field})`
 
-    if (condition.operator === 'exists') return guard
-    if (condition.operator === 'not_exists') return `!${guard}`
+    if (condition.operator === 'exists' || condition.operator === 'not_exists') {
+      return this.isNegated(condition, condition.operator === 'not_exists') ? `!${guard}` : guard
+    }
 
     return `(${guard} && ${this.buildComparison(field, condition, false)})`
   }
@@ -202,8 +204,9 @@ export class CelExpressionBuilder {
     const field = `request.headers['cookie']`
     const guard = `has(${field})`
 
-    if (condition.operator === 'exists') return guard
-    if (condition.operator === 'not_exists') return `!${guard}`
+    if (condition.operator === 'exists' || condition.operator === 'not_exists') {
+      return this.isNegated(condition, condition.operator === 'not_exists') ? `!${guard}` : guard
+    }
 
     if (!condition.key) {
       return `(${guard} && ${this.buildComparison(field, condition, false)})`
@@ -217,7 +220,7 @@ export class CelExpressionBuilder {
 
     const pair = `${condition.key}=${String(condition.value)}`
     const check = `${field}.contains('${escapeCelString(pair)}')`
-    const negated = condition.operator === 'ne' || condition.operator === 'not_contains'
+    const negated = this.isNegated(condition, condition.operator === 'ne' || condition.operator === 'not_contains')
     return `(${guard} && ${negated ? `!${check}` : check})`
   }
 
@@ -228,14 +231,35 @@ export class CelExpressionBuilder {
    * numeric field (`asn`, via `==`/`>`/`>=`/`<`/`<=`).
    */
   private static buildComparison(field: string, condition: UnifiedCondition, numeric: boolean): string {
-    const { operator, value } = condition
+    const { value } = condition
 
-    if (operator === 'exists' || operator === 'not_exists') {
+    if (condition.operator === 'exists' || condition.operator === 'not_exists') {
       // Every field routed here is always present on the request (unlike
       // the header-backed fields, which never reach this branch for these
       // two operators — see buildHeaderCondition) — so existence is
       // trivially always true/false rather than a meaningful check.
-      throw new Error(`"${operator}" is not meaningful for Cloud Armor's "${field}" — it is always present`)
+      throw new Error(`"${condition.operator}" is not meaningful for Cloud Armor's "${field}" — it is always present`)
+    }
+
+    // `negated: true` (Vercel's/Fastly's "base operator + separate flag"
+    // convention, as opposed to a distinct operator like `ne`) was
+    // previously ignored entirely here — a condition arriving as e.g.
+    // `{ operator: 'contains', negated: true }` (meaning "does not
+    // contain") built the exact same CEL as its non-negated counterpart,
+    // silently deploying the opposite of the configured rule. Flip to the
+    // paired operator where the Operator union has one (eq/ne, contains/
+    // not_contains, in/not_in); every other operator (starts_with/
+    // ends_with/matches/gt/ge/lt/le have no negative form) wraps the
+    // finished comparison in `!(...)` instead, after the switch below.
+    let operator: Operator = condition.operator
+    let wrapInNot = false
+    if (condition.negated) {
+      const flipped = NEGATED_OPERATOR[operator]
+      if (flipped) {
+        operator = flipped
+      } else {
+        wrapInNot = true
+      }
     }
 
     if (operator === 'in' || operator === 'not_in') {
@@ -247,32 +271,60 @@ export class CelExpressionBuilder {
 
     const literal = this.formatLiteral(value, numeric)
 
+    let result: string
     switch (operator) {
       case 'eq':
-        return `${field} == ${literal}`
+        result = `${field} == ${literal}`
+        break
       case 'ne':
-        return `${field} != ${literal}`
+        result = `${field} != ${literal}`
+        break
       case 'contains':
-        return `${field}.contains(${literal})`
+        result = `${field}.contains(${literal})`
+        break
       case 'not_contains':
-        return `!${field}.contains(${literal})`
+        result = `!${field}.contains(${literal})`
+        break
       case 'starts_with':
-        return `${field}.startsWith(${literal})`
+        result = `${field}.startsWith(${literal})`
+        break
       case 'ends_with':
-        return `${field}.endsWith(${literal})`
+        result = `${field}.endsWith(${literal})`
+        break
       case 'matches':
-        return `${field}.matches(${literal})`
+        result = `${field}.matches(${literal})`
+        break
       case 'gt':
-        return `${field} > ${literal}`
+        result = `${field} > ${literal}`
+        break
       case 'ge':
-        return `${field} >= ${literal}`
+        result = `${field} >= ${literal}`
+        break
       case 'lt':
-        return `${field} < ${literal}`
+        result = `${field} < ${literal}`
+        break
       case 'le':
-        return `${field} <= ${literal}`
+        result = `${field} <= ${literal}`
+        break
       default:
         throw new Error(`Cloud Armor CEL builder has no mapping for operator "${operator}"`)
     }
+    return wrapInNot ? `!(${result})` : result
+  }
+
+  /**
+   * Whether a condition's *effective* polarity is negative, folding
+   * together the two ways a unified condition can express "not" — a
+   * distinct operator (`ne`, `not_contains`, `not_exists`, `not_in`,
+   * `operatorImpliesNegation`) and the separate `negated` boolean flag
+   * (Vercel's/Fastly's convention: a base operator plus a flag). XOR'd
+   * rather than OR'd so a (currently unrealistic, but not type-forbidden)
+   * condition combining both — e.g. `{ operator: 'ne', negated: true }` —
+   * resolves to "negate the already-negative operator" (back to positive)
+   * rather than silently collapsing to just "negative".
+   */
+  private static isNegated(condition: UnifiedCondition, operatorImpliesNegation: boolean): boolean {
+    return operatorImpliesNegation !== !!condition.negated
   }
 
   private static formatLiteral(value: unknown, numeric: boolean): string {
@@ -305,6 +357,22 @@ export class CelExpressionBuilder {
     }
     return expressions.length === 1 ? expressions[0]! : `(${expressions.join(' || ')})`
   }
+}
+
+/**
+ * Operators with a distinct paired form for the opposite polarity, used by
+ * `buildComparison` to fold a `negated: true` flag into the base operator
+ * rather than wrapping the result in `!(...)`. `starts_with`/`ends_with`/
+ * `matches`/`gt`/`ge`/`lt`/`le` have no such pair in the `Operator` union
+ * (CEL has no "not greater than" keyword, etc.) and fall back to wrapping.
+ */
+const NEGATED_OPERATOR: Partial<Record<Operator, Operator>> = {
+  eq: 'ne',
+  ne: 'eq',
+  contains: 'not_contains',
+  not_contains: 'contains',
+  in: 'not_in',
+  not_in: 'in',
 }
 
 const SIMPLE_FIELD_MAP: Record<string, { path: string; numeric: boolean }> = {

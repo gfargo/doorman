@@ -223,6 +223,61 @@ describe('CelExpressionBuilder', () => {
     })
   })
 
+  describe('fromUnifiedCondition — negated flag (Vercel/Fastly base-operator-plus-flag convention)', () => {
+    // Distinct from the `ne`/`not_in`/`not_exists`/`not_contains` cases
+    // above, which express negation via a different operator value. Vercel
+    // and Fastly both translate to Unified using a base operator plus a
+    // separate `negated: true` flag instead — this was previously ignored
+    // completely here, so e.g. a Vercel rule with `neg: true` silently lost
+    // its negation on the way to Cloud Armor, deploying the exact opposite
+    // of the configured rule.
+    it('flips eq to != for a simple field', () => {
+      const c: UnifiedCondition = { field: 'method', operator: 'eq', value: 'POST', negated: true }
+      expect(CelExpressionBuilder.fromUnifiedCondition(c)).toBe("request.method != 'POST'")
+    })
+
+    it('wraps a guarded header comparison, preserving "false when header absent"', () => {
+      const c: UnifiedCondition = { field: 'user_agent', operator: 'contains', value: 'GoodBot', negated: true }
+      expect(CelExpressionBuilder.fromUnifiedCondition(c)).toBe(
+        "(has(request.headers['user-agent']) && !request.headers['user-agent'].contains('GoodBot'))",
+      )
+    })
+
+    it('wraps in !(...) for an operator with no distinct negative form', () => {
+      const c: UnifiedCondition = { field: 'path', operator: 'starts_with', value: '/admin', negated: true }
+      expect(CelExpressionBuilder.fromUnifiedCondition(c)).toBe("!(request.path.startsWith('/admin'))")
+    })
+
+    it('produces identical CEL to the distinct-operator convention for ip', () => {
+      const viaFlag: UnifiedCondition = { field: 'ip', operator: 'eq', value: '203.0.113.9', negated: true }
+      const viaOperator: UnifiedCondition = { field: 'ip', operator: 'ne', value: '203.0.113.9' }
+      expect(CelExpressionBuilder.fromUnifiedCondition(viaFlag)).toBe(
+        CelExpressionBuilder.fromUnifiedCondition(viaOperator),
+      )
+    })
+
+    it('cancels out when combined with an already-negative operator (double negative)', () => {
+      const c: UnifiedCondition = { field: 'ip', operator: 'ne', value: '203.0.113.9', negated: true }
+      expect(CelExpressionBuilder.fromUnifiedCondition(c)).toBe("origin.ip == '203.0.113.9'")
+    })
+
+    it('flips exists to not_exists on a header-backed field', () => {
+      const c: UnifiedCondition = { field: 'header', key: 'X-Foo', operator: 'exists', negated: true }
+      expect(CelExpressionBuilder.fromUnifiedCondition(c)).toBe(
+        CelExpressionBuilder.fromUnifiedCondition({
+          field: 'header',
+          key: 'X-Foo',
+          operator: 'not_exists',
+        }),
+      )
+    })
+
+    it('does not affect an ordinary condition with no negated flag (regression baseline)', () => {
+      const c: UnifiedCondition = { field: 'method', operator: 'eq', value: 'POST' }
+      expect(CelExpressionBuilder.fromUnifiedCondition(c)).toBe("request.method == 'POST'")
+    })
+  })
+
   describe('fromUnifiedCondition — unsupported fields', () => {
     it.each(['region', 'city', 'port', 'scheme'])(
       'throws a clear error for "%s" (no Cloud Armor CEL equivalent)',
