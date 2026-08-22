@@ -149,7 +149,9 @@ export const builder = {
     type: 'string',
     description: 'Template to use for initialization (empty, basic, or security-focused)',
     choices: ['empty', 'basic', 'security-focused'],
-    default: 'empty',
+    // No `default` here (deliberately) — the handler distinguishes "no
+    // template given" from "'empty' given explicitly" to decide whether
+    // --interactive should default on. See the `interactive` option below.
   },
   config: {
     alias: 'c',
@@ -166,8 +168,11 @@ export const builder = {
   interactive: {
     alias: 'i',
     type: 'boolean',
-    description: 'Interactive setup with guided prompts',
-    default: true,
+    description: 'Interactive setup with guided prompts (default: on unless a template is given positionally)',
+    // No `default` here either — see resolveInteractive below. Forcing a
+    // static `true` made the documented quick-start (`doorman init
+    // security-focused`) crash non-interactively, since naming a template
+    // doesn't opt out of the wizard. See #221.
   },
   projectId: {
     alias: 'p',
@@ -206,11 +211,22 @@ const showHelpLinks = () => {
   logger.log('')
 }
 
-const promptForProjectDetails = async (argv: Arguments<InitOptions>) => {
+/**
+ * `--interactive` has no static default (see the builder) so an explicit
+ * `--interactive`/`--no-interactive` always wins; absent that, a positional
+ * template reads as "just scaffold this" (non-interactive), and no template
+ * reads as "walk me through it" (interactive) — matching how `doorman init
+ * <template>` is documented in SKILL.md's quick-start. See #221.
+ */
+function resolveInteractive(argv: Arguments<InitOptions>): boolean {
+  return argv.interactive ?? argv.template === undefined
+}
+
+const promptForProjectDetails = async (argv: Arguments<InitOptions>, interactive: boolean) => {
   let projectId = argv.projectId
   let teamId = argv.teamId
 
-  if (argv.interactive) {
+  if (interactive) {
     logger.log(chalk.bold('📋 Project Configuration'))
     logger.log(chalk.dim('We need your Vercel project details to configure the firewall.\n'))
 
@@ -267,8 +283,9 @@ const promptForProjectDetails = async (argv: Arguments<InitOptions>) => {
 export const handler = async (argv: Arguments<InitOptions>) => {
   try {
     const configPath = argv.config || '.doorman.json'
+    const interactive = resolveInteractive(argv)
 
-    if (argv.interactive) {
+    if (interactive) {
       showWelcomeMessage()
     }
 
@@ -285,9 +302,9 @@ export const handler = async (argv: Arguments<InitOptions>) => {
     }
 
     // Get project details
-    const { projectId, teamId } = await promptForProjectDetails(argv)
+    const { projectId, teamId } = await promptForProjectDetails(argv, interactive)
 
-    if (argv.interactive) {
+    if (interactive) {
       logger.log('')
       logger.log(chalk.bold('🎨 Template Selection'))
       logger.log(chalk.dim('Choose a starting template for your firewall configuration:\n'))
@@ -299,8 +316,8 @@ export const handler = async (argv: Arguments<InitOptions>) => {
     }
 
     // Allow template selection in interactive mode
-    let template = argv.template
-    if (argv.interactive && !argv.template) {
+    let template = argv.template ?? 'empty'
+    if (interactive && !argv.template) {
       template = (await prompt('Select a template:', {
         type: 'select',
         options: ['empty', 'basic', 'security-focused'],
@@ -378,7 +395,7 @@ export const handler = async (argv: Arguments<InitOptions>) => {
     }
 
     // Show help links if interactive
-    if (argv.interactive && (!projectId || !process.env.VERCEL_TOKEN)) {
+    if (interactive && (!projectId || !process.env.VERCEL_TOKEN)) {
       showHelpLinks()
     }
   } catch (error) {

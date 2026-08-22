@@ -11,6 +11,18 @@ import consola from 'consola'
  * @returns The user's response.
  */
 export const prompt: typeof consola.prompt = async (message, options) => {
+  // consola.prompt has no TTY check of its own — without stdin attached to a
+  // real terminal it throws a raw libuv error ("TTY initialization failed:
+  // uv_tty_init returned EINVAL") from deep inside Node internals. Guard
+  // here, once, for every caller (init/template/add/remove/...) rather than
+  // in each command — see #221.
+  if (!process.stdin.isTTY) {
+    throw new Error(
+      `Cannot prompt for "${message}" — no interactive terminal available. ` +
+        `Re-run with the appropriate non-interactive flag for this command (e.g. --interactive=false, --ci, --force).`,
+    )
+  }
+
   const response = await consola.prompt(message, options)
 
   // An empty optional text prompt resolves to `undefined`/`null`, not the cancel symbol.

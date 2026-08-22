@@ -11,14 +11,26 @@ jest.mock('consola', () => ({
 
 describe('prompt wrapper', () => {
   let exitSpy: jest.SpyInstance
+  const originalIsTTY = process.stdin.isTTY
 
   beforeEach(() => {
     mockConsolaPrompt.mockReset()
     exitSpy = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+    // Every behavioral test below exercises what happens once a prompt is
+    // actually shown — simulate an attached terminal so the new TTY guard
+    // (tested separately below) doesn't short-circuit them.
+    process.stdin.isTTY = true
   })
 
   afterEach(() => {
     exitSpy.mockRestore()
+    process.stdin.isTTY = originalIsTTY
+  })
+
+  it('throws a clean, actionable error instead of reaching consola when stdin is not a TTY (regression test for #221)', async () => {
+    process.stdin.isTTY = false
+    await expect(prompt('Rule name:', { type: 'text' })).rejects.toThrow(/no interactive terminal available/)
+    expect(mockConsolaPrompt).not.toHaveBeenCalled()
   })
 
   it('normalizes an empty text prompt to an empty string instead of undefined', async () => {
