@@ -204,7 +204,11 @@ export class VercelClient extends BaseFirewallClient {
       },
     }
 
-    return this.patch<CustomRule>(this.getUrl(), body)
+    // `rules.insert` is not idempotent — a retry after a response is lost
+    // (e.g. a connection reset arriving after Vercel already created the
+    // rule) creates a second, duplicate rule. `rules.update` is safe to
+    // retry (keyed by id). See #195.
+    return this.patch<CustomRule>(this.getUrl(), body, isNewRule ? { retries: 0 } : undefined)
   }
 
   /**
@@ -256,7 +260,9 @@ export class VercelClient extends BaseFirewallClient {
       },
     }
 
-    return this.patch<IPBlockingRule>(this.getUrl(), body)
+    // Same non-idempotency risk as updateFirewallRule's `rules.insert` —
+    // see #195.
+    return this.patch<IPBlockingRule>(this.getUrl(), body, isNewRule ? { retries: 0 } : undefined)
   }
 
   /**
