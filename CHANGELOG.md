@@ -1,3 +1,10 @@
+## [3.13.1](https://github.com/gfargo/doorman/compare/v3.13.0...v3.13.1) (2026-08-22)
+
+
+### Bug Fixes
+
+* translate exists/not_exists conditions to Fastly correctly ([#237](https://github.com/gfargo/doorman/issues/237)) ([f130740](https://github.com/gfargo/doorman/commit/f130740a360f5712f2077d1a090e9fabb147b97e)), closes [#213](https://github.com/gfargo/doorman/issues/213) [#236](https://github.com/gfargo/doorman/issues/236)
+
 # [3.13.0](https://github.com/gfargo/doorman/compare/v3.12.1...v3.13.0) (2026-08-22)
 
 
