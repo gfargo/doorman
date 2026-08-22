@@ -867,6 +867,150 @@ describe('VercelFirewallService', () => {
       expect(changes.hasChanges).toBe(false)
     })
 
+    it('should detect no changes for a non-trivial rule with an ordinary (non-negated) condition (regression test for #203)', async () => {
+      // Empty rules/ips (above) can never exercise the diff comparison this
+      // guards — vercelToUnified previously wrote `negated: condition.neg`
+      // and `key: condition.key` unconditionally, so an ordinary condition
+      // (no `neg`/`key` in the source) translated to `negated: undefined`/
+      // `key: undefined` rather than omitting the keys entirely. isDeepEqual
+      // treats that as a different object shape than the local config (which,
+      // loaded from disk, never has those keys at all — JSON.stringify drops
+      // `undefined`), so this rule would show up as a phantom "update" on
+      // every single sync. Same bug, same fix shape, as Fastly's
+      // pushUnifiedCondition (see FastlyFirewallService.test.ts).
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+        ...mockVercelConfig,
+        rules: [mockVercelConfig.rules[0]!],
+        ips: [],
+      })
+
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'rule_1',
+            name: 'Block bots',
+            description: 'Block bad bots',
+            enabled: true,
+            // Deliberately no `negated`/`key` keys — matches what a real
+            // local .doorman.json has for an ordinary condition. `group: 0`
+            // and `conditionLogic: 'AND'` are included because
+            // vercelToUnified legitimately always sets both (source group
+            // index; single-group default) — they're not part of the
+            // undefined-vs-absent bug this test targets, and omitting them
+            // here would fail the comparison for an unrelated reason
+            // (getChanges compares configRule as-authored, without applying
+            // unifiedRuleSchema's conditionLogic default first — a separate,
+            // real gap, filed as its own issue rather than folded in here).
+            conditionLogic: 'AND',
+            conditions: [{ field: 'user_agent', operator: 'contains', value: 'BadBot', group: 0 }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+
+      const changes = await service.getChanges(config)
+
+      expect(changes.rulesToUpdate).toHaveLength(0)
+      expect(changes.hasChanges).toBe(false)
+    })
+
+    it('should detect no changes for a rate-limit rule with only requests/window set (regression test for #203)', async () => {
+      // Same class of bug, one level up from conditions: vercelToUnified's
+      // action-building previously wrote rateLimit/redirect/duration (and,
+      // nested, characteristics/mitigationTimeout/countingExpression) as
+      // undefined-valued keys rather than omitting them, for exactly the
+      // shape doorman's own "Rate Limit API" template produces (requests +
+      // window only, nothing else).
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+        ...mockVercelConfig,
+        rules: [
+          {
+            id: 'rule_2',
+            name: 'Rate Limit API',
+            active: true,
+            conditionGroup: [{ conditions: [{ type: 'path' as const, op: 'pre' as const, value: '/api/' }] }],
+            action: {
+              mitigate: {
+                action: 'rate_limit' as const,
+                rateLimit: { requests: 100, window: '1m' },
+                redirect: null,
+                actionDuration: null,
+              },
+            },
+          },
+        ],
+        ips: [],
+      })
+
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'rule_2',
+            name: 'Rate Limit API',
+            enabled: true,
+            conditionLogic: 'AND',
+            conditions: [{ field: 'path', operator: 'starts_with', value: '/api/', group: 0 }],
+            action: { type: 'rate_limit', rateLimit: { requests: 100, window: '1m' } },
+          },
+        ],
+        ips: [],
+      }
+
+      const changes = await service.getChanges(config)
+
+      expect(changes.rulesToUpdate).toHaveLength(0)
+      expect(changes.hasChanges).toBe(false)
+    })
+
+    it('should detect no changes for a redirect rule with permanent unset (regression test for #203)', async () => {
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+        ...mockVercelConfig,
+        rules: [
+          {
+            id: 'rule_3',
+            name: 'Redirect old page',
+            active: true,
+            conditionGroup: [{ conditions: [{ type: 'path' as const, op: 'eq' as const, value: '/old' }] }],
+            action: {
+              mitigate: {
+                action: 'redirect' as const,
+                redirect: { location: '/new' },
+                rateLimit: null,
+                actionDuration: null,
+              },
+            },
+          },
+        ],
+        ips: [],
+      })
+
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'rule_3',
+            name: 'Redirect old page',
+            enabled: true,
+            conditionLogic: 'AND',
+            conditions: [{ field: 'path', operator: 'eq', value: '/old', group: 0 }],
+            action: { type: 'redirect', redirect: { location: '/new' } },
+          },
+        ],
+        ips: [],
+      }
+
+      const changes = await service.getChanges(config)
+
+      expect(changes.rulesToUpdate).toHaveLength(0)
+      expect(changes.hasChanges).toBe(false)
+    })
+
     it('should include version from remote config', async () => {
       jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue(mockVercelConfig)
 
@@ -918,6 +1062,30 @@ describe('VercelFirewallService', () => {
       expect(changes.ipsToUpdate?.[0]?.hostname).toBe('changed.example.com')
       expect(changes.ipsToAdd).toHaveLength(0)
       expect(changes.ipsToDelete).toHaveLength(0)
+    })
+
+    it('should detect no changes for an IP rule with no hostname/notes set (regression test for #203)', async () => {
+      // Same class of bug as the rule-level fixes above, in
+      // vercelIPToUnified: a hostname-less IP rule (the real #219 scenario)
+      // previously still produced `hostname: undefined, notes: undefined`
+      // keys, so it would phantom-diff on every sync too.
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+        ...mockVercelConfig,
+        rules: [],
+        ips: [{ id: 'ip_2', ip: '192.168.1.100/32', action: 'deny' as const }],
+      })
+
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [],
+        ips: [{ id: 'ip_2', ip: '192.168.1.100/32', action: 'deny' }],
+      }
+
+      const changes = await service.getChanges(config)
+
+      expect(changes.ipsToUpdate).toHaveLength(0)
+      expect(changes.hasChanges).toBe(false)
     })
 
     it('treats an id-less local rule as an addition rather than matching it to an unrelated remote rule', async () => {

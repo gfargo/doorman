@@ -53,8 +53,15 @@ export function vercelToUnified(rule: VercelCustomRule): TranslationResult<Unifi
         field: mapVercelTypeToUnified(condition.type),
         operator,
         value: condition.value as string | number | string[] | number[],
-        negated: condition.neg,
-        key: condition.key,
+        // Conditional spread, not `negated: condition.neg` — an unconditional
+        // assignment creates a `negated: undefined` key for an ordinary
+        // condition, which isDeepEqual treats as a different shape than the
+        // key being absent entirely (the local-config-loaded-from-disk case,
+        // since JSON.stringify drops undefined). That mismatch makes every
+        // non-negated rule show up as a phantom "update" on every sync. Same
+        // bug, same fix, as Fastly's pushUnifiedCondition. See #203.
+        ...(condition.neg ? { negated: true } : {}),
+        ...(condition.key ? { key: condition.key } : {}),
         group: groupIndex,
       })
     }
@@ -73,30 +80,54 @@ export function vercelToUnified(rule: VercelCustomRule): TranslationResult<Unifi
     )
   }
 
+  // Conditional spread, not `key: value ?? undefined` — the same
+  // undefined-vs-absent-key bug as the condition loop above (see #203), one
+  // level up: an ordinary rule with no rate limit/redirect/duration set
+  // (the common case — deny/challenge/log/bypass) previously still produced
+  // `rateLimit: undefined, redirect: undefined, duration: undefined` keys,
+  // which isDeepEqual treats as extra keys the local config never has.
   const action: UnifiedAction = {
     type: rule.action.mitigate.action,
-    rateLimit: rule.action.mitigate.rateLimit
+    ...(rule.action.mitigate.rateLimit
       ? {
-          requests: rule.action.mitigate.rateLimit.requests,
-          window: rule.action.mitigate.rateLimit.window,
-          characteristics: rule.action.mitigate.rateLimit.characteristics,
-          mitigationTimeout: rule.action.mitigate.rateLimit.mitigationTimeout,
-          countingExpression: rule.action.mitigate.rateLimit.countingExpression,
+          rateLimit: {
+            requests: rule.action.mitigate.rateLimit.requests,
+            window: rule.action.mitigate.rateLimit.window,
+            // Same conditional-spread reasoning, nested one level further —
+            // a rate-limit rule with only requests/window set (the common
+            // case, including doorman's own "Rate Limit API" template) still
+            // produced these three as undefined-valued keys otherwise.
+            ...(rule.action.mitigate.rateLimit.characteristics
+              ? { characteristics: rule.action.mitigate.rateLimit.characteristics }
+              : {}),
+            ...(rule.action.mitigate.rateLimit.mitigationTimeout
+              ? { mitigationTimeout: rule.action.mitigate.rateLimit.mitigationTimeout }
+              : {}),
+            ...(rule.action.mitigate.rateLimit.countingExpression
+              ? { countingExpression: rule.action.mitigate.rateLimit.countingExpression }
+              : {}),
+          },
         }
-      : undefined,
-    redirect: rule.action.mitigate.redirect
+      : {}),
+    ...(rule.action.mitigate.redirect
       ? {
-          location: rule.action.mitigate.redirect.location,
-          permanent: rule.action.mitigate.redirect.permanent,
+          redirect: {
+            location: rule.action.mitigate.redirect.location,
+            ...(rule.action.mitigate.redirect.permanent ? { permanent: rule.action.mitigate.redirect.permanent } : {}),
+          },
         }
-      : undefined,
-    duration: rule.action.mitigate.actionDuration || undefined,
+      : {}),
+    ...(rule.action.mitigate.actionDuration ? { duration: rule.action.mitigate.actionDuration } : {}),
   }
 
   const unifiedRule: UnifiedRule = {
     id: rule.id,
     name: rule.name,
-    description: rule.description,
+    // Conditional spread, not `description: rule.description` — same
+    // undefined-vs-absent-key bug, one more level up: a rule with no
+    // description (very common — it's optional in both shapes) previously
+    // still produced a `description: undefined` key. See #203.
+    ...(rule.description ? { description: rule.description } : {}),
     enabled: rule.active,
     conditions,
     // Informational only once `group` is set above — real join semantics
@@ -180,8 +211,12 @@ export function vercelIPToUnified(ip: VercelIPBlockingRule): UnifiedIPRule {
   return {
     id: ip.id,
     ip: ip.ip,
-    hostname: ip.hostname,
-    notes: ip.notes,
+    // Conditional spread — same undefined-vs-absent-key bug as
+    // vercelToUnified above (#203): a hostname-less IP rule (both fields
+    // are optional; hostname especially so after #219) previously still
+    // produced `hostname: undefined, notes: undefined` keys.
+    ...(ip.hostname ? { hostname: ip.hostname } : {}),
+    ...(ip.notes ? { notes: ip.notes } : {}),
     action: ip.action,
   }
 }
