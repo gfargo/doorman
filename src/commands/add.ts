@@ -40,6 +40,7 @@ interface AddOptions {
   config?: string
   dryRun?: boolean
   debug?: boolean
+  ci?: boolean
 }
 
 export const command = 'add [type]'
@@ -148,6 +149,7 @@ export const builder = {
     description: 'Enable debug logging',
     default: false,
   },
+  ci: { type: 'boolean', description: 'Run in CI mode (non-interactive)', default: false },
 }
 
 const VALID_RULE_TYPES: RuleType[] = [
@@ -617,6 +619,14 @@ export const handler = async (argv: Arguments<AddOptions>) => {
       const duplicateWarning = checkDuplicates({ ...config, rules }, rule)
       if (duplicateWarning) {
         logger.warn(chalk.yellow(`⚠️  ${duplicateWarning}`))
+
+        // See template.ts's identical guard and #216 — matches the safe
+        // `initial: false` default rather than crashing on a missing TTY.
+        if (argv.ci || !process.stdin.isTTY) {
+          logger.info(chalk.dim('Skipping — non-interactive and a conflicting rule already exists. Rule not added.'))
+          return
+        }
+
         const proceed = (await prompt('Proceed anyway?', {
           type: 'confirm',
           initial: false,

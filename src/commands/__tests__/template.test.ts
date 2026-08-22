@@ -29,6 +29,8 @@ const mockedSaveConfig = saveConfig as jest.MockedFunction<typeof saveConfig>
 const mockedPrompt = prompt as jest.MockedFunction<typeof prompt>
 
 describe('template command', () => {
+  const originalIsTTY = process.stdin.isTTY
+
   beforeEach(() => {
     jest.clearAllMocks()
     mockedGetConfig.mockResolvedValue({ rules: [], ips: [] } as any)
@@ -36,10 +38,15 @@ describe('template command', () => {
     jest.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`process.exit called with "${code}"`)
     }) as any)
+    // The duplicate-name prompt tests below simulate an attached terminal —
+    // the non-interactive auto-skip path (regression tests for #216) sets
+    // this to false itself, per test.
+    process.stdin.isTTY = true
   })
 
   afterEach(() => {
     jest.restoreAllMocks()
+    process.stdin.isTTY = originalIsTTY
   })
 
   it('appends the named template rules to the existing config and saves it', async () => {
@@ -136,6 +143,47 @@ describe('template command', () => {
     const [savedConfig] = mockedSaveConfig.mock.calls[0]!
     // Original rule plus the duplicate-named template rule, both retained.
     expect((savedConfig as any).rules.length).toBe(2)
+  })
+
+  it('skips cleanly instead of prompting when stdin is not a TTY, even without --ci (regression test for #216)', async () => {
+    mockedGetConfig.mockResolvedValue({
+      rules: [
+        {
+          name: 'Deny WordPress URLs',
+          conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/wp-admin' }] }],
+          action: { mitigate: { action: 'deny' } },
+          active: true,
+        },
+      ],
+      ips: [],
+    } as any)
+    process.stdin.isTTY = false
+
+    await handler({ name: 'wordpress', dryRun: false, debug: false } as any)
+
+    expect(mockedPrompt).not.toHaveBeenCalled()
+    expect(mockedSaveConfig).not.toHaveBeenCalled()
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Skipping'))
+  })
+
+  it('skips cleanly instead of prompting when --ci is set, even on a TTY (regression test for #216)', async () => {
+    mockedGetConfig.mockResolvedValue({
+      rules: [
+        {
+          name: 'Deny WordPress URLs',
+          conditionGroup: [{ conditions: [{ type: 'path', op: 'eq', value: '/wp-admin' }] }],
+          action: { mitigate: { action: 'deny' } },
+          active: true,
+        },
+      ],
+      ips: [],
+    } as any)
+
+    await handler({ name: 'wordpress', dryRun: false, debug: false, ci: true } as any)
+
+    expect(mockedPrompt).not.toHaveBeenCalled()
+    expect(mockedSaveConfig).not.toHaveBeenCalled()
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Skipping'))
   })
 
   it('does not warn when running the template against an empty config', async () => {

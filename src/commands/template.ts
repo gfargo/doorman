@@ -14,6 +14,7 @@ interface TemplateOptions {
   config?: string
   dryRun?: boolean
   debug?: boolean
+  ci?: boolean
 }
 
 export const command = 'template [name]'
@@ -40,6 +41,7 @@ export const builder = {
     description: 'Enable debug logging',
     default: false,
   },
+  ci: { type: 'boolean', description: 'Run in CI mode (non-interactive)', default: false },
 }
 
 /**
@@ -108,6 +110,18 @@ export const handler = async (argv: Arguments<TemplateOptions>) => {
 
     if (duplicateNames.length > 0) {
       logger.warn(chalk.yellow(`⚠️  Rule name(s) already exist in the configuration: ${duplicateNames.join(', ')}`))
+
+      // Matches the safe default (`initial: false`) a human would hit Enter
+      // on — an unattended run shouldn't hang waiting for a terminal that
+      // isn't there, and shouldn't silently duplicate rules either. See
+      // #216: this used to fall through to `prompt()` unconditionally, which
+      // crashed with a raw libuv error under CI/agents with no explicit
+      // opt-out.
+      if (argv.ci || !process.stdin.isTTY) {
+        logger.info(chalk.dim('Skipping — non-interactive and rule name(s) already exist. Template not applied.'))
+        return
+      }
+
       const proceed = (await prompt('Proceed anyway?', {
         type: 'confirm',
         initial: false,
