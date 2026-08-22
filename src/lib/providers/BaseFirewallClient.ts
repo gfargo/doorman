@@ -36,8 +36,15 @@ export abstract class BaseFirewallClient {
   /**
    * Get authentication headers for API requests
    * Must be implemented by provider-specific clients
+   *
+   * Async because not every provider's credential is a static token: GCP
+   * Cloud Armor's service-account/ADC auth resolves to a short-lived OAuth2
+   * access token that needs refreshing roughly hourly, so the header value
+   * has to be computed fresh per request rather than once at construction
+   * time. Called from inside makeRequest()'s retry loop, so a token that
+   * expires mid-retry gets refreshed on the next attempt for free.
    */
-  protected abstract getAuthHeaders(): Record<string, string>
+  protected abstract getAuthHeaders(): Promise<Record<string, string>>
 
   /**
    * Make an HTTP request with retry logic and rate limit handling
@@ -79,7 +86,7 @@ export abstract class BaseFirewallClient {
             ...fetchOptions,
             headers: {
               'Content-Type': 'application/json',
-              ...this.getAuthHeaders(),
+              ...(await this.getAuthHeaders()),
               ...fetchOptions.headers,
             },
             signal: controller.signal,
