@@ -229,6 +229,45 @@ describe('parseCelExpression', () => {
       expect(parsed!.conditions[0]).toMatchObject({ field: 'ip', operator: 'ne', value: '203.0.113.9' })
     })
 
+    // Regression coverage for #239: before the fix, CelExpressionBuilder
+    // silently ignored `negated`, so these cases never reached the parser
+    // wrapped in `!(...)` at all — that shape simply didn't exist yet.
+    // Fixing the builder made it reachable, which exposed a second gap: the
+    // parser tried to represent "negated starts_with" etc. as a fabricated
+    // `not_starts_with` operator (not a real value in the Operator union),
+    // rejected its own fabrication, and returned null — turning the
+    // now-correct CEL into an "unparseable expression" warning with empty
+    // conditions on every fetch. Fixed by carrying `negated: true` on the
+    // output condition instead, for every operator with no distinct
+    // negative-operator form.
+    it.each([
+      { field: 'path', operator: 'starts_with', value: '/admin' },
+      { field: 'path', operator: 'ends_with', value: '.php' },
+      { field: 'path', operator: 'matches', value: '/x/' },
+      { field: 'asn', operator: 'gt', value: 1000 },
+      { field: 'asn', operator: 'ge', value: 1000 },
+      { field: 'asn', operator: 'lt', value: 1000 },
+      { field: 'asn', operator: 'le', value: 1000 },
+    ] as const)('round-trips a negated $operator condition via the negated flag, not a fabricated operator', (base) => {
+      const condition: UnifiedCondition = { ...base, negated: true }
+      const { parsed } = roundTrip([condition])
+      expect(parsed).not.toBeNull()
+      expect(parsed!.conditions[0]).toMatchObject({ ...base, negated: true })
+    })
+
+    // Known, accepted lossiness (documented on comparisonToCondition) — not
+    // a #239 regression, since the pre-fix parser already normalized these
+    // three pairs to the distinct-operator form with no flag. What matters,
+    // same as the keyed-cookie case above, is idempotence: re-feeding the
+    // reshaped condition produces the exact same CEL, not a different one.
+    it('round-trips a negated eq condition to the equivalent (reshaped, idempotent) ne condition', () => {
+      const original: UnifiedCondition = { field: 'method', operator: 'eq', value: 'POST', negated: true }
+      const firstPass = roundTrip([original])
+      expect(firstPass.parsed!.conditions[0]).toMatchObject({ field: 'method', operator: 'ne', value: 'POST' })
+      const secondPass = roundTrip(firstPass.parsed!.conditions)
+      expect(secondPass.expression).toBe(firstPass.expression)
+    })
+
     // A keyed cookie condition is CEL's one inherently lossy case (see
     // CelParser.ts's file-level doc comment) — there is no CEL shape that
     // distinguishes "this specific cookie" from "this substring appears in
