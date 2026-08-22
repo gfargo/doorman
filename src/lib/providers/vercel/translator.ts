@@ -39,14 +39,14 @@ export function vercelToUnified(rule: VercelCustomRule): TranslationResult<Unifi
       conditions.push({
         field: mapVercelTypeToUnified(condition.type),
         operator,
-        value: condition.value as string | number | string[] | number[],
-        // Conditional spread, not `negated: condition.neg` — an unconditional
-        // assignment creates a `negated: undefined` key for an ordinary
-        // condition, which isDeepEqual treats as a different shape than the
-        // key being absent entirely (the local-config-loaded-from-disk case,
-        // since JSON.stringify drops undefined). That mismatch makes every
-        // non-negated rule show up as a phantom "update" on every sync. Same
-        // bug, same fix, as Fastly's pushUnifiedCondition. See #203.
+        // Conditional spread, not `value: condition.value` — an unconditional
+        // assignment creates a `value: undefined` key for an `ex`/`nex`
+        // condition (whose Vercel-native value is always undefined by
+        // design, #213), which isDeepEqual treats as a different shape than
+        // the key being absent entirely (the local-config-loaded-from-disk
+        // case, since JSON.stringify drops undefined). Same bug, same fix,
+        // as `negated` right below. See #203, #231.
+        ...(condition.value !== undefined ? { value: condition.value as string | number | string[] | number[] } : {}),
         ...(condition.neg ? { negated: true } : {}),
         ...(condition.key ? { key: condition.key } : {}),
         group: groupIndex,

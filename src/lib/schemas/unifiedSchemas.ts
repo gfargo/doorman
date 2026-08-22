@@ -25,6 +25,15 @@ export const unifiedConditionSchema = z
     value: z.union([z.string(), z.number(), z.array(z.string()), z.array(z.number())]).optional(),
     negated: z.boolean().optional(),
     key: z.string().optional(), // For header, query, cookie
+    // AND-group index (see UnifiedCondition.group in types/unified.ts). Zod
+    // strips unrecognized keys by default, so before this was added,
+    // running a condition through this schema silently dropped `group` —
+    // fine as a one-off, but a live regression the moment any caller
+    // switches from reading raw config to reading the parsed/defaulted
+    // result (see #225's fix in VercelFirewallService.getChanges: every
+    // multi-group rule, and every rule diffed against vercelToUnified's
+    // always-present `group`, would show a phantom "update" otherwise).
+    group: z.number().optional(),
   })
   .refine(
     // `exists`/`not_exists` (unified's equivalent of Vercel's `ex`/`nex` —
