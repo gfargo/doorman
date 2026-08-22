@@ -1,3 +1,10 @@
+## [3.13.2](https://github.com/gfargo/doorman/compare/v3.13.1...v3.13.2) (2026-08-22)
+
+
+### Bug Fixes
+
+* apply UnifiedCondition.negated in Cloud Armor CEL generation ([#240](https://github.com/gfargo/doorman/issues/240)) ([6d42ad6](https://github.com/gfargo/doorman/commit/6d42ad6c5c7fc037cdcb20486ea4a98d7f1e2f08)), closes [#239](https://github.com/gfargo/doorman/issues/239)
+
 ## [3.13.1](https://github.com/gfargo/doorman/compare/v3.13.0...v3.13.1) (2026-08-22)
 
 
