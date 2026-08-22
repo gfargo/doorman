@@ -301,10 +301,25 @@ function pushUnifiedCondition(
   const valueCondition = item.conditions.find((c) => c.field === 'value' || c.field === 'value_string')
 
   if (!valueCondition) {
+    // A name-only multival (no value sub-condition) is a pure existence
+    // check — the outbound half of this pair (buildFastlyConditions, above)
+    // now emits exactly this shape for a unified exists/not_exists
+    // condition, using the multival's own operator ('exists'/
+    // 'does_not_exist') to carry the check. See #236.
+    if (nameCondition) {
+      conditions.push({
+        field: unifiedField,
+        operator: item.operator === 'does_not_exist' ? 'not_exists' : 'exists',
+        key: nameCondition.value,
+        group,
+      })
+      return
+    }
+
     warnings.push(
       logicWarning(
         ruleId,
-        `Multival condition on '${item.field}' has no value sub-condition doorman could extract (only a 'name' existence check) — skipped.`,
+        `Multival condition on '${item.field}' has no value or name sub-condition doorman could extract — skipped.`,
       ),
     )
     return
@@ -476,6 +491,26 @@ function buildFastlyConditions(
         )
         return null
       }
+      // A pure existence check (Vercel's ex/nex, unified exists/not_exists)
+      // has no value to compare — only whether an entry named `condition.key`
+      // is present at all. Fastly's multival `operator` (FastlyMultivalOperator,
+      // 'exists' | 'does_not_exist') already models exactly that at the group
+      // level, so this case needs only the `name` sub-condition. Previously
+      // this branch always hardcoded `operator: 'exists'` and always added a
+      // value sub-condition via `String(condition.value)` — for exists/
+      // not_exists that meant `String(undefined)`, i.e. a condition matching
+      // the literal text "undefined", with the not_exists case additionally
+      // never flipping to `does_not_exist` at all. See #236.
+      if (condition.operator === 'exists' || condition.operator === 'not_exists') {
+        return {
+          type: 'multival',
+          field: multivalField,
+          operator: condition.operator === 'exists' ? 'exists' : 'does_not_exist',
+          group_operator: 'all',
+          conditions: [{ type: 'single', field: 'name', operator: 'equals', value: condition.key }],
+        }
+      }
+
       const valueField =
         multivalField === 'request_header' || multivalField === 'response_header' ? 'value_string' : 'value'
       return {
@@ -493,6 +528,24 @@ function buildFastlyConditions(
           },
         ],
       }
+    }
+
+    // Non-multival fields (path, method, host, etc.) always exist on every
+    // request — Fastly has no per-field existence check to translate an
+    // exists/not_exists condition into outside the keyed multival model
+    // above. Warn and drop rather than silently emitting a condition that
+    // matches the literal string "undefined" (see #236).
+    if (condition.operator === 'exists' || condition.operator === 'not_exists') {
+      warnings.push(
+        TranslationWarningSystem.createUnsupportedFeatureWarning(
+          `"${condition.operator}" on field '${condition.field}'`,
+          'unified config',
+          'Fastly',
+          ruleId,
+          condition.field,
+        ),
+      )
+      return null
     }
 
     const field = mapUnifiedFieldToFastly(condition.field)

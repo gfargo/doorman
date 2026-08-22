@@ -114,6 +114,51 @@ describe('fastly translator round-trip fidelity', () => {
     expect(result.conditions[0]).toMatchObject({ field, operator: 'eq', value: 'expected-value', key: 'X-Test' })
   })
 
+  it.each(['exists', 'not_exists'] as const)(
+    'round-trips a keyed %s condition as a pure Fastly existence check, not a value match against "undefined"',
+    (operator) => {
+      const rule: UnifiedRule = {
+        id: 'r4b',
+        name: `Cookie ${operator}`,
+        enabled: true,
+        conditions: [{ field: 'cookie', operator, key: 'supabase_auth', group: 0 }],
+        action: { type: 'bypass' },
+      }
+
+      const { result: input } = unifiedToFastly(rule)
+      expect(input.multival_conditions).toHaveLength(1)
+      const multival = input.multival_conditions![0]!
+      expect(multival.operator).toBe(operator === 'exists' ? 'exists' : 'does_not_exist')
+      // Exactly the name sub-condition — no value sub-condition at all, so
+      // there's nothing that could serialize as the literal string "undefined".
+      expect(multival.conditions).toEqual([
+        { type: 'single', field: 'name', operator: 'equals', value: 'supabase_auth' },
+      ])
+
+      const result = roundTrip(rule)
+      expect(result.conditions[0]).toMatchObject({ field: 'cookie', operator, key: 'supabase_auth' })
+      expect(result.conditions[0]).not.toHaveProperty('value')
+    },
+  )
+
+  it('drops an exists/not_exists condition on a non-keyed field, with a warning, rather than matching literal "undefined"', () => {
+    const rule: UnifiedRule = {
+      id: 'r4c',
+      name: 'Path existence (unsupported)',
+      enabled: true,
+      conditions: [
+        { field: 'path', operator: 'not_exists', group: 0 },
+        { field: 'method', operator: 'eq', value: 'POST', group: 0 },
+      ],
+      action: { type: 'block' },
+    }
+
+    const { result, warnings } = unifiedToFastly(rule)
+    expect(result.conditions).toHaveLength(1)
+    expect(result.conditions?.[0]).toMatchObject({ field: 'method' })
+    expect(warnings.some((w) => w.message.includes('not_exists') && w.message.includes('path'))).toBe(true)
+  })
+
   it('drops a condition field Fastly has no equivalent for, with a warning, rather than mistranslating it', () => {
     const rule: UnifiedRule = {
       id: 'r5',
