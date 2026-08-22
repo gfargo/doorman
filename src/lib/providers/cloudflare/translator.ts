@@ -112,11 +112,38 @@ export function unifiedToCloudflare(rule: UnifiedRule): TranslationResult<Cloudf
     } else {
       // Default to 1 hour (3600 seconds) for rate limit blocks
       cloudflareRule.ratelimit.mitigation_timeout = 3600
+      warnings.push(
+        TranslationWarningSystem.createWarning(
+          'rate_limiting_precision',
+          rule.id,
+          'action.rateLimit.mitigationTimeout',
+          `No mitigationTimeout set for rate limit rule "${rule.name}" — defaulted to Cloudflare's 3600s (1 hour) block duration.`,
+        ),
+      )
     }
 
     // Add counting expression if specified
     if (rule.action.rateLimit.countingExpression) {
       cloudflareRule.ratelimit.counting_expression = rule.action.rateLimit.countingExpression
+    }
+  }
+
+  // Redirect target. Without this, a translated redirect rule reaches
+  // Cloudflare as `action: 'redirect'` with no destination at all — an
+  // incomplete rule the API is likely to reject outright, or silently
+  // accept as a redirect-to-nowhere. See #199. Prefers an explicit
+  // `statusCode` (redirectSchema supports any 3xx) over the permanent-only
+  // 301/302 the previous (dead, since-removed) vercelToCloudflare code
+  // used, since the unified type carries more precision than that.
+  if (rule.action.type === 'redirect' && rule.action.redirect) {
+    cloudflareRule.action_parameters = {
+      from_value: {
+        status_code: rule.action.redirect.statusCode ?? (rule.action.redirect.permanent ? 301 : 302),
+        target_url: { value: rule.action.redirect.location },
+        ...(rule.action.redirect.preserveQueryString !== undefined
+          ? { preserve_query_string: rule.action.redirect.preserveQueryString }
+          : {}),
+      },
     }
   }
 
