@@ -1,3 +1,10 @@
+# [3.13.0](https://github.com/gfargo/doorman/compare/v3.12.1...v3.13.0) (2026-08-22)
+
+
+### Features
+
+* add GCP Cloud Armor provider ([#238](https://github.com/gfargo/doorman/issues/238)) ([f843e2e](https://github.com/gfargo/doorman/commit/f843e2eaf6970998f634a7ceeb2ff069afc84cea)), closes [#187](https://github.com/gfargo/doorman/issues/187) [#187](https://github.com/gfargo/doorman/issues/187) [#232](https://github.com/gfargo/doorman/issues/232) [#178](https://github.com/gfargo/doorman/issues/178) [#187](https://github.com/gfargo/doorman/issues/187) [#183](https://github.com/gfargo/doorman/issues/183) [#230](https://github.com/gfargo/doorman/issues/230) [#187](https://github.com/gfargo/doorman/issues/187)
+
 ## [3.12.1](https://github.com/gfargo/doorman/compare/v3.12.0...v3.12.1) (2026-08-22)
 
 
