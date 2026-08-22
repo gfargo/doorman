@@ -181,15 +181,30 @@ describe('cloudflare/translator', () => {
       expect(result.ratelimit!.characteristics).toEqual(['ip.src'])
     })
 
-    it('defaults mitigation_timeout to 3600 when not specified', () => {
+    it('defaults mitigation_timeout to 3600 when not specified, and warns about it (regression test for #199)', () => {
       const rule = makeUnifiedRule({
         action: {
           type: 'rate_limit',
           rateLimit: { requests: 10, window: '60s' },
         },
       })
-      const { result } = unifiedToCloudflare(rule)
+      const { result, warnings } = unifiedToCloudflare(rule)
       expect(result.ratelimit!.mitigation_timeout).toBe(3600)
+      // The dead vercelToCloudflare code this was ported from warned here;
+      // unifiedToCloudflare silently defaulted the same value with nothing
+      // telling the user it happened.
+      expect(warnings.some((w) => w.field === 'action.rateLimit.mitigationTimeout')).toBe(true)
+    })
+
+    it('does not warn about mitigation_timeout when it was explicitly set', () => {
+      const rule = makeUnifiedRule({
+        action: {
+          type: 'rate_limit',
+          rateLimit: { requests: 10, window: '60s', mitigationTimeout: 600 },
+        },
+      })
+      const { warnings } = unifiedToCloudflare(rule)
+      expect(warnings.some((w) => w.field === 'action.rateLimit.mitigationTimeout')).toBe(false)
     })
 
     it('uses rule name as description fallback', () => {
@@ -230,6 +245,61 @@ describe('cloudflare/translator', () => {
         const { result } = unifiedToCloudflare(rule)
         expect(result.ratelimit!.period).toBe(86400)
       })
+    })
+  })
+
+  // Regression coverage for #199: unifiedToCloudflare mapped action.type
+  // 'redirect' to Cloudflare's `action: 'redirect'` but never populated
+  // action_parameters.from_value — the target URL and status code a
+  // Cloudflare redirect rule actually needs to do anything. A second,
+  // now-deleted translator (dead code, zero production callers) got this
+  // right; the live path never did.
+  describe('redirect action (UnifiedAction.redirect)', () => {
+    const redirectRule = (redirect: UnifiedRule['action']['redirect']): UnifiedRule => ({
+      id: 'r3',
+      name: 'Redirect old page',
+      enabled: true,
+      conditions: [{ field: 'path', operator: 'eq', value: '/old' }],
+      action: { type: 'redirect', redirect },
+    })
+
+    it('emits action_parameters.from_value with status 302 for a non-permanent redirect', () => {
+      const { result, warnings } = unifiedToCloudflare(redirectRule({ location: '/new' }))
+
+      expect(result.action).toBe('redirect')
+      expect(result.action_parameters).toEqual({
+        from_value: { status_code: 302, target_url: { value: '/new' } },
+      })
+      expect(warnings).toEqual([])
+    })
+
+    it('uses status 301 when permanent is true', () => {
+      const { result } = unifiedToCloudflare(redirectRule({ location: '/new', permanent: true }))
+
+      expect(result.action_parameters).toEqual({
+        from_value: { status_code: 301, target_url: { value: '/new' } },
+      })
+    })
+
+    it('prefers an explicit statusCode over the permanent-derived 301/302', () => {
+      const { result } = unifiedToCloudflare(redirectRule({ location: '/new', statusCode: 308, permanent: true }))
+
+      expect(result.action_parameters).toEqual({
+        from_value: { status_code: 308, target_url: { value: '/new' } },
+      })
+    })
+
+    it('includes preserve_query_string when set', () => {
+      const { result } = unifiedToCloudflare(redirectRule({ location: '/new', preserveQueryString: true }))
+
+      expect(result.action_parameters).toEqual({
+        from_value: { status_code: 302, target_url: { value: '/new' }, preserve_query_string: true },
+      })
+    })
+
+    it('does not set action_parameters at all when a redirect action has no redirect details', () => {
+      const { result } = unifiedToCloudflare(redirectRule(undefined))
+      expect(result.action_parameters).toBeUndefined()
     })
   })
 
