@@ -1,3 +1,10 @@
+## [3.12.1](https://github.com/gfargo/doorman/compare/v3.12.0...v3.12.1) (2026-08-22)
+
+
+### Bug Fixes
+
+* diff-symmetry bugs — conditionLogic default not applied, value:undefined on ex/nex ([#235](https://github.com/gfargo/doorman/issues/235)) ([2aa82a4](https://github.com/gfargo/doorman/commit/2aa82a44e244f15c32898ed056d43bf8dca45790)), closes [#213](https://github.com/gfargo/doorman/issues/213) [#226](https://github.com/gfargo/doorman/issues/226) [#231](https://github.com/gfargo/doorman/issues/231) [#225](https://github.com/gfargo/doorman/issues/225)
+
 # [3.12.0](https://github.com/gfargo/doorman/compare/v3.11.7...v3.12.0) (2026-08-22)
 
 
