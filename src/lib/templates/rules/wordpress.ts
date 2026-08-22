@@ -8,6 +8,7 @@ export const wordpress: Template = {
   config: {
     rules: [
       {
+        id: 'rule_deny_word_press_ur_ls',
         name: 'Deny WordPress URLs',
         description: '',
         conditionGroup: [
