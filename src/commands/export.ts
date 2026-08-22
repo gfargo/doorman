@@ -7,20 +7,12 @@ import type { UnifiedConfig, UnifiedIPRule, UnifiedRule } from '../lib/types/uni
 import { getConfig } from '../lib/utils/config'
 import { handleCommandError } from '../lib/utils/handleCommandError'
 import { toUnifiedConfig } from '../lib/utils/vercelConfigAdapter'
-import type { ProviderType } from '../lib/providers/IFirewallProvider'
 import { providerOption } from '../lib/utils/providerOption'
 import { withCredentials } from '../lib/utils/withCredentials'
+import { credentialOptions, pickCredentialOptions, type CredentialOptions } from '../lib/utils/credentialOptions'
 
-interface ExportOptions {
+interface ExportOptions extends CredentialOptions {
   config?: string
-  provider?: ProviderType | 'cloudflare'
-  projectId?: string
-  teamId?: string
-  token?: string
-  apiToken?: string
-  zoneId?: string
-  accountId?: string
-  workspaceId?: string
   format?: 'json' | 'yaml' | 'terraform' | 'markdown'
   output?: string
   source?: 'local' | 'remote'
@@ -38,27 +30,7 @@ export const builder = {
     description: 'Path to firewall config file (defaults to .doorman.json)',
   },
   provider: providerOption,
-  projectId: {
-    alias: 'p',
-    type: 'string',
-    description: 'Vercel Project ID (can be set in config file)',
-  },
-  teamId: {
-    alias: 't',
-    type: 'string',
-    description: 'Vercel Team ID (can be set in config file)',
-  },
-  token: {
-    type: 'string',
-    description: 'Vercel API token (defaults to VERCEL_TOKEN env var)',
-  },
-  apiToken: { type: 'string', description: 'Cloudflare API token (defaults to CLOUDFLARE_API_TOKEN env var)' },
-  zoneId: { type: 'string', description: 'Cloudflare Zone ID (defaults to CLOUDFLARE_ZONE_ID env var)' },
-  accountId: { type: 'string', description: 'Cloudflare Account ID (optional)' },
-  workspaceId: {
-    type: 'string',
-    description: 'Fastly Next-Gen WAF Workspace ID (defaults to FASTLY_WORKSPACE_ID env var)',
-  },
+  ...credentialOptions,
   format: {
     alias: 'f',
     type: 'string',
@@ -218,13 +190,7 @@ export const handler = async (argv: Arguments<ExportOptions>) => {
         {
           config: argv.config,
           provider: argv.provider,
-          projectId: argv.projectId,
-          teamId: argv.teamId,
-          token: argv.token,
-          apiToken: argv.apiToken,
-          zoneId: argv.zoneId,
-          accountId: argv.accountId,
-          workspaceId: argv.workspaceId,
+          ...pickCredentialOptions(argv),
           debug: argv.debug,
           ci: argv.ci,
           errorContext: 'exporting configuration',

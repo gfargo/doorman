@@ -12,12 +12,16 @@ import { mockVercelClientPrototype } from './testHelpers/providerMocks'
 // `providers/vercel/VercelClient`.
 jest.mock('../lib/providers/vercel/VercelClient')
 jest.mock('../lib/ui/prompt')
-jest.mock('../lib/ui/promptForCredentials')
 
 describe('Command Integration Tests', () => {
   let tempDir: string
   let configPath: string
 
+  // Every handler call below passes these explicitly rather than relying on
+  // interactive credential prompting — these tests exercise download/sync
+  // logic, not credential-prompting UX (that's providerHelper.test.ts's
+  // job), and explicit values sidestep having to track prompt() call order
+  // against this file's own confirmation-dialog prompts.
   const mockCredentials = {
     token: 'test-token',
     projectId: 'test-project',
@@ -76,12 +80,11 @@ describe('Command Integration Tests', () => {
       throw new Error(`process.exit called with "${code}"`)
     })
 
-    // Mock the prompt functions
+    // Mock the prompt function (confirmation dialogs only — credentials are
+    // passed explicitly to each handler call below)
     const { prompt } = await import('../lib/ui/prompt')
-    const { promptForCredentials } = await import('../lib/ui/promptForCredentials')
 
     ;(prompt as jest.MockedFunction<typeof prompt>).mockResolvedValue(true)
-    ;(promptForCredentials as jest.MockedFunction<typeof promptForCredentials>).mockResolvedValue(mockCredentials)
 
     // Mock providers/vercel/VercelClient — used by `sync`, `watch`,
     // `download`, and every other Vercel command via the generic
@@ -117,6 +120,7 @@ describe('Command Integration Tests', () => {
       // When
       await downloadHandler({
         config: configPath,
+        ...mockCredentials,
         dryRun: false,
         debug: false,
       } as any)
@@ -174,9 +178,13 @@ describe('Command Integration Tests', () => {
       const { prompt } = await import('../lib/ui/prompt')
       ;(prompt as jest.MockedFunction<typeof prompt>).mockResolvedValue(true) // Confirm download
 
-      // When
+      // When — explicit projectId (distinct from the existing config's
+      // 'old-project') exercises the same "download overwrites stale
+      // credentials too" behavior the mocked-prompt version of this test
+      // used to, just via the explicit-flag precedence tier instead.
       await downloadHandler({
         config: configPath,
+        ...mockCredentials,
         dryRun: false,
         debug: false,
       } as any)
@@ -193,6 +201,7 @@ describe('Command Integration Tests', () => {
       // When
       await downloadHandler({
         config: configPath,
+        ...mockCredentials,
         dryRun: true,
         debug: false,
       } as any)
@@ -221,6 +230,7 @@ describe('Command Integration Tests', () => {
       // When
       await downloadHandler({
         config: configPath,
+        ...mockCredentials,
         configVersion: 3,
         dryRun: false,
         debug: false,
@@ -250,6 +260,7 @@ describe('Command Integration Tests', () => {
       // When
       await syncHandler({
         config: configPath,
+        ...mockCredentials,
         debug: false,
       } as any)
 
@@ -334,6 +345,7 @@ describe('Command Integration Tests', () => {
 
       await syncHandler({
         config: configPath,
+        ...mockCredentials,
         debug: false,
       } as any)
 
@@ -343,6 +355,7 @@ describe('Command Integration Tests', () => {
       // covers this call too, and matches the expected post-sync state.
       await downloadHandler({
         config: configPath,
+        ...mockCredentials,
         dryRun: false,
         debug: false,
       } as any)

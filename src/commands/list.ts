@@ -4,19 +4,11 @@ import { z } from 'zod'
 import { logger } from '../lib/logger'
 import type { IFirewallProvider } from '../lib/providers/IFirewallProvider'
 import { configVersionSchema } from '../lib/schemas/firewallSchemas'
-import type { ProviderType } from '../lib/providers/IFirewallProvider'
 import { providerOption } from '../lib/utils/providerOption'
 import { withCredentials } from '../lib/utils/withCredentials'
+import { credentialOptions, pickCredentialOptions, type CredentialOptions } from '../lib/utils/credentialOptions'
 
-interface ListOptions {
-  provider?: ProviderType | 'cloudflare'
-  projectId: string
-  teamId: string
-  token?: string
-  apiToken?: string
-  zoneId?: string
-  accountId?: string
-  workspaceId?: string
+interface ListOptions extends CredentialOptions {
   format?: 'json' | 'table'
   debug: boolean
   configVersion?: number
@@ -32,27 +24,7 @@ export const builder = {
     description: 'Specific configuration version to fetch (defaults to latest)',
   },
   provider: providerOption,
-  projectId: {
-    alias: 'p',
-    type: 'string',
-    description: 'Vercel Project ID (can be set in config file or VERCEL_PROJECT_ID environment variable)',
-  },
-  teamId: {
-    alias: 't',
-    type: 'string',
-    description: 'Vercel Team ID (can be set in config file or VERCEL_TEAM_ID environment variable)',
-  },
-  token: {
-    type: 'string',
-    description: 'Vercel API token (defaults to VERCEL_TOKEN env var)',
-  },
-  apiToken: { type: 'string', description: 'Cloudflare API token (defaults to CLOUDFLARE_API_TOKEN env var)' },
-  zoneId: { type: 'string', description: 'Cloudflare Zone ID (defaults to CLOUDFLARE_ZONE_ID env var)' },
-  accountId: { type: 'string', description: 'Cloudflare Account ID (optional)' },
-  workspaceId: {
-    type: 'string',
-    description: 'Fastly Next-Gen WAF Workspace ID (defaults to FASTLY_WORKSPACE_ID env var)',
-  },
+  ...credentialOptions,
   format: {
     alias: 'f',
     type: 'string',
@@ -72,13 +44,7 @@ export const handler = async (argv: Arguments<ListOptions>) => {
   await withCredentials(
     {
       provider: argv.provider,
-      projectId: argv.projectId,
-      teamId: argv.teamId,
-      token: argv.token,
-      apiToken: argv.apiToken,
-      zoneId: argv.zoneId,
-      accountId: argv.accountId,
-      workspaceId: argv.workspaceId,
+      ...pickCredentialOptions(argv),
       debug: argv.debug,
       ci: argv.ci,
       optionalConfig: true,

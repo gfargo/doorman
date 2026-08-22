@@ -1,10 +1,11 @@
 import { LogLevels } from 'consola'
 import { logger } from '../logger'
-import type { IFirewallProvider, ProviderType } from '../providers/IFirewallProvider'
+import type { IFirewallProvider } from '../providers/IFirewallProvider'
 import { FirewallConfig } from '../types'
 import { getConfig } from './config'
 import { handleCommandError } from './handleCommandError'
 import { getProviderInstance } from './providerHelper'
+import { pickCredentialOptions, type CredentialOptions } from './credentialOptions'
 
 /**
  * Context provided to command handlers by `withCredentials`.
@@ -21,27 +22,13 @@ export interface CommandContext {
 }
 
 /**
- * Options controlling how `withCredentials` loads config and resolves credentials.
+ * Options controlling how `withCredentials` loads config and resolves
+ * credentials. Extends `CredentialOptions` for every provider's credential
+ * flags (auto-detected when not specified) rather than declaring them here.
  */
-export interface WithCredentialsOptions {
+export interface WithCredentialsOptions extends CredentialOptions {
   /** CLI --config path */
   config?: string
-  /** Explicit provider selection (auto-detected if not specified) */
-  provider?: ProviderType
-  /** CLI --projectId override (Vercel) */
-  projectId?: string
-  /** CLI --teamId override (Vercel) */
-  teamId?: string
-  /** CLI --token override (Vercel) */
-  token?: string
-  /** CLI --apiToken override (Cloudflare, also reused for Fastly's API token) */
-  apiToken?: string
-  /** CLI --zoneId override (Cloudflare) */
-  zoneId?: string
-  /** CLI --accountId override (Cloudflare) */
-  accountId?: string
-  /** CLI --workspaceId override (Fastly) */
-  workspaceId?: string
   /** CLI --debug flag */
   debug?: boolean
   /** CLI --ci flag (non-interactive mode) */
@@ -89,21 +76,13 @@ export async function withCredentials(
       config = await getConfig(options.config, 'required')
     }
 
-    // 2. Get provider instance (handles credential resolution for both providers)
+    // 2. Get provider instance (handles credential resolution generically,
+    // against whichever provider ends up selected)
     const { provider, vercelCredentials } = await getProviderInstance({
       provider: options.provider,
       config,
       interactive: !options.ci,
-      // Vercel credentials
-      token: options.token,
-      projectId: options.projectId,
-      teamId: options.teamId,
-      // Cloudflare credentials
-      apiToken: options.apiToken,
-      zoneId: options.zoneId,
-      accountId: options.accountId,
-      // Fastly credentials
-      workspaceId: options.workspaceId,
+      credentials: pickCredentialOptions(options),
     })
 
     // Resolved Vercel credentials, when applicable — some commands (e.g.

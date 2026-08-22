@@ -15,6 +15,8 @@ export const vercelCredentials: CredentialDescriptor = {
       secret: true,
       // Deliberately no configKey — an API token has no business living in a
       // committed config file, so it comes from a flag or the environment only.
+      promptMessage:
+        'What is your Vercel API Auth Token? (https://vercel.com/guides/how-do-i-use-a-vercel-api-access-token#creating-an-access-token) ',
     },
     {
       key: 'projectId',
@@ -22,6 +24,10 @@ export const vercelCredentials: CredentialDescriptor = {
       label: 'Vercel Project ID',
       required: true,
       configKey: 'projectId',
+      cliAlias: 'p',
+      legacyConfigKey: 'projectId',
+      promptMessage:
+        'What is your Vercel Project ID? (See https://vercel.com/docs/projects/project-configuration/general-settings#project-id)',
     },
     {
       key: 'teamId',
@@ -33,6 +39,10 @@ export const vercelCredentials: CredentialDescriptor = {
       // callers who belong to more than one team and want a non-default one.
       required: false,
       configKey: 'teamId',
+      cliAlias: 't',
+      legacyConfigKey: 'teamId',
+      promptMessage:
+        'What is your Vercel Team ID? Leave blank to use your Vercel default team (every account, including Hobby, is a team). Only needed if you belong to more than one team and want to target a non-default one. (See https://vercel.com/docs/accounts#find-your-team-id)',
     },
   ],
 }

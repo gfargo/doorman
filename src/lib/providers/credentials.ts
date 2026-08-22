@@ -34,6 +34,26 @@ export interface CredentialField {
    * config (e.g. API tokens).
    */
   configKey?: string
+  /**
+   * Message shown when interactively prompting for this field. Defaults to
+   * `"${label}:"` (or `"${label} (optional):"` when `required` is false) —
+   * set explicitly only when a field benefits from more context, such as a
+   * docs link or an explanation of what leaving it blank does.
+   */
+  promptMessage?: string
+  /**
+   * Single-character CLI flag alias (e.g. `'p'` for `--projectId`). Aliases
+   * are a scarce, collision-prone resource shared across every provider's
+   * flags on the same command, so most fields should leave this unset.
+   */
+  cliAlias?: string
+  /**
+   * Vercel-only today: some pre-multi-provider configs stored this value at
+   * the config's top level (e.g. `config.projectId`) rather than nested
+   * under `providers.<name>`. New providers should leave this unset — it
+   * exists purely for backward compatibility with that legacy shape.
+   */
+  legacyConfigKey?: string
 }
 
 /**

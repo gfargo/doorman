@@ -8,12 +8,15 @@ import { FirewallConfig } from '../lib/types'
 // Mock external dependencies.
 jest.mock('../lib/providers/vercel/VercelClient')
 jest.mock('../lib/ui/prompt')
-jest.mock('../lib/ui/promptForCredentials')
 
 describe('Version Sync Fix', () => {
   let tempDir: string
   let configPath: string
 
+  // Passed explicitly to every syncHandler call below rather than relying on
+  // interactive credential prompting — these tests exercise version-sync
+  // logic, not credential-prompting UX, and an explicit token sidesteps
+  // having to track prompt()/promptSecret() call order.
   const mockCredentials = {
     token: 'test-token',
     projectId: 'test-project',
@@ -24,12 +27,10 @@ describe('Version Sync Fix', () => {
     tempDir = await fs.mkdtemp(join(tmpdir(), 'doorman-version-test-'))
     configPath = join(tempDir, 'test-config.json')
 
-    // Mock the prompt functions
+    // Mock the prompt function (confirmation dialogs only)
     const { prompt } = await import('../lib/ui/prompt')
-    const { promptForCredentials } = await import('../lib/ui/promptForCredentials')
 
     ;(prompt as jest.MockedFunction<typeof prompt>).mockResolvedValue(true)
-    ;(promptForCredentials as jest.MockedFunction<typeof promptForCredentials>).mockResolvedValue(mockCredentials)
   })
 
   afterEach(async () => {
@@ -95,6 +96,7 @@ describe('Version Sync Fix', () => {
     // When
     await syncHandler({
       config: configPath,
+      ...mockCredentials,
       debug: false,
     } as any)
 
@@ -143,6 +145,7 @@ describe('Version Sync Fix', () => {
     // When
     await syncHandler({
       config: configPath,
+      ...mockCredentials,
       debug: false,
     } as any)
 
@@ -186,6 +189,7 @@ describe('Version Sync Fix', () => {
     // When
     await syncHandler({
       config: configPath,
+      ...mockCredentials,
       debug: false,
     } as any)
 
@@ -230,6 +234,7 @@ describe('Version Sync Fix', () => {
     // When
     await syncHandler({
       config: configPath,
+      ...mockCredentials,
       debug: false,
     } as any)
 
