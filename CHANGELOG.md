@@ -1,3 +1,10 @@
+# [3.12.0](https://github.com/gfargo/doorman/compare/v3.11.7...v3.12.0) (2026-08-22)
+
+
+### Features
+
+* add CelExpressionBuilder/CelParser for Cloud Armor CEL ([#234](https://github.com/gfargo/doorman/issues/234)) ([048d59d](https://github.com/gfargo/doorman/commit/048d59d1bdb36b27540c73be602d6505005900c2)), closes [#187](https://github.com/gfargo/doorman/issues/187) [#178](https://github.com/gfargo/doorman/issues/178) [#187](https://github.com/gfargo/doorman/issues/187)
+
 ## [3.11.7](https://github.com/gfargo/doorman/compare/v3.11.6...v3.11.7) (2026-08-22)
 
 
