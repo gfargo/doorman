@@ -181,36 +181,34 @@ describe('Cloudflare Error Handling Integration', () => {
   })
 
   describe('Network Error Scenarios', () => {
-    // These all use mockRejectedValueOnce, which only covers makeRequest's
-    // first attempt — later retries fall through to a real fetch() since
-    // fetchMock spies on globalThis.fetch rather than replacing it outright.
-    // Safe only because .rejects.toThrow() takes no message argument: the
-    // mocked error, a real network failure, or a real 4xx from Cloudflare
-    // (given these fake credentials) all satisfy the assertion equally.
+    // mockRejectedValue (not Once): a one-shot rejection only covers
+    // makeRequest's first retry attempt, letting the rest fall through to a
+    // real fetch() call against the live Cloudflare API — see the identical
+    // comment on verifyCredentials in CloudflareClient.test.ts.
     it('should handle DNS resolution failures', async () => {
       const dnsError = new Error('getaddrinfo ENOTFOUND api.cloudflare.com')
-      fetchMock.mockRejectedValueOnce(dnsError)
+      fetchMock.mockRejectedValue(dnsError)
 
       await expect(client.listRulesets()).rejects.toThrow()
     })
 
     it('should handle connection timeouts', async () => {
       const timeoutError = new Error('Request timeout after 30000ms')
-      fetchMock.mockRejectedValueOnce(timeoutError)
+      fetchMock.mockRejectedValue(timeoutError)
 
       await expect(client.listRulesets()).rejects.toThrow()
     })
 
     it('should handle connection refused errors', async () => {
       const connError = new Error('connect ECONNREFUSED 127.0.0.1:443')
-      fetchMock.mockRejectedValueOnce(connError)
+      fetchMock.mockRejectedValue(connError)
 
       await expect(client.listRulesets()).rejects.toThrow()
     })
 
     it('should handle SSL/TLS errors', async () => {
       const sslError = new Error('certificate verify failed')
-      fetchMock.mockRejectedValueOnce(sslError)
+      fetchMock.mockRejectedValue(sslError)
 
       await expect(client.listRulesets()).rejects.toThrow()
     })
@@ -267,12 +265,10 @@ describe('Cloudflare Error Handling Integration', () => {
   })
 
   describe('Service-Level Error Handling', () => {
-    // Same reasoning as the Network Error Scenarios block above: single-shot
-    // rejections here can fall through to a real fetch() on retry, but
-    // .rejects.toThrow() has no message argument so it's safe either way.
+    // mockRejectedValue (not Once): same reasoning as Network Error Scenarios above.
     it('should handle fetchConfig errors gracefully', async () => {
       const networkError = new Error('Network unavailable')
-      fetchMock.mockRejectedValueOnce(networkError)
+      fetchMock.mockRejectedValue(networkError)
 
       await expect(service.fetchConfig()).rejects.toThrow()
     })
@@ -286,7 +282,7 @@ describe('Cloudflare Error Handling Integration', () => {
       }
 
       const serverError = new Error('Internal server error')
-      fetchMock.mockRejectedValueOnce(serverError)
+      fetchMock.mockRejectedValue(serverError)
 
       await expect(service.syncRules(mockConfig)).rejects.toThrow()
     })
