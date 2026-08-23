@@ -31,16 +31,10 @@ export interface OptimizedDiffResult<T> {
 export interface ConnectionPoolOptions {
   /** Maximum number of concurrent connections (default: 6) */
   maxConnections: number
-  /** Idle timeout in ms before a connection slot is released (default: 30000) */
-  idleTimeout: number
-  /** Whether to enable keep-alive on connections (default: true) */
-  keepAlive: boolean
 }
 
 const DEFAULT_POOL_OPTIONS: ConnectionPoolOptions = {
   maxConnections: 6,
-  idleTimeout: 30000,
-  keepAlive: true,
 }
 
 /**
@@ -436,17 +430,6 @@ export class CloudflareOptimizer {
 
     await Promise.all(executing)
     return results
-  }
-
-  /**
-   * Get default headers for connection reuse (keep-alive).
-   */
-  public getConnectionHeaders(): Record<string, string> {
-    if (!this.poolOptions.keepAlive) return {}
-    return {
-      Connection: 'keep-alive',
-      'Keep-Alive': `timeout=${Math.floor(this.poolOptions.idleTimeout / 1000)}`,
-    }
   }
 
   // ── Request Deduplication ───────────────────────────────────────────

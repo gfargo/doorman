@@ -1,0 +1,14 @@
+{
+  "zoneId": "zone_demo123",
+  "rulesets": [
+    {
+      "id": "ruleset_demo1",
+      "name": "Doorman Custom Firewall Rules",
+      "description": "Custom firewall rules managed by Doorman",
+      "kind": "custom",
+      "phase": "http_request_firewall_custom",
+      "version": "1",
+      "rules": []
+    }
+  ]
+}
