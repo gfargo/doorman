@@ -71,6 +71,32 @@ describe('CloudflareClient', () => {
       const headers = requestInit.headers as Record<string, string>
       expect(headers['Authorization']).toBe(`Bearer ${API_TOKEN}`)
     })
+
+    it('should never send Connection or Keep-Alive request headers', async () => {
+      // Regression test: getAuthHeaders() used to spread in
+      // CloudflareOptimizer.getConnectionHeaders(), which set these as
+      // per-request headers. Both are on the Fetch spec's forbidden-header
+      // list — undici's fetch() throws ("invalid keep-alive header") the
+      // moment either is present, so every real Cloudflare API call failed
+      // outright. Confirmed against a live local server, not just this
+      // mocked fetch: see demos/cloudflare-mock-server.mjs.
+      const mockResponse: CloudflareAPIResponse<CloudflareRuleset[]> = {
+        success: true,
+        errors: [],
+        messages: [],
+        result: [],
+      }
+
+      fetchMock.mockResolvedValueOnce(makeResponse({ ok: true, status: 200, jsonBody: mockResponse }))
+
+      await client.listRulesets()
+
+      const callArgs = fetchMock.mock.calls[0]
+      const requestInit = callArgs?.[1] as RequestInit
+      const headers = requestInit.headers as Record<string, string>
+      expect(headers).not.toHaveProperty('Connection')
+      expect(headers).not.toHaveProperty('Keep-Alive')
+    })
   })
 
   describe('Ruleset Operations', () => {
@@ -399,7 +425,11 @@ describe('CloudflareClient', () => {
     })
 
     it('should return false for invalid credentials', async () => {
-      fetchMock.mockRejectedValueOnce(new Error('Authentication failed'))
+      // mockRejectedValue (not Once): see the identical comment in
+      // CloudflareEdgeCases.test.ts — a one-shot rejection only covers the
+      // first of makeRequest's retry attempts, letting the rest fall through
+      // to a real fetch() call.
+      fetchMock.mockRejectedValue(new Error('Authentication failed'))
 
       const result = await client.verifyCredentials()
 

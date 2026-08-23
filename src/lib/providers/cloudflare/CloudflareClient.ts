@@ -22,6 +22,15 @@ import type {
   CloudflareListItemsResponse,
 } from '../../types/cloudflare'
 
+// Overridable for testing/demos against a local mock server — never set this
+// in production. demos/cloudflare-mock-server.mjs and the VHS demo tapes rely
+// on this to drive the real CLI/network code path against a local fixture
+// server instead of the live Cloudflare API, the same way
+// DOORMAN_VERCEL_API_BASE_URL and DOORMAN_FASTLY_API_BASE_URL already do for
+// their providers.
+export const CLOUDFLARE_API_BASE_URL =
+  process.env.DOORMAN_CLOUDFLARE_API_BASE_URL || 'https://api.cloudflare.com/client/v4'
+
 /**
  * Cloudflare API Client
  * Implements Cloudflare Ruleset Engine API operations
@@ -34,7 +43,7 @@ export class CloudflareClient extends BaseFirewallClient {
   private readonly optimizer: CloudflareOptimizer
 
   constructor(apiToken: string, zoneId: string, accountId?: string) {
-    super('https://api.cloudflare.com/client/v4', 'cloudflare')
+    super(CLOUDFLARE_API_BASE_URL, 'cloudflare')
     this.apiToken = apiToken
     this.zoneId = zoneId
     this.accountId = accountId
@@ -79,7 +88,6 @@ export class CloudflareClient extends BaseFirewallClient {
   protected async getAuthHeaders(): Promise<Record<string, string>> {
     return {
       Authorization: `Bearer ${this.apiToken}`,
-      ...this.optimizer.getConnectionHeaders(),
     }
   }
 

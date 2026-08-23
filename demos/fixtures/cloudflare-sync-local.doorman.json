@@ -1,0 +1,19 @@
+{
+  "$schema": "https://doorman.griffen.codes/schema.json",
+  "version": "2.0",
+  "provider": "cloudflare",
+  "providers": {
+    "cloudflare": { "zoneId": "zone_demo123" }
+  },
+  "rules": [
+    {
+      "id": "rule_block_bad_bots",
+      "name": "Block Bad Bots",
+      "enabled": true,
+      "conditions": [{ "field": "user_agent", "operator": "contains", "value": "bot", "group": 0 }],
+      "conditionLogic": "AND",
+      "action": { "type": "block" }
+    }
+  ],
+  "ips": []
+}

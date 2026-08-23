@@ -256,17 +256,6 @@ describe('CloudflareOptimizer', () => {
       const results = await optimizer.executePooled([])
       expect(results).toEqual([])
     })
-
-    it('should provide keep-alive headers when enabled', () => {
-      const headers = optimizer.getConnectionHeaders()
-      expect(headers).toHaveProperty('Connection', 'keep-alive')
-    })
-
-    it('should return empty headers when keep-alive is disabled', () => {
-      const noKeepAlive = new CloudflareOptimizer({ keepAlive: false })
-      const headers = noKeepAlive.getConnectionHeaders()
-      expect(headers).toEqual({})
-    })
   })
 
   // ── Request Deduplication ───────────────────────────────────────────
