@@ -1,3 +1,10 @@
+## [3.13.9](https://github.com/gfargo/doorman/compare/v3.13.8...v3.13.9) (2026-08-23)
+
+
+### Bug Fixes
+
+* **gcp:** relocate a rule via remove+add, not patch, when its priority changes ([#256](https://github.com/gfargo/doorman/issues/256)) ([57c611c](https://github.com/gfargo/doorman/commit/57c611cd8a82944e822f0c3b1e080925f7657158)), closes [#249](https://github.com/gfargo/doorman/issues/249)
+
 ## [3.13.8](https://github.com/gfargo/doorman/compare/v3.13.7...v3.13.8) (2026-08-23)
 
 
