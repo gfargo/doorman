@@ -1,3 +1,10 @@
+## [3.13.7](https://github.com/gfargo/doorman/compare/v3.13.6...v3.13.7) (2026-08-23)
+
+
+### Bug Fixes
+
+* **gcp:** auth headers silently dropped on every request; CEL parsed twice per rule ([#253](https://github.com/gfargo/doorman/issues/253)) ([9ff9f39](https://github.com/gfargo/doorman/commit/9ff9f3926b28f9dc2a614c5b45ae9a29d8bad96f)), closes [#187](https://github.com/gfargo/doorman/issues/187) [#232](https://github.com/gfargo/doorman/issues/232) [#234](https://github.com/gfargo/doorman/issues/234) [#238](https://github.com/gfargo/doorman/issues/238) [#240](https://github.com/gfargo/doorman/issues/240) [#248](https://github.com/gfargo/doorman/issues/248) [-#252](https://github.com/-/issues/252)
+
 ## [3.13.6](https://github.com/gfargo/doorman/compare/v3.13.5...v3.13.6) (2026-08-23)
 
 
