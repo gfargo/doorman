@@ -1,3 +1,10 @@
+## [3.13.5](https://github.com/gfargo/doorman/compare/v3.13.4...v3.13.5) (2026-08-23)
+
+
+### Bug Fixes
+
+* diff Fastly rules against the parsed/defaulted config, not the raw one ([#244](https://github.com/gfargo/doorman/issues/244)) ([23b92c0](https://github.com/gfargo/doorman/commit/23b92c0aba14f761ae24d7c802f2caef3923d5b7)), closes [#225](https://github.com/gfargo/doorman/issues/225) [#243](https://github.com/gfargo/doorman/issues/243)
+
 ## [3.13.4](https://github.com/gfargo/doorman/compare/v3.13.3...v3.13.4) (2026-08-23)
 
 
