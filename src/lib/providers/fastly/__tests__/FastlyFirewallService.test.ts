@@ -184,6 +184,36 @@ describe('FastlyFirewallService', () => {
       expect(changes.hasChanges).toBe(false)
     })
 
+    it('should detect no changes for a local rule that omits conditionLogic (regression test for #225)', async () => {
+      // getChanges previously diffed the raw `config` parameter rather than
+      // unifiedConfigSchema.safeParse(config).data — so a local rule relying
+      // on the documented conditionLogic default ('AND') never actually got
+      // it applied before comparison, while fastlyToUnified always sets it
+      // explicitly on the translated remote side. One fewer key on the
+      // local side made isDeepEqual flag every such rule as a phantom
+      // "update". Same bug, same fix, as Vercel's getChanges.
+      jest.spyOn(client, 'fetchRules').mockResolvedValue([mockRequestRule])
+
+      const config: UnifiedConfig = {
+        ...baseConfig,
+        rules: [
+          {
+            id: 'rule_1',
+            name: 'Block bad bots',
+            enabled: true,
+            // No `conditionLogic` key at all — relies entirely on the
+            // schema's documented default.
+            conditions: [{ field: 'user_agent', operator: 'contains', value: 'BadBot', group: 0 }],
+            action: { type: 'block' },
+          },
+        ],
+      }
+
+      const changes = await service.getChanges(config)
+      expect(changes.rulesToUpdate).toHaveLength(0)
+      expect(changes.hasChanges).toBe(false)
+    })
+
     it('should detect an update when a rule with the same id has different content', async () => {
       jest.spyOn(client, 'fetchRules').mockResolvedValue([mockRequestRule])
 

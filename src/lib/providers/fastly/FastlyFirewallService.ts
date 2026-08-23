@@ -327,8 +327,17 @@ export class FastlyFirewallService extends BaseFirewallService implements IFirew
       // a translated local rule against an untranslated remote one produces
       // spurious diffs from defaults `unifiedToFastly` fills in that the
       // remote rule never had.
+      //
+      // Diff against `configValidation.data`, not the raw `config` param —
+      // `fastlyToUnified` always sets `conditionLogic` explicitly (see
+      // `extractUnifiedConditions`), but a local rule relying on the
+      // schema's documented 'AND' default omits the key entirely. Reading
+      // from the unparsed `config` meant that local rule had one fewer key
+      // than the always-explicit translated remote side, so `isDeepEqual`
+      // flagged it as a phantom "update" forever — the same bug found and
+      // fixed on Vercel's getChanges, see #225.
       const remoteRules = this.translateFastlyRules(fastlyRules)
-      const { toAdd, toUpdate, toDelete } = this.diffRules(config.rules, remoteRules)
+      const { toAdd, toUpdate, toDelete } = this.diffRules(configValidation.data.rules, remoteRules)
 
       const denyEntries = denyList?.entries ?? []
       const allowEntries = allowList?.entries ?? []
@@ -336,7 +345,7 @@ export class FastlyFirewallService extends BaseFirewallService implements IFirew
         ...RuleTranslator.fastlyListEntriesToUnified(denyEntries, 'deny'),
         ...RuleTranslator.fastlyListEntriesToUnified(allowEntries, 'allow'),
       ]
-      const { ipsToAdd, ipsToDelete } = this.diffIPs(config.ips || [], remoteIPs)
+      const { ipsToAdd, ipsToDelete } = this.diffIPs(configValidation.data.ips || [], remoteIPs)
 
       return {
         rulesToAdd: toAdd,
