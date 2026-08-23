@@ -181,6 +181,12 @@ describe('Cloudflare Error Handling Integration', () => {
   })
 
   describe('Network Error Scenarios', () => {
+    // These all use mockRejectedValueOnce, which only covers makeRequest's
+    // first attempt — later retries fall through to a real fetch() since
+    // fetchMock spies on globalThis.fetch rather than replacing it outright.
+    // Safe only because .rejects.toThrow() takes no message argument: the
+    // mocked error, a real network failure, or a real 4xx from Cloudflare
+    // (given these fake credentials) all satisfy the assertion equally.
     it('should handle DNS resolution failures', async () => {
       const dnsError = new Error('getaddrinfo ENOTFOUND api.cloudflare.com')
       fetchMock.mockRejectedValueOnce(dnsError)
@@ -261,6 +267,9 @@ describe('Cloudflare Error Handling Integration', () => {
   })
 
   describe('Service-Level Error Handling', () => {
+    // Same reasoning as the Network Error Scenarios block above: single-shot
+    // rejections here can fall through to a real fetch() on retry, but
+    // .rejects.toThrow() has no message argument so it's safe either way.
     it('should handle fetchConfig errors gracefully', async () => {
       const networkError = new Error('Network unavailable')
       fetchMock.mockRejectedValueOnce(networkError)

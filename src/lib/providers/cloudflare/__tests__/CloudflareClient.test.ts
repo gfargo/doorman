@@ -840,6 +840,9 @@ describe('CloudflareClient', () => {
   describe('Error Handling', () => {
     it('should handle network errors with proper error mapping', async () => {
       const networkError = new Error('Network connection failed')
+      // Intentionally `Once`: unlike verifyCredentials above, this doesn't
+      // assert on the error message, so it still passes if retries fall
+      // through to a real fetch() and surface a different error instead.
       fetchMock.mockRejectedValueOnce(networkError)
 
       await expect(client.listRulesets()).rejects.toThrow()

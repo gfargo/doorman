@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals
 import { CloudflareValidator } from '../CloudflareValidator'
 import type { CloudflareCredentials } from '../CloudflareValidator'
 
-// Mock fetch globally
+// Mock fetch globally. Unlike jest.spyOn(globalThis, 'fetch') used in other
+// Cloudflare test files, this replaces fetch outright, so mockRejectedValueOnce()
+// below is safe even though it's single-shot: CloudflareValidator's own fetch()
+// calls (verifyTokenWithAPI, getZoneInfo, ...) make one request with no retry
+// loop, and CloudflareClient — which does retry via BaseFirewallClient — is
+// mocked separately above and never touches fetch in this file.
 const mockFetch = jest.fn() as jest.MockedFunction<typeof fetch>
 global.fetch = mockFetch
 
