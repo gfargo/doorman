@@ -60,8 +60,13 @@ export class FastlyClient extends BaseFirewallClient {
     return response.data
   }
 
+  // Creating a rule is not idempotent — a retry after a response is lost
+  // (the request reached Fastly and created the rule, but the client never
+  // saw the success) creates a second, duplicate rule with a new
+  // server-assigned id. updateRule/deleteRule are keyed by id and safe to
+  // retry. Same bug, same fix, as Vercel's rules.insert — see #195.
   async createRule(rule: FastlyRuleInput): Promise<FastlyRule> {
-    return this.post<FastlyRule>(this.workspacePath('rules'), rule)
+    return this.post<FastlyRule>(this.workspacePath('rules'), rule, { retries: 0 })
   }
 
   async updateRule(ruleId: string, rule: FastlyRuleInput): Promise<FastlyRule> {
@@ -77,13 +82,21 @@ export class FastlyClient extends BaseFirewallClient {
     return response.data
   }
 
+  // Same non-idempotency as createRule above — a lost-response retry would
+  // create a second list also named DOORMAN_DENY_LIST_NAME/
+  // DOORMAN_ALLOW_LIST_NAME, and findList's `lists.find(...)` would then
+  // silently pick whichever one happens to sort first.
   async createList(name: string, entries: string[]): Promise<FastlyList> {
-    return this.post<FastlyList>(this.workspacePath('lists'), {
-      name,
-      type: 'ip',
-      description: 'Managed by doorman — do not edit entries directly, they will be overwritten on the next sync.',
-      entries,
-    })
+    return this.post<FastlyList>(
+      this.workspacePath('lists'),
+      {
+        name,
+        type: 'ip',
+        description: 'Managed by doorman — do not edit entries directly, they will be overwritten on the next sync.',
+        entries,
+      },
+      { retries: 0 },
+    )
   }
 
   async updateListEntries(listId: string, entries: string[]): Promise<FastlyList> {
