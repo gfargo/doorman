@@ -1,3 +1,10 @@
+## [3.13.6](https://github.com/gfargo/doorman/compare/v3.13.5...v3.13.6) (2026-08-23)
+
+
+### Bug Fixes
+
+* stop retrying non-idempotent rule/list creation on Fastly ([#246](https://github.com/gfargo/doorman/issues/246)) ([e914c6c](https://github.com/gfargo/doorman/commit/e914c6c103e45e3ebc699aebed343c0267c59f0f)), closes [#195](https://github.com/gfargo/doorman/issues/195) [#195](https://github.com/gfargo/doorman/issues/195) [#245](https://github.com/gfargo/doorman/issues/245)
+
 ## [3.13.5](https://github.com/gfargo/doorman/compare/v3.13.4...v3.13.5) (2026-08-23)
 
 
