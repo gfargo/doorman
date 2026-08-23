@@ -59,11 +59,13 @@ export class CloudArmorClient extends BaseFirewallClient {
   protected async getAuthHeaders(): Promise<Record<string, string>> {
     const client = await this.auth.getClient()
     const headers = await client.getRequestHeaders()
-    // google-auth-library types this as a plain header record already;
-    // the cast is only to satisfy BaseFirewallClient's Record<string,
-    // string> contract against the library's own (structurally identical)
-    // Headers-like type.
-    return headers as unknown as Record<string, string>
+    // getRequestHeaders() returns a real WHATWG Headers instance, not a
+    // plain object. BaseFirewallClient.makeRequest merges auth headers by
+    // object-spreading this return value into a header literal — spreading
+    // a Headers instance produces `{}`, silently dropping every header
+    // (including Authorization) from every real request. Converting via
+    // entries() is required, not optional.
+    return Object.fromEntries(headers.entries())
   }
 
   private policyPath(...segments: string[]): string {

@@ -2,6 +2,7 @@ import { logger } from '../../logger'
 import { BaseFirewallService } from '../BaseFirewallService'
 import { CloudArmorClient } from './CloudArmorClient'
 import { RuleTranslator } from '../../translators'
+import { parseCelExpression } from '../../translators/CelParser'
 import { isDeepEqual } from '../../utils/isDeepEqual'
 import { omitId } from '../../utils/omitId'
 import { unifiedConfigSchema } from '../../schemas/unifiedSchemas'
@@ -81,11 +82,15 @@ export class CloudArmorFirewallService extends BaseFirewallService implements IF
     const ips: UnifiedIPRule[] = []
 
     for (const rule of policy.rules) {
-      if (RuleTranslator.gcpLooksLikeIpRule(rule)) {
-        ips.push(RuleTranslator.gcpToUnifiedIP(rule))
+      // Parsed once and threaded through both the classification check and
+      // whichever translation follows it, rather than each re-parsing the
+      // same CEL expression from scratch.
+      const parsed = parseCelExpression(rule.match.expr.expression)
+      if (RuleTranslator.gcpLooksLikeIpRule(rule, parsed)) {
+        ips.push(RuleTranslator.gcpToUnifiedIP(rule, parsed))
         continue
       }
-      const translation = RuleTranslator.gcpToUnified(rule)
+      const translation = RuleTranslator.gcpToUnified(rule, parsed)
       if (translation.warnings.length > 0) {
         translation.warnings.forEach((w) => {
           const { TranslationWarningSystem } = require('../../translators/TranslationWarningSystem')
