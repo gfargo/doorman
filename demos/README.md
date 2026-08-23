@@ -27,7 +27,9 @@ demos/
 │   ├── sync.tape              -> assets/demos/sync.gif
 │   ├── import-existing.tape   -> assets/demos/import-existing.gif
 │   ├── fastly-sync.tape       -> assets/demos/fastly-sync.gif
-│   └── cloudflare-sync.tape   -> assets/demos/cloudflare-sync.gif
+│   ├── cloudflare-sync.tape   -> assets/demos/cloudflare-sync.gif
+│   ├── backup.tape            -> assets/demos/backup.gif
+│   └── export.tape            -> assets/demos/export.gif
 ├── fixtures/                 # JSON fixtures for the mock server + seeded local configs
 ├── mock-server.mjs           # minimal local stand-in for the Vercel Firewall Config API
 ├── fastly-mock-server.mjs    # minimal local stand-in for the Fastly Next-Gen WAF API
@@ -42,3 +44,7 @@ Each tape aliases `doorman` to the locally built `bin/run` and works in a scratc
 `import-existing` tells the "adopting doorman on a project that already has rules" story: `download` pulls hand-configured rules from the (mocked) Vercel dashboard into a fresh `.doorman.json`, `validate --verbose` confirms the result, and a `git commit` shows the config ready to check in.
 
 `fastly-sync` and `cloudflare-sync` tell the same sync story as `sync`, but against Fastly Next-Gen WAF and Cloudflare WAF respectively, to show off doorman's provider-agnostic model: `status` and `diff` show pending changes against a seeded local config, `sync` deploys them (prompting for confirmation, same as every provider), and a closing `status` confirms convergence. `fastly-sync` covers a rule plus a managed IP list; `cloudflare-sync` covers a single rule (Cloudflare's ruleset-as-a-whole write model is exercised well enough by that alone).
+
+`backup` reuses `mock-server.mjs` (Vercel) to tell the full safety-net story: `backup` snapshots the live remote config to a timestamped file under `./backups`, `backup --list` shows it, and `backup --restore "$(ls backups | head -1)"` restores it back over the local config (with the same overwrite-confirmation prompt every provider's `sync` uses).
+
+`export` needs no mock server at all — it only reads the local config. Captures `export --format markdown --output firewall-report.md` followed by `cat firewall-report.md`, so the actual generated report is visible on screen, not just a success message. Deliberately doesn't capture `--format terraform`: that generator's own output header says "this is a conceptual Terraform configuration... a provider-specific Terraform provider would need to be implemented for actual use", so it isn't a real drop-in IaC artifact — `markdown` is the format that's genuinely complete and immediately useful as-is.
