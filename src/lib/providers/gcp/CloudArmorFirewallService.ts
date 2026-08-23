@@ -77,7 +77,18 @@ export class CloudArmorFirewallService extends BaseFirewallService implements IF
     }
   }
 
-  private translatePolicy(policy: { rules: CloudArmorRule[] }): { rules: UnifiedRule[]; ips: UnifiedIPRule[] } {
+  /**
+   * `localRuleIds` (ids present in the local config's `rules[]`, i.e.
+   * `getChanges`'s caller) breaks the classification tie described below in
+   * the local config's favor — see #248. `fetchConfig` has no local config
+   * to check against and passes nothing, preserving its prior CEL-shape-only
+   * behavior (there's no existing classification to conflict with when
+   * building a config from scratch).
+   */
+  private translatePolicy(
+    policy: { rules: CloudArmorRule[] },
+    localRuleIds?: ReadonlySet<string>,
+  ): { rules: UnifiedRule[]; ips: UnifiedIPRule[] } {
     const rules: UnifiedRule[] = []
     const ips: UnifiedIPRule[] = []
 
@@ -86,7 +97,18 @@ export class CloudArmorFirewallService extends BaseFirewallService implements IF
       // whichever translation follows it, rather than each re-parsing the
       // same CEL expression from scratch.
       const parsed = parseCelExpression(rule.match.expr.expression)
-      if (RuleTranslator.gcpLooksLikeIpRule(rule, parsed)) {
+
+      // Cloud Armor has no field distinguishing "IP-blocking entry" from
+      // "ordinary rule that happens to match on ip" — a single ip==X
+      // condition under `rules[]` produces CEL byte-identical to a real
+      // `ips[]` entry (#248). looksLikeIpRule can't resolve that ambiguity
+      // from CEL shape alone, so when the caller knows this rule's priority
+      // already exists in local `rules[]`, that wins the tie regardless of
+      // shape — otherwise a hand-authored single-IP rule gets silently
+      // reclassified into `ips[]` on every fetch, which getChanges then
+      // reads as "delete the rule, create an orphaned IP entry," forever.
+      const isKnownLocalRule = localRuleIds?.has(String(rule.priority)) ?? false
+      if (!isKnownLocalRule && RuleTranslator.gcpLooksLikeIpRule(rule, parsed)) {
         ips.push(RuleTranslator.gcpToUnifiedIP(rule, parsed))
         continue
       }
@@ -291,7 +313,8 @@ export class CloudArmorFirewallService extends BaseFirewallService implements IF
     try {
       logger.debug('Fetching existing Cloud Armor configuration')
       const policy = await this.client.getPolicy()
-      const { rules: remoteRules, ips: remoteIPs } = this.translatePolicy(policy)
+      const localRuleIds = new Set(config.rules.map((r) => r.id).filter((id): id is string => id !== undefined))
+      const { rules: remoteRules, ips: remoteIPs } = this.translatePolicy(policy, localRuleIds)
 
       // Diff in unified space, normalizing both sides through gcpToUnified —
       // same reasoning as every other provider's getChanges: comparing a

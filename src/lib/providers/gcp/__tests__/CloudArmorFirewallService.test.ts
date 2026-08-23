@@ -1,7 +1,8 @@
 import { CloudArmorFirewallService } from '../CloudArmorFirewallService'
 import { CloudArmorClient } from '../CloudArmorClient'
+import { unifiedToGcp } from '../translator'
 import type { CloudArmorRule, CloudArmorSecurityPolicy } from '../../../types/gcp'
-import type { UnifiedConfig } from '../../../types/unified'
+import type { UnifiedConfig, UnifiedRule } from '../../../types/unified'
 
 jest.mock('../../../logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -148,6 +149,38 @@ describe('CloudArmorFirewallService', () => {
       expect(changes.rulesToAdd).toHaveLength(0)
       expect(changes.rulesToUpdate).toHaveLength(1)
       expect(changes.rulesToDelete).toHaveLength(0)
+    })
+
+    it('does not misclassify a rules[]-authored single-IP rule as an ips[] entry (#248)', async () => {
+      // A plain custom rule whose one condition happens to be on `ip` — CEL-
+      // identical to what unifiedIPToGcp would produce for an ips[] entry,
+      // since Cloud Armor has no server-side field distinguishing the two.
+      const singleIpRule: UnifiedRule = {
+        id: '1000',
+        name: 'Block known bad actor',
+        description: 'Block known bad actor',
+        enabled: true,
+        conditions: [{ field: 'ip', operator: 'eq', value: '198.51.100.7' }],
+        action: { type: 'deny' },
+        priority: 1000,
+      }
+      // Built via the real translator (not hand-typed CEL) so the remote
+      // fixture is exactly what a prior sync of `singleIpRule` would have
+      // produced — the same round-trip the bug report reproduced.
+      const remoteRule: CloudArmorRule = unifiedToGcp(singleIpRule).result
+      jest.spyOn(client, 'getPolicy').mockResolvedValue(policy([remoteRule]))
+
+      const config: UnifiedConfig = { ...baseConfig, rules: [singleIpRule] }
+      const changes = await service.getChanges(config)
+
+      expect(changes.hasChanges).toBe(false)
+      expect(changes.rulesToAdd).toHaveLength(0)
+      expect(changes.rulesToUpdate).toHaveLength(0)
+      expect(changes.rulesToDelete).toHaveLength(0)
+      // The bug's signature: the remote rule reclassified as an orphaned IP
+      // entry with no local ips[] match, queued for deletion.
+      expect(changes.ipsToAdd).toHaveLength(0)
+      expect(changes.ipsToDelete).toHaveLength(0)
     })
   })
 
@@ -312,6 +345,36 @@ describe('CloudArmorFirewallService', () => {
       expect(result.rulesAdded).toBe(1)
       expect(result.errors).toHaveLength(1)
       expect(result.errors![0]).toContain('boom')
+    })
+
+    it('does not delete+recreate a rules[]-authored single-IP rule on a second sync (#248)', async () => {
+      const singleIpRule: UnifiedRule = {
+        id: '1000',
+        name: 'Block known bad actor',
+        description: 'Block known bad actor',
+        enabled: true,
+        conditions: [{ field: 'ip', operator: 'eq', value: '198.51.100.7' }],
+        action: { type: 'deny' },
+        priority: 1000,
+      }
+      // The remote state a first sync of this exact rule would have left
+      // behind — built via the real translator, not hand-typed CEL.
+      const remoteRule: CloudArmorRule = unifiedToGcp(singleIpRule).result
+      jest.spyOn(client, 'getPolicy').mockResolvedValue(policy([remoteRule]))
+      const addRuleSpy = jest.spyOn(client, 'addRule')
+      const removeRuleSpy = jest.spyOn(client, 'removeRule')
+      const patchRuleSpy = jest.spyOn(client, 'patchRule')
+
+      const result = await service.syncRules({ ...baseConfig, rules: [singleIpRule] })
+
+      expect(result.success).toBe(true)
+      expect(result.rulesAdded).toBe(0)
+      expect(result.rulesDeleted).toBe(0)
+      expect(result.ipsAdded).toBe(0)
+      expect(result.ipsDeleted).toBe(0)
+      expect(addRuleSpy).not.toHaveBeenCalled()
+      expect(removeRuleSpy).not.toHaveBeenCalled()
+      expect(patchRuleSpy).not.toHaveBeenCalled()
     })
 
     it('does not call addRule/patchRule/removeRule when the user cancels the confirmation', async () => {
