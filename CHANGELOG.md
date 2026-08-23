@@ -1,3 +1,10 @@
+## [3.13.8](https://github.com/gfargo/doorman/compare/v3.13.7...v3.13.8) (2026-08-23)
+
+
+### Bug Fixes
+
+* **gcp:** a single-IP rules[] entry no longer gets misclassified as an ips[] entry ([#254](https://github.com/gfargo/doorman/issues/254)) ([71df008](https://github.com/gfargo/doorman/commit/71df008a4aa37201246f36d08d91c20e46aed79b)), closes [#248](https://github.com/gfargo/doorman/issues/248)
+
 ## [3.13.7](https://github.com/gfargo/doorman/compare/v3.13.6...v3.13.7) (2026-08-23)
 
 
