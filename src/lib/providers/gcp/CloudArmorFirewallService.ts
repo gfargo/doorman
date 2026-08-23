@@ -235,17 +235,36 @@ export class CloudArmorFirewallService extends BaseFirewallService implements IF
 
       let rulesUpdated = 0
       for (const rule of rulesToUpdate) {
-        const priority = priorityOf(rule.id)
-        if (priority === undefined) continue
+        const oldPriority = priorityOf(rule.id)
+        if (oldPriority === undefined) continue
+
         const translation = RuleTranslator.unifiedToGcp(rule)
         translation.warnings.forEach((w) => warnings.push(w.message))
+
+        // Cloud Armor has no "change priority" operation (see types/gcp.ts's
+        // CloudArmorRule doc comment) — a PATCH is always addressed by, and
+        // can only touch, the rule already at oldPriority; a body that also
+        // carries a different desired priority doesn't relocate it, the
+        // field is just ignored server-side. Route a priority change through
+        // remove-then-add-at-the-new-priority instead, the one relocation
+        // path the real API supports, with the same idRemappings bookkeeping
+        // a brand-new rule gets — this rule's addressing id is changing too
+        // (#249).
+        const relocating = rule.priority !== undefined && rule.priority !== oldPriority
         try {
-          logger.debug(`Updating Cloud Armor rule at priority ${priority}`)
-          await this.client.patchRule(priority, translation.result)
+          if (relocating) {
+            logger.debug(`Relocating Cloud Armor rule from priority ${oldPriority} to ${rule.priority}`)
+            await this.client.removeRule(oldPriority)
+            await this.client.addRule(translation.result)
+            idRemappings.push({ oldId: rule.id, newId: String(rule.priority), name: rule.name })
+          } else {
+            logger.debug(`Updating Cloud Armor rule at priority ${oldPriority}`)
+            await this.client.patchRule(oldPriority, translation.result)
+          }
           rulesUpdated++
         } catch (error) {
-          logger.error(`Failed to update Cloud Armor rule at priority ${priority}:`, error)
-          errors.push(describeError(`Failed to update rule at priority ${priority}`, error))
+          logger.error(`Failed to update Cloud Armor rule at priority ${oldPriority}:`, error)
+          errors.push(describeError(`Failed to update rule at priority ${oldPriority}`, error))
         }
       }
 

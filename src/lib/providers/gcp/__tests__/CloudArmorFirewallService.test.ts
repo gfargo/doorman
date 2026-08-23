@@ -300,6 +300,42 @@ describe('CloudArmorFirewallService', () => {
       expect(patchRuleSpy).toHaveBeenCalledWith(1000, expect.objectContaining({ priority: 1000 }))
     })
 
+    it('relocates a rule via remove+add, not patch, when its priority changes (#249)', async () => {
+      jest.spyOn(client, 'getPolicy').mockResolvedValue(policy([blockAdminRule])) // remote: priority 1000
+      const patchRuleSpy = jest.spyOn(client, 'patchRule').mockResolvedValue(undefined)
+      const removeRuleSpy = jest.spyOn(client, 'removeRule').mockResolvedValue(undefined)
+      const addRuleSpy = jest.spyOn(client, 'addRule').mockResolvedValue(undefined)
+
+      // Same rule, id unchanged, but the user moved it to priority 2000 —
+      // Cloud Armor has no PATCH-based relocation (see types/gcp.ts), so
+      // this can only be honored as remove(1000) + add(...priority: 2000).
+      const config: UnifiedConfig = {
+        ...baseConfig,
+        rules: [
+          {
+            id: '1000',
+            name: 'Block admin',
+            description: 'Block admin',
+            enabled: true,
+            conditions: [{ field: 'path', operator: 'eq', value: '/admin' }],
+            action: { type: 'deny' },
+            priority: 2000,
+          },
+        ],
+      }
+
+      const result = await service.syncRules(config)
+
+      expect(result.success).toBe(true)
+      expect(result.rulesUpdated).toBe(1)
+      expect(patchRuleSpy).not.toHaveBeenCalled()
+      expect(removeRuleSpy).toHaveBeenCalledWith(1000)
+      expect(addRuleSpy).toHaveBeenCalledTimes(1)
+      const addedRule = addRuleSpy.mock.calls[0]![0] as CloudArmorRule
+      expect(addedRule.priority).toBe(2000)
+      expect(result.idRemappings).toContainEqual({ oldId: '1000', newId: '2000', name: 'Block admin' })
+    })
+
     it('adds a new IP rule with an assigned priority', async () => {
       jest.spyOn(client, 'getPolicy').mockResolvedValue(policy([]))
       const addRuleSpy = jest.spyOn(client, 'addRule').mockResolvedValue(undefined)
