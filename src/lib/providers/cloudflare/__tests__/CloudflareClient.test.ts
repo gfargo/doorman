@@ -425,7 +425,11 @@ describe('CloudflareClient', () => {
     })
 
     it('should return false for invalid credentials', async () => {
-      fetchMock.mockRejectedValueOnce(new Error('Authentication failed'))
+      // mockRejectedValue (not Once): see the identical comment in
+      // CloudflareEdgeCases.test.ts — a one-shot rejection only covers the
+      // first of makeRequest's retry attempts, letting the rest fall through
+      // to a real fetch() call.
+      fetchMock.mockRejectedValue(new Error('Authentication failed'))
 
       const result = await client.verifyCredentials()
 

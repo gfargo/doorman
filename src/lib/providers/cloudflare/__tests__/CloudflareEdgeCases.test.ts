@@ -217,7 +217,18 @@ describe('CloudflareClient - Edge Cases', () => {
     })
 
     it('should return false when credentials are invalid', async () => {
-      fetchMock.mockRejectedValueOnce(new Error('Authentication failed'))
+      // mockRejectedValue (not Once): verifyCredentials -> listRulesets goes
+      // through makeRequest's retry loop (3 retries by default), so a single
+      // Once-rejection only covers the first attempt — the rest silently
+      // fall through jest.spyOn's default of calling the real fetch(). That
+      // was invisible while a since-fixed bug (forbidden Connection/
+      // Keep-Alive headers) made every real fetch() call throw immediately
+      // for an unrelated reason; once real network calls could succeed
+      // again, this test started making an actual call to Cloudflare's API
+      // in any environment with real outbound access (CI), which returns a
+      // real error whose message can trip verifyCredentials' zone/forbidden
+      // matching and throw instead of returning false.
+      fetchMock.mockRejectedValue(new Error('Authentication failed'))
 
       const result = await client.verifyCredentials()
 
@@ -225,7 +236,7 @@ describe('CloudflareClient - Edge Cases', () => {
     })
 
     it('should return false on network error', async () => {
-      fetchMock.mockRejectedValueOnce(new Error('Network error'))
+      fetchMock.mockRejectedValue(new Error('Network error'))
 
       const result = await client.verifyCredentials()
 
