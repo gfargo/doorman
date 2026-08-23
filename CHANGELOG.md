@@ -1,3 +1,10 @@
+## [3.13.4](https://github.com/gfargo/doorman/compare/v3.13.3...v3.13.4) (2026-08-23)
+
+
+### Bug Fixes
+
+* Cloudflare Connection/Keep-Alive headers broke every real API call ([#242](https://github.com/gfargo/doorman/issues/242)) ([25f4cf1](https://github.com/gfargo/doorman/commit/25f4cf174781d65b42660fd83e81d41505143933))
+
 ## [3.13.3](https://github.com/gfargo/doorman/compare/v3.13.2...v3.13.3) (2026-08-22)
 
 

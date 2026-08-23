@@ -1,6 +1,6 @@
 {
   "name": "@gfargo/doorman",
-  "version": "3.13.3",
+  "version": "3.13.4",
   "description": "Manage firewall rules as code across multiple providers",
   "publishConfig": {
     "access": "public"
