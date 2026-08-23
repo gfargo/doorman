@@ -4,7 +4,7 @@ import type { ActionType } from '../../types/common'
 import type { TranslationResult, TranslationWarning } from '../../translators/TranslationTypes'
 import { TranslationWarningSystem } from '../../translators/TranslationWarningSystem'
 import { CelExpressionBuilder } from '../../translators/CelExpressionBuilder'
-import { parseCelExpression } from '../../translators/CelParser'
+import { parseCelExpression, type CelParseResult } from '../../translators/CelParser'
 import { ipAddressSchema } from '../../schemas/commonSchemas'
 
 /**
@@ -90,14 +90,19 @@ export function unifiedToGcp(rule: UnifiedRule): TranslationResult<CloudArmorRul
   return { result: gcpRule, warnings }
 }
 
-export function gcpToUnified(rule: CloudArmorRule): TranslationResult<UnifiedRule> {
+export function gcpToUnified(rule: CloudArmorRule, preparsed?: CelParseResult | null): TranslationResult<UnifiedRule> {
   const warnings: TranslationWarning[] = []
 
   // doorman only ever *writes* CEL itself, so CelParser understands exactly
   // the grammar subset it can produce — anything else (hand-authored, or
   // from another tool) is reported as unparseable (`null`) rather than
   // guessed at, same as WirefilterParser's own precedent (#178).
-  const parsed = parseCelExpression(rule.match.expr.expression)
+  //
+  // `preparsed` lets a caller that already parsed this same expression once
+  // (e.g. translatePolicy, to classify it via looksLikeIpRule first) pass
+  // that result through instead of re-running the tokenizer/parser on an
+  // identical string — see CloudArmorFirewallService.translatePolicy.
+  const parsed = preparsed !== undefined ? preparsed : parseCelExpression(rule.match.expr.expression)
 
   let conditions: UnifiedRule['conditions'] = []
   let conditionLogic: UnifiedRule['conditionLogic']
@@ -162,17 +167,18 @@ export function gcpToUnified(rule: CloudArmorRule): TranslationResult<UnifiedRul
  * (extra conditions, a different action, rate limiting) is a custom rule
  * that happens to reference `ip`, not an IP-blocking entry.
  */
-export function looksLikeIpRule(rule: CloudArmorRule): boolean {
+export function looksLikeIpRule(rule: CloudArmorRule, preparsed?: CelParseResult | null): boolean {
   if (rule.action !== 'allow' && rule.action !== 'deny(403)') return false
   if (rule.preview) return false
-  const parsed = parseCelExpression(rule.match.expr.expression)
+  const parsed = preparsed !== undefined ? preparsed : parseCelExpression(rule.match.expr.expression)
   if (!parsed || parsed.conditions.length !== 1) return false
   const condition = parsed.conditions[0]!
   return condition.field === 'ip' && (condition.operator === 'eq' || condition.operator === 'in') && !condition.key
 }
 
-export function gcpToUnifiedIP(rule: CloudArmorRule): UnifiedIPRule {
-  const condition = parseCelExpression(rule.match.expr.expression)!.conditions[0]!
+export function gcpToUnifiedIP(rule: CloudArmorRule, preparsed?: CelParseResult | null): UnifiedIPRule {
+  const parsed = preparsed !== undefined ? preparsed : parseCelExpression(rule.match.expr.expression)
+  const condition = parsed!.conditions[0]!
   const value = condition.value
   return {
     id: String(rule.priority),

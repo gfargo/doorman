@@ -1,6 +1,7 @@
 import { unifiedToGcp, gcpToUnified, unifiedIPToGcp, gcpToUnifiedIP, looksLikeIpRule } from '../translator'
 import type { UnifiedRule, UnifiedIPRule } from '../../../types/unified'
 import type { CloudArmorRule } from '../../../types/gcp'
+import type { CelParseResult } from '../../../translators/CelParser'
 
 describe('unifiedToGcp', () => {
   const baseRule: UnifiedRule = {
@@ -228,5 +229,62 @@ describe('looksLikeIpRule / unifiedIPToGcp / gcpToUnifiedIP', () => {
     // grammar this parser understands (it's an AND of two leaves) — belt
     // and suspenders check that this never misclassifies.
     expect(looksLikeIpRule(rule)).toBe(false)
+  })
+})
+
+describe('preparsed parameter (avoids re-parsing a CEL expression the caller already parsed)', () => {
+  // Each rule's real expression deliberately parses to something OTHER than
+  // what the fake `preparsed` value below claims — if any of these functions
+  // ignored `preparsed` and re-parsed the real string instead, the
+  // assertions here would fail (or, for gcpToUnified, warn "could not be
+  // parsed"). That's what proves the passed-in value is actually being used.
+
+  const nonIpRule: CloudArmorRule = {
+    priority: 1000,
+    match: { expr: { expression: "request.path == '/admin'" } },
+    action: 'deny(403)',
+  }
+
+  const fakeIpParse: CelParseResult = {
+    conditions: [{ field: 'ip', operator: 'eq', value: '9.9.9.9' }],
+    conditionLogic: 'AND',
+  }
+
+  it('looksLikeIpRule trusts a given preparsed result instead of re-parsing', () => {
+    expect(looksLikeIpRule(nonIpRule)).toBe(false) // sanity: real expression is not an ip rule
+    expect(looksLikeIpRule(nonIpRule, fakeIpParse)).toBe(true)
+  })
+
+  it('gcpToUnifiedIP trusts a given preparsed result instead of re-parsing', () => {
+    expect(gcpToUnifiedIP(nonIpRule, fakeIpParse).ip).toBe('9.9.9.9')
+  })
+
+  it('gcpToUnified trusts a given preparsed result instead of re-parsing', () => {
+    const unparseableRule: CloudArmorRule = {
+      priority: 1000,
+      match: { expr: { expression: 'this is not valid cel at all {{{' } },
+      action: 'deny(403)',
+    }
+    const fakeParse: CelParseResult = {
+      conditions: [{ field: 'path', operator: 'eq', value: '/fake' }],
+      conditionLogic: 'AND',
+    }
+
+    const real = gcpToUnified(unparseableRule)
+    expect(real.warnings).toHaveLength(1) // sanity: the real expression genuinely fails to parse
+
+    const { result, warnings } = gcpToUnified(unparseableRule, fakeParse)
+    expect(result.conditions).toEqual(fakeParse.conditions)
+    expect(warnings).toHaveLength(0)
+  })
+
+  it('all three still parse for real when no preparsed value is given', () => {
+    const ipRule: CloudArmorRule = {
+      priority: 2000,
+      match: { expr: { expression: "origin.ip == '5.5.5.5'" } },
+      action: 'deny(403)',
+    }
+    expect(looksLikeIpRule(ipRule)).toBe(true)
+    expect(gcpToUnifiedIP(ipRule).ip).toBe('5.5.5.5')
   })
 })
