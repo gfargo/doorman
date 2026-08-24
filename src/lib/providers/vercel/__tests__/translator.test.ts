@@ -97,6 +97,14 @@ describe('vercel/translator', () => {
         { vercel: 'geo_city', unified: 'city' },
         { vercel: 'geo_as_number', unified: 'asn' },
         { vercel: 'scheme', unified: 'scheme' },
+        // #273 Bug 1: Vercel's `region` (edge/deployment location) must NOT
+        // become unified `region` — that name is already taken by a
+        // different concept (client geo subdivision). Namespaced instead.
+        { vercel: 'region', unified: 'vercel_region' },
+        // #273: Vercel's `geo_country_region` ("Region/state code", e.g.
+        // "CA") is the *same* concept as unified `region`, unlike the case
+        // above — it gets the real name, not a pass-through or a namespace.
+        { vercel: 'geo_country_region', unified: 'region' },
       ] as const
 
       for (const { vercel, unified } of mappings) {
@@ -106,6 +114,22 @@ describe('vercel/translator', () => {
         const { result } = vercelToUnified(rule)
         expect(result.conditions[0]!.field).toBe(unified)
       }
+    })
+
+    // Regression test for #273 Bug 1: this is the exact collision the bug
+    // report found — Vercel's `region` must never survive vercelToUnified as
+    // literal unified field `"region"`, because that's already the name of a
+    // different, real FieldType (client geo subdivision, see common.ts) that
+    // Cloudflare's translator maps to `ip.geoip.subdivision_1`. Asserted
+    // separately from the table above so this specific regression can't be
+    // silently deleted by future table edits without failing loudly.
+    it('never lets a Vercel region condition collide with the unified region field', () => {
+      const rule = makeVercelRule({
+        conditionGroup: [{ conditions: [{ type: 'region', op: 'eq', value: 'sfo1' }] }],
+      })
+      const { result } = vercelToUnified(rule)
+      expect(result.conditions[0]!.field).not.toBe('region')
+      expect(result.conditions[0]!.field).toBe('vercel_region')
     })
 
     it('preserves negation flag', () => {
@@ -278,11 +302,9 @@ describe('vercel/translator', () => {
     it('round-trips Vercel-native field types that have no renamed unified counterpart', () => {
       const vercelNativeFields = [
         'target_path',
-        'region',
         'protocol',
         'environment',
         'geo_continent',
-        'geo_country_region',
         'ja4_digest',
         'ja3_digest',
         'rate_limit_api_id',
@@ -295,6 +317,30 @@ describe('vercel/translator', () => {
         const { result } = unifiedToVercel(rule)
         expect(result.conditionGroup[0]!.conditions[0]!.type).toBe(field)
       }
+    })
+
+    // Regression test for #273 Bug 1: unified `region` (client geo
+    // subdivision, e.g. Cloudflare's `ip.geoip.subdivision_1`) must map to
+    // Vercel's `geo_country_region` — the field that actually represents
+    // that concept on Vercel — not to Vercel's own `region` (edge/deployment
+    // location, a different concept that happens to share the name).
+    it('maps unified region (client geo) to Vercel geo_country_region, not Vercel region', () => {
+      const rule = makeUnifiedRule({
+        conditions: [{ field: 'region', operator: 'eq', value: 'CA' }],
+      })
+      const { result } = unifiedToVercel(rule)
+      expect(result.conditionGroup[0]!.conditions[0]!.type).toBe('geo_country_region')
+    })
+
+    // Regression test for #273 Bug 1: the Vercel-namespaced `vercel_region`
+    // unified field (see vercelToUnified tests below) must round-trip back
+    // to Vercel's native `region` type.
+    it('maps unified vercel_region back to Vercel region', () => {
+      const rule = makeUnifiedRule({
+        conditions: [{ field: 'vercel_region', operator: 'eq', value: 'sfo1' }],
+      })
+      const { result } = unifiedToVercel(rule)
+      expect(result.conditionGroup[0]!.conditions[0]!.type).toBe('region')
     })
 
     // Regression test: a condition field with no Vercel equivalent (e.g.

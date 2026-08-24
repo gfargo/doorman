@@ -204,6 +204,59 @@ describe('ExpressionBuilder', () => {
       expect(() => ExpressionBuilder.fromUnifiedConditions([])).toThrow('At least one condition is required')
     })
 
+    // Regression test for #273: mapUnifiedFieldToCloudflare returning `null`
+    // for an unmapped field (e.g. a Vercel-only field like `vercel_region`
+    // or `environment`) must never reach a wirefilter expression, whether as
+    // a leaked bare identifier (the pre-#273 behavior) or as literal `null`.
+    // Callers are expected to filter with `isFieldSupported` and warn
+    // instead (see unifiedToCloudflare) — this asserts the defensive path
+    // still fails loudly if one doesn't.
+    it('throws for a condition field with no Cloudflare mapping, rather than leaking it into the expression', () => {
+      const conditions: UnifiedCondition[] = [{ field: 'vercel_region', operator: 'eq', value: 'sfo1' }]
+      expect(() => ExpressionBuilder.fromUnifiedConditions(conditions)).toThrow(/vercel_region/)
+    })
+  })
+
+  describe('isFieldSupported', () => {
+    it('returns true for every field mapUnifiedFieldToCloudflare recognizes', () => {
+      const supported = [
+        'ip',
+        'country',
+        'region',
+        'city',
+        'asn',
+        'path',
+        'host',
+        'method',
+        'header',
+        'query',
+        'cookie',
+        'user_agent',
+        'referer',
+        'scheme',
+        'port',
+      ]
+      for (const field of supported) {
+        expect(ExpressionBuilder.isFieldSupported(field)).toBe(true)
+      }
+    })
+
+    it('returns false for Vercel-only fields with no Cloudflare equivalent', () => {
+      const unsupported = [
+        'vercel_region',
+        'protocol',
+        'target_path',
+        'environment',
+        'geo_continent',
+        'ja3_digest',
+        'ja4_digest',
+        'rate_limit_api_id',
+      ]
+      for (const field of unsupported) {
+        expect(ExpressionBuilder.isFieldSupported(field)).toBe(false)
+      }
+    })
+
     // Regression test: conditions carrying a `group` index (set by
     // RuleTranslator.vercelToUnified for a rule with 2+ Vercel condition
     // groups) must be AND'd within a group and OR'd across groups, not

@@ -58,25 +58,26 @@ Doorman translates its unified rule format (`conditions`/`enabled`/`action: {typ
 
 ### Field Mapping
 
-Cloudflare supports all 15 unified condition fields:
+Cloudflare supports all 16 unified condition fields:
 
-| Doorman Field | Cloudflare Field              | Notes                                                                                                                                           |
-| ------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ip`          | `ip.src`                      |                                                                                                                                                 |
-| `country`     | `ip.geoip.country`            |                                                                                                                                                 |
-| `region`      | `ip.geoip.subdivision_1`      |                                                                                                                                                 |
-| `city`        | `ip.geoip.city`               |                                                                                                                                                 |
-| `asn`         | `ip.geoip.asnum`              |                                                                                                                                                 |
-| `path`        | `http.request.uri.path`       |                                                                                                                                                 |
-| `host`        | `http.host`                   |                                                                                                                                                 |
-| `method`      | `http.request.method`         |                                                                                                                                                 |
-| `header`      | `http.request.headers["key"]` | Requires `key` (the header name)                                                                                                                |
-| `query`       | `http.request.uri.query`      | ⚠️ `key` is currently ignored — matches the whole query string, not one parameter ([doorman#263](https://github.com/gfargo/doorman/issues/263)) |
-| `cookie`      | `http.cookie["key"]`          | Requires `key` (the cookie name)                                                                                                                |
-| `user_agent`  | `http.user_agent`             |                                                                                                                                                 |
-| `referer`     | `http.referer`                |                                                                                                                                                 |
-| `scheme`      | `ssl` (boolean)               |                                                                                                                                                 |
-| `port`        | `cf.edge.server_port`         |                                                                                                                                                 |
+| Doorman Field  | Cloudflare Field              | Notes                                                                                                                                           |
+| -------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ip`           | `ip.src`                      |                                                                                                                                                 |
+| `country`      | `ip.geoip.country`            |                                                                                                                                                 |
+| `region`       | `ip.geoip.subdivision_1`      | Client geo subdivision (e.g. `"CA"`) — see the legacy-field note below for how this differs from Vercel's own `region`                          |
+| `city`         | `ip.geoip.city`               |                                                                                                                                                 |
+| `asn`          | `ip.geoip.asnum`              |                                                                                                                                                 |
+| `path`         | `http.request.uri.path`       |                                                                                                                                                 |
+| `host`         | `http.host`                   |                                                                                                                                                 |
+| `method`       | `http.request.method`         |                                                                                                                                                 |
+| `header`       | `http.request.headers["key"]` | Requires `key` (the header name)                                                                                                                |
+| `query`        | `http.request.uri.query`      | ⚠️ `key` is currently ignored — matches the whole query string, not one parameter ([doorman#263](https://github.com/gfargo/doorman/issues/263)) |
+| `cookie`       | `http.cookie["key"]`          | Requires `key` (the cookie name)                                                                                                                |
+| `user_agent`   | `http.user_agent`             |                                                                                                                                                 |
+| `referer`      | `http.referer`                |                                                                                                                                                 |
+| `scheme`       | `ssl` (boolean)               |                                                                                                                                                 |
+| `port`         | `cf.edge.server_port`         |                                                                                                                                                 |
+| `threat_score` | `cf.threat_score`             | Cloudflare bot/attack threat score (0-100)                                                                                                      |
 
 ### Operator Mapping
 
@@ -112,7 +113,10 @@ Without `CLOUDFLARE_ACCOUNT_ID`, IP blocking falls back to individual WAF rules 
 
 ## Limitations & Differences
 
-`environment`, `ja3_digest`, `ja4_digest` are **legacy-format-only concepts** — they exist on Vercel's native rule type but have no unified-format equivalent at all, so they're not reachable through a `provider`/`providers`-tagged config for _any_ provider, not just Cloudflare. Every other unified field maps to something on Cloudflare — see Field Mapping above.
+`protocol`, `target_path`, `environment`, `geo_continent`, `ja3_digest`, `ja4_digest`, `rate_limit_api_id` are **Vercel-native-only concepts** with no Cloudflare equivalent. Unlike what this doc previously claimed, they _are_ reachable through a `provider`/`providers`-tagged config — `UnifiedCondition.field` accepts arbitrary strings, and a Vercel rule using any of them translates straight through into the unified layer unchanged. Cloudflare's translator drops each one from the generated expression with a `TranslationWarning` rather than emitting invalid wirefilter ([doorman#271](https://github.com/gfargo/doorman/issues/271)); if _every_ condition on a rule falls into this set, translation throws rather than syncing a conditionless (match-everything) rule. Two related fields are handled specially, not dropped:
+
+- Vercel's own `region` (the edge/deployment location a request was served from, e.g. `"sfo1"`) is namespaced internally to `vercel_region` so it can't collide with the unified `region` field in the table above (client geo subdivision) — before [doorman#270](https://github.com/gfargo/doorman/issues/270) the two silently shared one name, so a Vercel edge-region condition became a Cloudflare `ip.geoip.subdivision_1` check that could never match. `vercel_region` itself is still Cloudflare-unsupported and gets dropped-with-warning like the rest of this list.
+- Vercel's `geo_country_region` ("Region/state code", e.g. `"CA"`) _is_ the same concept as the unified `region` field — it maps there directly and translates to `ip.geoip.subdivision_1` normally, unlike the rest of this list.
 
 | Feature             | Cloudflare                               | Notes                                                                                                   |
 | ------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- |

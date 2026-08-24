@@ -1,5 +1,11 @@
 import type { CloudflareRule, CloudflareAction, CloudflareExecuteActionParameters } from '../../types/cloudflare'
-import type { UnifiedRule, UnifiedIPRule, UnifiedAction, UnifiedManagedRuleGroup } from '../../types/unified'
+import type {
+  UnifiedRule,
+  UnifiedIPRule,
+  UnifiedAction,
+  UnifiedManagedRuleGroup,
+  UnifiedCondition,
+} from '../../types/unified'
 import type { ActionType } from '../../types/common'
 import type { TranslationResult, TranslationWarning } from '../../translators/TranslationTypes'
 import { TranslationWarningSystem } from '../../translators/TranslationWarningSystem'
@@ -89,7 +95,15 @@ export function cloudflareToUnified(rule: CloudflareRule): TranslationResult<Uni
 export function unifiedToCloudflare(rule: UnifiedRule): TranslationResult<CloudflareRule> {
   const warnings: TranslationWarning[] = []
 
-  const expression = ExpressionBuilder.fromUnifiedConditions(rule.conditions, rule.conditionLogic)
+  const supportedConditions = filterUnsupportedConditions(rule.conditions, rule.id, warnings)
+  if (supportedConditions.length === 0) {
+    throw new Error(
+      `Rule "${rule.name}" has no conditions Cloudflare can represent — every condition field is unsupported ` +
+        'by Cloudflare (e.g. Vercel-only fields like environment/ja3_digest, or vercel_region). Cannot sync this rule to Cloudflare.',
+    )
+  }
+
+  const expression = ExpressionBuilder.fromUnifiedConditions(supportedConditions, rule.conditionLogic)
 
   const cloudflareRule: CloudflareRule = {
     id: rule.id || crypto.randomUUID(),
@@ -381,6 +395,35 @@ function mapUnifiedActionToCloudflare(action: string): CloudflareRule['action'] 
   }
 
   return mapping[action] || 'block'
+}
+
+/**
+ * Drops conditions whose field has no Cloudflare equivalent, warning for
+ * each one, instead of letting them reach `ExpressionBuilder` and either
+ * throw or (before #273) silently emit an invalid or semantically-wrong
+ * wirefilter expression. Mirrors `buildVercelConditionGroups`'s identical
+ * per-condition filter-and-warn loop (providers/vercel/translator.ts).
+ */
+function filterUnsupportedConditions(
+  conditions: UnifiedCondition[],
+  ruleId: string | undefined,
+  warnings: TranslationWarning[],
+): UnifiedCondition[] {
+  return conditions.filter((condition) => {
+    if (ExpressionBuilder.isFieldSupported(condition.field)) {
+      return true
+    }
+    warnings.push(
+      TranslationWarningSystem.createUnsupportedFeatureWarning(
+        `condition field '${condition.field}'`,
+        'unified config',
+        'Cloudflare',
+        ruleId,
+        condition.field,
+      ),
+    )
+    return false
+  })
 }
 
 function parseWindowToSeconds(window: string): number {
