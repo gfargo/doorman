@@ -76,7 +76,7 @@ FASTLY_WORKSPACE_ID=workspace_xxx
 }
 ```
 
-For Cloudflare or Fastly, add `provider` and `providers` fields instead of `projectId`/`teamId`.
+For Cloudflare or Fastly, add `provider` and `providers` fields instead of `projectId`/`teamId` — and note this switches the *rule* shape too, not just the top-level fields. See [Rule Shape](#rule-shape-minimal) below.
 
 ## Core Workflow
 
@@ -93,6 +93,10 @@ doorman backup && doorman validate && doorman diff && doorman sync && doorman st
 
 ## Rule Shape (Minimal)
 
+Two different rule shapes, picked by whether the config has `provider`/`providers` set (see [Config Structure](#config-structure) above) — **they are not interchangeable, and mixing them fails validation.**
+
+**Legacy shape** (no `provider`/`providers` — Vercel-only):
+
 ```json
 {
   "name": "Block Admin",
@@ -108,7 +112,26 @@ doorman backup && doorman validate && doorman diff && doorman sync && doorman st
 
 **Operators**: `eq`, `pre` (prefix), `suf` (suffix), `sub` (contains), `inc` (in array), `re` (regex), `ex` (exists), `nex` (not exists)
 
-**Actions**: `deny`, `challenge`, `rate_limit`, `redirect`, `log`, `bypass`
+**Actions**: `deny`, `challenge`, `rate_limit`, `redirect`, `log`, `bypass` (no `allow`/`block`)
+
+**Unified shape** (`provider`/`providers` set — required for Cloudflare/Fastly):
+
+```json
+{
+  "name": "Block Admin",
+  "enabled": true,
+  "conditions": [{ "field": "path", "operator": "starts_with", "value": "/admin" }],
+  "action": { "type": "deny" }
+}
+```
+
+**Logic**: conditions default to AND across all of them. Tag conditions with a `group` number for OR-of-AND-groups (same conditions sharing a `group` are AND'd, distinct `group`s are OR'd) — see [references/rules.md](references/rules.md) for the full explanation and an example.
+
+**Condition fields**: `ip`, `country`, `region`, `city`, `asn`, `path`, `host`, `method`, `header`, `query`, `cookie`, `user_agent`, `referer`, `scheme`, `port` — support varies by provider, see [references/cloudflare.md](references/cloudflare.md)/[references/fastly.md](references/fastly.md)
+
+**Operators**: `eq`, `ne`, `contains`, `not_contains`, `starts_with`, `ends_with`, `matches`, `in`, `not_in`, `gt`, `ge`, `lt`, `le`, `exists`, `not_exists` — **on Vercel specifically, `ne`/`not_contains`/`not_in`/`gt`/`ge`/`lt`/`le` currently degrade silently to `eq` (known bug, [doorman#261](https://github.com/gfargo/doorman/issues/261)) — avoid them in a Vercel-targeted config until that's fixed.**
+
+**Actions**: `log`, `deny`, `challenge`, `bypass`, `rate_limit`, `redirect`, `allow`, `block` — **`allow`/`block` are invalid on Vercel specifically ([doorman#262](https://github.com/gfargo/doorman/issues/262)); use `bypass`/`deny` there instead.**
 
 ## When to Read Each Reference
 
@@ -117,7 +140,7 @@ Load the relevant reference file for detailed documentation:
 | Task                                                                                        | Reference                                            |
 | ------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | Writing rules — full field docs, operators, actions, IP blocking, patterns                  | [references/rules.md](references/rules.md)           |
-| Cloudflare-specific setup, Lists API, expression translation, limitations                   | [references/cloudflare.md](references/cloudflare.md) |
+| Cloudflare-specific setup, Lists API, managed rule groups, expression translation, limitations | [references/cloudflare.md](references/cloudflare.md) |
 | Fastly-specific setup, condition/action mapping, rate-limit signal requirement, limitations | [references/fastly.md](references/fastly.md)         |
 | Available templates and what they protect against                                           | [references/templates.md](references/templates.md)   |
 | CI/CD integration, automation, export formats, validation in pipelines                      | [references/cicd.md](references/cicd.md)             |
