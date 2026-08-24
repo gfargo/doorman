@@ -197,14 +197,25 @@ describe('parseWirefilterExpression', () => {
       expect(parsed!.conditions[0]).toMatchObject({ field: 'user_agent', operator: 'not_contains', value: 'bot' })
     })
 
-    it('round-trips a header condition with a bracket key', () => {
+    // A keyed header/cookie/query condition no longer round-trips through
+    // this parser as of #269 — ExpressionBuilder emits `any(field["key"][*]
+    // <op> value)`/`has_key(field, "key")` for these (the type-valid
+    // Cloudflare construct; see ExpressionBuilder.buildKeyedMapExpression),
+    // and this parser understands only the bracket-index/`exists` grammar it
+    // previously produced. This is a deliberate, safe degradation matching
+    // the class's own documented contract (falls back to `null` — "unsupported,
+    // reported... rather than guessed at" — for anything outside the exact
+    // subset ExpressionBuilder currently generates), not a silent
+    // misparse — `cloudflareToUnified` already has a warning path for
+    // exactly this (see translator.test.ts's "falls back to empty
+    // conditions with a warning" test). Extending this parser to understand
+    // the new construct is tracked separately, not done here.
+    it("no longer round-trips a keyed header condition — any(...)/has_key(...) is outside this parser's grammar", () => {
       const conditions: UnifiedCondition[] = [{ field: 'header', key: 'X-Custom', operator: 'eq', value: 'value' }]
       const expression = ExpressionBuilder.fromUnifiedConditions(conditions, 'AND')
 
-      const parsed = parseWirefilterExpression(expression)
-
-      expect(parsed).not.toBeNull()
-      expect(parsed!.conditions[0]).toMatchObject({ field: 'header', key: 'X-Custom', value: 'value' })
+      expect(expression).toBe('any(http.request.headers["x-custom"][*] eq "value")')
+      expect(parseWirefilterExpression(expression)).toBeNull()
     })
 
     it('round-trips an "in" condition with an array value', () => {

@@ -148,6 +148,29 @@ describe('cloudflare/translator', () => {
       expect(result.expression).not.toBe('http.request.uri.query eq "1"')
     })
 
+    // Regression tests for #269: keyed header/cookie conditions previously
+    // compiled to a bare `field["key"] eq value` — an Array-vs-String type
+    // mismatch (header) or an attempt to bracket-index a non-Map scalar
+    // field (cookie's `http.cookie`) that Cloudflare's real ruleset API
+    // rejects either way. See ExpressionBuilder's
+    // fromUnifiedCondition/buildKeyedMapExpression for the fix.
+    it("scopes a keyed header condition via any(...), lowercased to match Cloudflare's header-name map keys", () => {
+      const rule = makeUnifiedRule({
+        conditions: [{ field: 'header', operator: 'eq', value: 'application/json', key: 'Content-Type' }],
+      })
+      const { result } = unifiedToCloudflare(rule)
+      expect(result.expression).toBe('any(http.request.headers["content-type"][*] eq "application/json")')
+    })
+
+    it('scopes a keyed cookie condition to http.request.cookies, not the unindexable scalar http.cookie', () => {
+      const rule = makeUnifiedRule({
+        conditions: [{ field: 'cookie', operator: 'eq', value: 'abc123', key: 'session_id' }],
+      })
+      const { result } = unifiedToCloudflare(rule)
+      expect(result.expression).toBe('any(http.request.cookies["session_id"][*] eq "abc123")')
+      expect(result.expression).not.toContain('http.cookie[')
+    })
+
     // Regression tests for #273 Bug 1: `region` in the unified vocabulary
     // means the client's geo subdivision. A Vercel-originated condition
     // that collided with this name (fixed by renaming it to `vercel_region`

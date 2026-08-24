@@ -15,9 +15,31 @@ const UNQUOTED_IP_FIELDS = new Set(['ip.src'])
  * Cloudflare's indexable query-args field. Distinct from
  * `http.request.uri.query` (the whole query string, a scalar `String`) —
  * this one is a `Map<Array<String>>` keyed by argument name, used only when
- * a query condition carries a `key`. See `buildKeyedQueryExpression`.
+ * a query condition carries a `key`. See `buildKeyedMapExpression`.
  */
 const QUERY_ARGS_FIELD = 'http.request.uri.args'
+
+/** Cloudflare's `Map<Array<String>>` header field — same field used for both the bare and keyed header case. */
+const HEADERS_FIELD = 'http.request.headers'
+
+/**
+ * Cloudflare's indexable per-cookie field. Distinct from `http.cookie` (the
+ * raw `Cookie` header as a whole, a scalar `String`, used for the bare
+ * cookie case) — this one is a `Map<Array<String>>` keyed by cookie name,
+ * used only when a cookie condition carries a `key`.
+ */
+const COOKIES_MAP_FIELD = 'http.request.cookies'
+
+/**
+ * Unified/Vercel condition fields that key-scope onto one of Cloudflare's
+ * `Map<Array<String>>` fields when a `key` is present, and which Map field
+ * each one uses. See `buildKeyedMapExpression`.
+ */
+const KEYED_MAP_FIELDS: Record<string, string> = {
+  query: QUERY_ARGS_FIELD,
+  header: HEADERS_FIELD,
+  cookie: COOKIES_MAP_FIELD,
+}
 
 /**
  * Builds Cloudflare wirefilter expressions from structured conditions
@@ -26,6 +48,18 @@ export class ExpressionBuilder {
   /**
    * Build expression from Vercel condition groups
    * Vercel uses OR between groups, AND within groups
+   *
+   * NOTE: unreachable from any live command as of #269 (nothing in `src/`
+   * outside this file and its tests calls `fromVercelConditionGroups`/
+   * `fromVercelCondition`/`FieldMapper` — the direct Vercel-native ->
+   * Cloudflare path was superseded by translating through `UnifiedCondition`
+   * instead). `fromVercelCondition` below has the *same* keyed-header/cookie
+   * bug `fromUnifiedCondition` was fixed for in #269 (still builds a bare
+   * `field["key"] eq value` via `FieldMapper.toCloudflare`), plus an
+   * unfixed keyed-`query` case (#263's original bug, on this path only —
+   * `FieldMapper` never special-cased `query` for key-scoping at all). Left
+   * as-is since fixing dead code protects no one, but if this ever gets
+   * wired into a live path again, it needs the same fix applied here first.
    */
   public static fromVercelConditionGroups(conditionGroups: VercelConditionGroup[]): string {
     if (!conditionGroups || conditionGroups.length === 0) {
@@ -111,15 +145,21 @@ export class ExpressionBuilder {
    * Build expression from a single unified condition
    */
   public static fromUnifiedCondition(condition: UnifiedCondition): string {
-    // A keyed query condition can't reuse the generic bracket-index path
-    // below the way header/cookie do: Cloudflare's indexable query-args
-    // field (`http.request.uri.args`, aliased as QUERY_ARGS_FIELD) types as
-    // `Map<Array<String>>`, so `args["key"] eq "value"` is an Array-vs-String
-    // type mismatch the Cloudflare API rejects — it needs `any(args["key"][*]
-    // eq "value")` (and `has_key(...)` for exists/not_exists) instead. See
-    // buildKeyedQueryExpression.
-    if (condition.key && condition.field === 'query') {
-      return this.buildKeyedQueryExpression(condition, condition.key)
+    // A keyed query/header/cookie condition can't reuse the generic
+    // base-field path below: Cloudflare's indexable fields for these three
+    // (`http.request.uri.args`, `http.request.headers`,
+    // `http.request.cookies`) all type as `Map<Array<String>>`, so
+    // `field["key"] eq "value"` is an Array-vs-String type mismatch the
+    // Cloudflare API rejects — it needs `any(field["key"][*] eq "value")`
+    // (and `has_key(...)` for exists/not_exists) instead. See
+    // buildKeyedMapExpression. (`http.cookie`, the *bare*-cookie field used
+    // below, is a plain scalar String and isn't indexable at all — the keyed
+    // case must use the separate `http.request.cookies` map field instead.)
+    if (condition.key) {
+      const mapField = KEYED_MAP_FIELDS[condition.field]
+      if (mapField) {
+        return this.buildKeyedMapExpression(condition, condition.key, mapField)
+      }
     }
 
     const baseField = this.mapUnifiedFieldToCloudflare(condition.field)
@@ -132,16 +172,8 @@ export class ExpressionBuilder {
         `Unsupported condition field '${condition.field}' for Cloudflare — filter it out with a warning before calling fromUnifiedCondition (see unifiedToCloudflare).`,
       )
     }
-    // `key` only makes sense as a bracket index for header/cookie fields
-    // (matching FieldMapper's Vercel-side behavior) — a header or cookie
-    // condition's key must not fall through to the headers field regardless
-    // of which of the two it actually is.
-    const field =
-      condition.key && (condition.field === 'header' || condition.field === 'cookie')
-        ? `${baseField}["${escapeWirefilterString(condition.key)}"]`
-        : baseField
 
-    let expression = this.buildUnifiedExpression(field, condition.operator, condition.value)
+    let expression = this.buildUnifiedExpression(baseField, condition.operator, condition.value)
 
     if (condition.negated) {
       expression = `not (${expression})`
@@ -151,34 +183,46 @@ export class ExpressionBuilder {
   }
 
   /**
-   * Build a keyed query-parameter expression against Cloudflare's
-   * `Map<Array<String>>`-typed `http.request.uri.args` field — see the
-   * comment in `fromUnifiedCondition` for why this can't share the generic
-   * field-string path the way header/cookie conditions do. Mirrors
-   * Cloudflare's own documented idioms: `any(args["key"][*] <op> value)` for
-   * value comparisons (a query param can repeat, so this matches if *any*
-   * occurrence satisfies the operator) and `has_key(args, "key")` for
-   * existence.
+   * Build a keyed expression against one of Cloudflare's `Map<Array<String>>`
+   * fields — see the comment in `fromUnifiedCondition` for why query/header/
+   * cookie conditions with a `key` can't share the generic base-field path.
+   * Mirrors Cloudflare's own documented idioms: `any(map["key"][*] <op>
+   * value)` for value comparisons (a header/cookie/query-param can repeat, so
+   * this matches if *any* occurrence satisfies the operator) and
+   * `has_key(map, "key")` for existence.
    */
-  private static buildKeyedQueryExpression(condition: UnifiedCondition, key: string): string {
-    const escapedKey = escapeWirefilterString(key)
-    const keyedField = `${QUERY_ARGS_FIELD}["${escapedKey}"]`
+  private static buildKeyedMapExpression(condition: UnifiedCondition, key: string, mapField: string): string {
+    const escapedKey = escapeWirefilterString(this.normalizeMapKey(mapField, key))
+    const keyedField = `${mapField}["${escapedKey}"]`
 
     let expression: string
     if (condition.operator === 'exists') {
-      expression = `has_key(${QUERY_ARGS_FIELD}, "${escapedKey}")`
+      expression = `has_key(${mapField}, "${escapedKey}")`
     } else if (condition.operator === 'not_exists') {
-      expression = `not (has_key(${QUERY_ARGS_FIELD}, "${escapedKey}"))`
+      expression = `not (has_key(${mapField}, "${escapedKey}"))`
     } else if (condition.operator === 'not_contains') {
-      expression = `not (any(${keyedField}[*] contains ${this.formatValue(QUERY_ARGS_FIELD, condition.value)}))`
+      expression = `not (any(${keyedField}[*] contains ${this.formatValue(mapField, condition.value)}))`
     } else if (condition.operator === 'not_in') {
-      expression = `not (any(${keyedField}[*] in ${this.formatValue(QUERY_ARGS_FIELD, condition.value)}))`
+      expression = `not (any(${keyedField}[*] in ${this.formatValue(mapField, condition.value)}))`
     } else {
       const operator = this.mapUnifiedOperator(condition.operator)
-      expression = `any(${keyedField}[*] ${operator} ${this.formatValue(QUERY_ARGS_FIELD, condition.value)})`
+      expression = `any(${keyedField}[*] ${operator} ${this.formatValue(mapField, condition.value)})`
     }
 
     return condition.negated ? `not (${expression})` : expression
+  }
+
+  /**
+   * Cloudflare's `http.request.headers` map keys are lowercased internally
+   * ("the keys... are the names of HTTP request headers converted to
+   * lowercase" — Ruleset Engine field reference), so a header key built with
+   * its original casing (e.g. `Content-Type`) would silently never match a
+   * real request. `http.request.cookies`/`http.request.uri.args` keys are
+   * NOT case-normalized by Cloudflare, so those must keep their original
+   * casing instead.
+   */
+  private static normalizeMapKey(mapField: string, key: string): string {
+    return mapField === HEADERS_FIELD ? key.toLowerCase() : key
   }
 
   /**

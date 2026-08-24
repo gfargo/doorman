@@ -356,14 +356,20 @@ describe('ExpressionBuilder', () => {
       expect(result).toBe('not (http.request.uri.path eq "/public")')
     })
 
-    it('handles header conditions with key', () => {
+    it("handles header conditions with key, lowercasing it to match Cloudflare's header-name map keys", () => {
       const result = ExpressionBuilder.fromUnifiedCondition({
         field: 'header',
         operator: 'eq',
         value: 'Bearer token',
         key: 'Authorization',
       })
-      expect(result).toBe('http.request.headers["Authorization"] eq "Bearer token"')
+      // http.request.headers is a Map<Array<String>> keyed by lowercased
+      // header name (Cloudflare's own field reference: "the keys... are the
+      // names of HTTP request headers converted to lowercase") — a mixed-case
+      // key like "Authorization" would silently never match if left as-is.
+      // any(...[*] eq ...) is also required: a bare `headers["authorization"]
+      // eq "Bearer token"` is an Array-vs-String type mismatch.
+      expect(result).toBe('any(http.request.headers["authorization"][*] eq "Bearer token")')
     })
 
     it('escapes quotes in a unified header key so it cannot break out of the field reference', () => {
@@ -373,8 +379,38 @@ describe('ExpressionBuilder', () => {
         value: 'x',
         key: 'x"] or (true) or http.request.headers["x',
       })
-      expect(result).toBe('http.request.headers["x\\"] or (true) or http.request.headers[\\"x"] eq "x"')
+      expect(result).toBe('any(http.request.headers["x\\"] or (true) or http.request.headers[\\"x"][*] eq "x")')
       expect(result).not.toMatch(/headers\["[^"\\]*"\] or/)
+    })
+
+    it('builds a valueless exists expression for a keyed header condition via has_key', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'header',
+        operator: 'exists',
+        key: 'X-Api-Version',
+      } as UnifiedCondition)
+      expect(result).toBe('has_key(http.request.headers, "x-api-version")')
+    })
+
+    it('builds a not_contains expression for a keyed header condition as a positive any(...) wrapped in not(...)', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'header',
+        operator: 'not_contains',
+        value: 'bot',
+        key: 'User-Agent',
+      })
+      expect(result).toBe('not (any(http.request.headers["user-agent"][*] contains "bot"))')
+    })
+
+    it('wraps a negated keyed header condition in an outer not(...) around the any(...) expression', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'header',
+        operator: 'eq',
+        value: 'application/json',
+        key: 'Content-Type',
+        negated: true,
+      })
+      expect(result).toBe('not (any(http.request.headers["content-type"][*] eq "application/json"))')
     })
 
     it('escapes backslashes in string values so a trailing backslash cannot consume the closing quote', () => {
@@ -386,14 +422,30 @@ describe('ExpressionBuilder', () => {
       expect(result).toBe('http.request.uri.path eq "a\\\\"')
     })
 
-    it('handles cookie conditions with key as http.cookie, not http.request.headers', () => {
+    it('handles cookie conditions with key against http.request.cookies, not the scalar http.cookie', () => {
       const result = ExpressionBuilder.fromUnifiedCondition({
         field: 'cookie',
         operator: 'eq',
         value: 'abc123',
         key: 'session_id',
       })
-      expect(result).toBe('http.cookie["session_id"] eq "abc123"')
+      // http.cookie (used for the *unkeyed* cookie case) is a scalar String —
+      // the raw Cookie header — and isn't indexable at all. The keyed case
+      // must use the separate http.request.cookies Map<Array<String>> field
+      // instead, with any(...[*] eq ...) for the same Array-vs-String reason
+      // as header/query.
+      expect(result).toBe('any(http.request.cookies["session_id"][*] eq "abc123")')
+      expect(result).not.toContain('http.cookie[')
+    })
+
+    it('does not lowercase a cookie key — unlike headers, Cloudflare does not case-normalize cookie names', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'cookie',
+        operator: 'eq',
+        value: 'abc123',
+        key: 'Session_ID',
+      })
+      expect(result).toBe('any(http.request.cookies["Session_ID"][*] eq "abc123")')
     })
 
     it('escapes quotes in a unified cookie key so it cannot break out of the field reference', () => {
@@ -401,9 +453,28 @@ describe('ExpressionBuilder', () => {
         field: 'cookie',
         operator: 'eq',
         value: 'x',
-        key: 'a" or true or http.cookie["a',
+        key: 'a" or true or http.request.cookies["a',
       })
-      expect(result).toBe('http.cookie["a\\" or true or http.cookie[\\"a"] eq "x"')
+      expect(result).toBe('any(http.request.cookies["a\\" or true or http.request.cookies[\\"a"][*] eq "x")')
+    })
+
+    it('builds a valueless not_exists expression for a keyed cookie condition wrapped in not(...)', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'cookie',
+        operator: 'not_exists',
+        key: 'session_id',
+      } as UnifiedCondition)
+      expect(result).toBe('not (has_key(http.request.cookies, "session_id"))')
+    })
+
+    it('builds a not_in expression for a keyed cookie condition as a positive any(...) wrapped in not(...)', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'cookie',
+        operator: 'not_in',
+        value: ['expired', 'invalid'],
+        key: 'session_status',
+      })
+      expect(result).toBe('not (any(http.request.cookies["session_status"][*] in {"expired" "invalid"}))')
     })
 
     it('scopes a keyed query condition to that argument via http.request.uri.args, not the whole query string', () => {
@@ -489,7 +560,7 @@ describe('ExpressionBuilder', () => {
         operator: 'exists',
         key: 'x-api-version',
       } as UnifiedCondition)
-      expect(result).toBe('http.request.headers["x-api-version"] exists')
+      expect(result).toBe('has_key(http.request.headers, "x-api-version")')
     })
 
     it('builds a valueless not_exists expression wrapped in not(...) (regression test for #85)', () => {
@@ -498,7 +569,7 @@ describe('ExpressionBuilder', () => {
         operator: 'not_exists',
         key: 'x-api-version',
       } as UnifiedCondition)
-      expect(result).toBe('not (http.request.headers["x-api-version"] exists)')
+      expect(result).toBe('not (has_key(http.request.headers, "x-api-version"))')
       expect(result).not.toContain('undefined')
       expect(result).not.toContain('not exists')
     })
