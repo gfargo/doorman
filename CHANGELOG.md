@@ -1,3 +1,10 @@
+# [3.15.0](https://github.com/gfargo/doorman/compare/v3.14.2...v3.15.0) (2026-08-24)
+
+
+### Features
+
+* **demos:** add GCP Cloud Armor sync demo tape and gif ([#274](https://github.com/gfargo/doorman/issues/274)) ([35804b2](https://github.com/gfargo/doorman/commit/35804b21b3ef6f4ceb75c7f15c005adc820efd2d))
+
 ## [3.14.2](https://github.com/gfargo/doorman/compare/v3.14.1...v3.14.2) (2026-08-24)
 
 
