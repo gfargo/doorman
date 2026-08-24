@@ -15,6 +15,14 @@ const COMPUTE_SCOPE = 'https://www.googleapis.com/auth/compute'
 // Armor rule mutations are typically sub-second in practice, but global
 // Compute operations can occasionally take longer under load — capped well
 // short of makeRequest's own per-request timeout stacking indefinitely.
+//
+// Polling starts at OPERATION_POLL_INITIAL_MS and doubles (plus jitter, same
+// shape as BaseFirewallClient's HTTP retry backoff) up to
+// OPERATION_POLL_INTERVAL_MS, rather than always sleeping the full interval
+// before the first recheck (#251) — since the ceiling is unchanged, a slow
+// operation is never polled less often than before, only a fast one gets
+// noticed sooner.
+const OPERATION_POLL_INITIAL_MS = 250
 const OPERATION_POLL_INTERVAL_MS = 1000
 const OPERATION_POLL_TIMEOUT_MS = 60000
 
@@ -100,6 +108,7 @@ export class CloudArmorClient extends BaseFirewallClient {
   private async waitForOperation(operation: CloudArmorOperation): Promise<void> {
     const deadline = Date.now() + OPERATION_POLL_TIMEOUT_MS
     let current = operation
+    let pollInterval = OPERATION_POLL_INITIAL_MS
 
     while (current.status !== 'DONE') {
       if (Date.now() >= deadline) {
@@ -107,8 +116,10 @@ export class CloudArmorClient extends BaseFirewallClient {
           `gcp operation "${current.name}" did not complete within ${OPERATION_POLL_TIMEOUT_MS}ms (last status: ${current.status})`,
         )
       }
-      await this.delay(OPERATION_POLL_INTERVAL_MS)
+      const jitter = Math.random() * 0.1 * pollInterval
+      await this.delay(pollInterval + jitter)
       current = await this.get<CloudArmorOperation>(`/operations/${current.name}`)
+      pollInterval = Math.min(pollInterval * 2, OPERATION_POLL_INTERVAL_MS)
     }
 
     if (current.httpErrorStatusCode || current.error) {

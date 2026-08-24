@@ -204,6 +204,20 @@ export class CloudArmorFirewallService extends BaseFirewallService implements IF
 
       const idRemappings: NonNullable<SyncResult['idRemappings']> = []
 
+      // Every loop below (delete/add/update, rules and IPs alike) awaits
+      // each item in turn rather than firing them concurrently. Deletes
+      // must precede adds/updates for the priority-reuse race described
+      // above — that part's necessary. Whether items *within* one category
+      // (e.g. all of rulesToAdd) could safely run concurrently is a
+      // separate question this codebase doesn't have an answer to: no
+      // research or real-API testing here has established whether Cloud
+      // Armor's securityPolicies API tolerates concurrent mutations against
+      // the same policy resource (unlike the cross-category ordering above,
+      // which is a documented, deliberate constraint). Staying fully
+      // sequential is the deliberate, conservative choice until that's
+      // verified against a real GCP project — see #251, which also fixed
+      // waitForOperation's poll cadence to reduce the cost of staying
+      // sequential in the meantime.
       // Delete before add/update, same ordering rationale as Vercel/Fastly.
       for (const rule of [...rulesToDelete, ...ipsToDelete]) {
         const priority = priorityOf(rule.id)
