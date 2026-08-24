@@ -1,3 +1,10 @@
+## [3.15.2](https://github.com/gfargo/doorman/compare/v3.15.1...v3.15.2) (2026-08-24)
+
+
+### Bug Fixes
+
+* emit valid wirefilter for keyed Cloudflare header/cookie conditions ([#278](https://github.com/gfargo/doorman/issues/278)) ([c529e57](https://github.com/gfargo/doorman/commit/c529e571584b5633be070b2061944d5ad1598220)), closes [#269](https://github.com/gfargo/doorman/issues/269) [#263](https://github.com/gfargo/doorman/issues/263) [#263](https://github.com/gfargo/doorman/issues/263) [#263](https://github.com/gfargo/doorman/issues/263) [#263](https://github.com/gfargo/doorman/issues/263) [#267](https://github.com/gfargo/doorman/issues/267)
+
 ## [3.15.1](https://github.com/gfargo/doorman/compare/v3.15.0...v3.15.1) (2026-08-24)
 
 
