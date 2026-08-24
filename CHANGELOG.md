@@ -1,3 +1,10 @@
+## [3.15.3](https://github.com/gfargo/doorman/compare/v3.15.2...v3.15.3) (2026-08-24)
+
+
+### Bug Fixes
+
+* stop Vercel translator silently mapping unsupported operators to eq ([#279](https://github.com/gfargo/doorman/issues/279)) ([3bc17f1](https://github.com/gfargo/doorman/commit/3bc17f144705543ca8bb5f5c56e71fc7704e7c62))
+
 ## [3.15.2](https://github.com/gfargo/doorman/compare/v3.15.1...v3.15.2) (2026-08-24)
 
 
