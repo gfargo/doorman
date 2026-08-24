@@ -353,15 +353,79 @@ describe('ExpressionBuilder', () => {
       expect(result).toBe('http.cookie["a\\" or true or http.cookie[\\"a"] eq "x"')
     })
 
-    it('ignores an unsupported key on a query condition instead of mislabeling it as a header', () => {
+    it('scopes a keyed query condition to that argument via http.request.uri.args, not the whole query string', () => {
       const result = ExpressionBuilder.fromUnifiedCondition({
         field: 'query',
         operator: 'eq',
         value: 'abc',
         key: 'utm_source',
       })
-      expect(result).toBe('http.request.uri.query eq "abc"')
+      // http.request.uri.query is a scalar String (the whole query string);
+      // http.request.uri.args is the Map<Array<String>> Cloudflare actually
+      // indexes by argument name, and `any(...[*] eq ...)` is the type-valid
+      // way to compare one of its (possibly-repeated) values — a bare
+      // `args["utm_source"] eq "abc"` is an Array-vs-String mismatch.
+      expect(result).toBe('any(http.request.uri.args["utm_source"][*] eq "abc")')
       expect(result).not.toContain('headers')
+      expect(result).not.toBe('http.request.uri.query eq "abc"')
+    })
+
+    it('leaves an unkeyed query condition matching the whole query string', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'query',
+        operator: 'contains',
+        value: 'debug=true',
+      })
+      expect(result).toBe('http.request.uri.query contains "debug=true"')
+    })
+
+    it('builds a valueless exists expression for a keyed query condition via has_key', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'query',
+        operator: 'exists',
+        key: 'utm_source',
+      } as UnifiedCondition)
+      expect(result).toBe('has_key(http.request.uri.args, "utm_source")')
+    })
+
+    it('builds a valueless not_exists expression for a keyed query condition wrapped in not(...)', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'query',
+        operator: 'not_exists',
+        key: 'utm_source',
+      } as UnifiedCondition)
+      expect(result).toBe('not (has_key(http.request.uri.args, "utm_source"))')
+    })
+
+    it('builds a not_contains expression for a keyed query condition as a positive any(...) wrapped in not(...)', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'query',
+        operator: 'not_contains',
+        value: 'admin',
+        key: 'redirect',
+      })
+      expect(result).toBe('not (any(http.request.uri.args["redirect"][*] contains "admin"))')
+    })
+
+    it('wraps a negated keyed query condition in an outer not(...) around the any(...) expression', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'query',
+        operator: 'eq',
+        value: '1',
+        key: 'debug',
+        negated: true,
+      })
+      expect(result).toBe('not (any(http.request.uri.args["debug"][*] eq "1"))')
+    })
+
+    it('escapes quotes in a keyed query key so it cannot break out of the field reference', () => {
+      const result = ExpressionBuilder.fromUnifiedCondition({
+        field: 'query',
+        operator: 'eq',
+        value: 'x',
+        key: 'a" or true or http.request.uri.args["a',
+      })
+      expect(result).toBe('any(http.request.uri.args["a\\" or true or http.request.uri.args[\\"a"][*] eq "x")')
     })
 
     it('builds a valueless exists expression (regression test for #85)', () => {

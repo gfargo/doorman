@@ -134,6 +134,20 @@ describe('cloudflare/translator', () => {
       expect(result.enabled).toBe(true)
     })
 
+    // Regression test: a keyed `query` condition (e.g. "match ?debug=1
+    // specifically") previously compiled to a bare `http.request.uri.query`
+    // comparison against the *entire* query string, silently ignoring `key`
+    // and matching far more broadly than intended — see ExpressionBuilder's
+    // fromUnifiedCondition/buildKeyedQueryExpression for the fix.
+    it('scopes a keyed query condition to that argument, not the entire query string', () => {
+      const rule = makeUnifiedRule({
+        conditions: [{ field: 'query', operator: 'eq', value: '1', key: 'debug' }],
+      })
+      const { result } = unifiedToCloudflare(rule)
+      expect(result.expression).toBe('any(http.request.uri.args["debug"][*] eq "1")')
+      expect(result.expression).not.toBe('http.request.uri.query eq "1"')
+    })
+
     it('maps unified actions to Cloudflare actions', () => {
       const actionMappings: Array<{ unified: string; cf: string }> = [
         { unified: 'log', cf: 'log' },

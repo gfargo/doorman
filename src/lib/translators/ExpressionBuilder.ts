@@ -12,6 +12,14 @@ import { ipAddressSchema } from '../schemas/commonSchemas'
 const UNQUOTED_IP_FIELDS = new Set(['ip.src'])
 
 /**
+ * Cloudflare's indexable query-args field. Distinct from
+ * `http.request.uri.query` (the whole query string, a scalar `String`) —
+ * this one is a `Map<Array<String>>` keyed by argument name, used only when
+ * a query condition carries a `key`. See `buildKeyedQueryExpression`.
+ */
+const QUERY_ARGS_FIELD = 'http.request.uri.args'
+
+/**
  * Builds Cloudflare wirefilter expressions from structured conditions
  */
 export class ExpressionBuilder {
@@ -103,6 +111,17 @@ export class ExpressionBuilder {
    * Build expression from a single unified condition
    */
   public static fromUnifiedCondition(condition: UnifiedCondition): string {
+    // A keyed query condition can't reuse the generic bracket-index path
+    // below the way header/cookie do: Cloudflare's indexable query-args
+    // field (`http.request.uri.args`, aliased as QUERY_ARGS_FIELD) types as
+    // `Map<Array<String>>`, so `args["key"] eq "value"` is an Array-vs-String
+    // type mismatch the Cloudflare API rejects — it needs `any(args["key"][*]
+    // eq "value")` (and `has_key(...)` for exists/not_exists) instead. See
+    // buildKeyedQueryExpression.
+    if (condition.key && condition.field === 'query') {
+      return this.buildKeyedQueryExpression(condition, condition.key)
+    }
+
     const baseField = this.mapUnifiedFieldToCloudflare(condition.field)
     // `key` only makes sense as a bracket index for header/cookie fields
     // (matching FieldMapper's Vercel-side behavior) — a header or cookie
@@ -120,6 +139,37 @@ export class ExpressionBuilder {
     }
 
     return expression
+  }
+
+  /**
+   * Build a keyed query-parameter expression against Cloudflare's
+   * `Map<Array<String>>`-typed `http.request.uri.args` field — see the
+   * comment in `fromUnifiedCondition` for why this can't share the generic
+   * field-string path the way header/cookie conditions do. Mirrors
+   * Cloudflare's own documented idioms: `any(args["key"][*] <op> value)` for
+   * value comparisons (a query param can repeat, so this matches if *any*
+   * occurrence satisfies the operator) and `has_key(args, "key")` for
+   * existence.
+   */
+  private static buildKeyedQueryExpression(condition: UnifiedCondition, key: string): string {
+    const escapedKey = escapeWirefilterString(key)
+    const keyedField = `${QUERY_ARGS_FIELD}["${escapedKey}"]`
+
+    let expression: string
+    if (condition.operator === 'exists') {
+      expression = `has_key(${QUERY_ARGS_FIELD}, "${escapedKey}")`
+    } else if (condition.operator === 'not_exists') {
+      expression = `not (has_key(${QUERY_ARGS_FIELD}, "${escapedKey}"))`
+    } else if (condition.operator === 'not_contains') {
+      expression = `not (any(${keyedField}[*] contains ${this.formatValue(QUERY_ARGS_FIELD, condition.value)}))`
+    } else if (condition.operator === 'not_in') {
+      expression = `not (any(${keyedField}[*] in ${this.formatValue(QUERY_ARGS_FIELD, condition.value)}))`
+    } else {
+      const operator = this.mapUnifiedOperator(condition.operator)
+      expression = `any(${keyedField}[*] ${operator} ${this.formatValue(QUERY_ARGS_FIELD, condition.value)})`
+    }
+
+    return condition.negated ? `not (${expression})` : expression
   }
 
   /**
