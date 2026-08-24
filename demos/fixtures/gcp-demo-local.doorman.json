@@ -1,0 +1,26 @@
+{
+  "$schema": "https://doorman.griffen.codes/schema.json",
+  "version": "2.0",
+  "provider": "gcp",
+  "providers": {
+    "gcp": { "projectId": "demo-project", "policyName": "doorman-demo-policy" }
+  },
+  "rules": [
+    {
+      "id": "1000",
+      "name": "Block Bad Bots",
+      "description": "Block Bad Bots",
+      "enabled": true,
+      "conditions": [{ "field": "user_agent", "operator": "contains", "value": "bot" }],
+      "action": { "type": "deny" },
+      "priority": 1000
+    },
+    {
+      "name": "Block Admin Access",
+      "enabled": true,
+      "conditions": [{ "field": "path", "operator": "starts_with", "value": "/admin" }],
+      "action": { "type": "deny" }
+    }
+  ],
+  "ips": []
+}

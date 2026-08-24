@@ -115,12 +115,12 @@ Unlike classic Fastly VCL services, Next-Gen WAF rule and list writes take effec
 
 ## Limitations & Differences
 
-| Feature                    | Vercel                        | Fastly                 | Notes                                                                     |
-| -------------------------- | ----------------------------- | ---------------------- | ------------------------------------------------------------------------- |
-| Geo targeting              | Country/city/continent/region | Country only           | No sub-country condition field                                            |
-| Rule ordering              | Best-effort (insertion order) | None                   | Next-Gen WAF rules are evaluated independently — `priority` has no effect |
+| Feature                    | Vercel                        | Fastly                 | Notes                                                                                                                          |
+| -------------------------- | ----------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Geo targeting              | Country/city/continent/region | Country only           | No sub-country condition field                                                                                                 |
+| Rule ordering              | Best-effort (insertion order) | None                   | Next-Gen WAF rules are evaluated independently — `priority` has no effect                                                      |
 | Managed/vendor rule groups | CRS (enterprise)              | Templated signal rules | Doorman-managed on Cloudflare only ([cloudflare.md](cloudflare.md)); not yet configurable through Doorman for Vercel or Fastly |
-| Signal/exclusion rules     | —                             | `type: signal`         | Not managed by Doorman — see below                                        |
+| Signal/exclusion rules     | —                             | `type: signal`         | Not managed by Doorman — see below                                                                                             |
 
 Fastly rules of type `signal` or `templated_signal` (which tag or exclude WAF signals rather than allow/block/redirect a request) are skipped entirely by `doorman download`/`fetchConfig` rather than forced into a lossy `UnifiedRule` — they simply don't appear in the local config.
 
