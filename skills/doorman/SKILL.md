@@ -127,7 +127,7 @@ Two different rule shapes, picked by whether the config has `provider`/`provider
 
 **Logic**: conditions default to AND across all of them. Tag conditions with a `group` number for OR-of-AND-groups (same conditions sharing a `group` are AND'd, distinct `group`s are OR'd) — see [references/rules.md](references/rules.md) for the full explanation and an example.
 
-**Condition fields**: `ip`, `country`, `region`, `city`, `asn`, `path`, `host`, `method`, `header`, `query`, `cookie`, `user_agent`, `referer`, `scheme`, `port` — support varies by provider, see [references/cloudflare.md](references/cloudflare.md)/[references/fastly.md](references/fastly.md)
+**Condition fields**: `ip`, `country`, `region`, `city`, `asn`, `path`, `host`, `method`, `header`, `query`, `cookie`, `user_agent`, `referer`, `scheme`, `port` — support varies by provider, see [references/cloudflare.md](references/cloudflare.md)/[references/fastly.md](references/fastly.md)/[references/gcp.md](references/gcp.md)
 
 **Operators**: `eq`, `ne`, `contains`, `not_contains`, `starts_with`, `ends_with`, `matches`, `in`, `not_in`, `gt`, `ge`, `lt`, `le`, `exists`, `not_exists` — **on Vercel specifically, `ne`/`not_contains`/`not_in`/`gt`/`ge`/`lt`/`le` currently degrade silently to `eq` (known bug, [doorman#261](https://github.com/gfargo/doorman/issues/261)) — avoid them in a Vercel-targeted config until that's fixed.**
 
@@ -142,6 +142,7 @@ Load the relevant reference file for detailed documentation:
 | Writing rules — full field docs, operators, actions, IP blocking, patterns                  | [references/rules.md](references/rules.md)           |
 | Cloudflare-specific setup, Lists API, managed rule groups, expression translation, limitations | [references/cloudflare.md](references/cloudflare.md) |
 | Fastly-specific setup, condition/action mapping, rate-limit signal requirement, limitations | [references/fastly.md](references/fastly.md)         |
+| GCP Cloud Armor setup, CEL translation, priority model, manual e2e verification runbook     | [references/gcp.md](references/gcp.md)                |
 | Available templates and what they protect against                                           | [references/templates.md](references/templates.md)   |
 | CI/CD integration, automation, export formats, validation in pipelines                      | [references/cicd.md](references/cicd.md)             |
 
