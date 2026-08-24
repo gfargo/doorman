@@ -320,6 +320,44 @@ describe('unifiedSchemas', () => {
       expect(result.success).toBe(true)
       expect(result.success && result.data.managedRules).toEqual(managedRules)
     })
+
+    // Same class of bug as managedRules above, on action.rateLimit instead:
+    // mitigationTimeout/countingExpression are on UnifiedAction['rateLimit']
+    // (types/unified.ts) and read by unifiedToCloudflare/unifiedToVercel/
+    // buildFastlyRateLimit, but rateLimitSchema didn't validate them —
+    // silently stripped on every safeParse. VercelFirewallService.getChanges
+    // and FastlyFirewallService.getChanges both diff against the *parsed*
+    // config, so a rule authored with either field lost it before it ever
+    // reached those translators.
+    it('round-trips action.rateLimit.mitigationTimeout and countingExpression through safeParse without stripping them', () => {
+      const result = unifiedConfigSchema.safeParse({
+        ...validConfig,
+        rules: [
+          {
+            name: 'Rate limited rule',
+            enabled: true,
+            conditions: [{ field: 'path', operator: 'eq', value: '/api' }],
+            action: {
+              type: 'rate_limit',
+              rateLimit: {
+                requests: 100,
+                window: '1m',
+                mitigationTimeout: 7200,
+                countingExpression: 'http.request.method eq "POST"',
+              },
+            },
+          },
+        ],
+      })
+
+      expect(result.success).toBe(true)
+      expect(result.success && result.data.rules[0]?.action.rateLimit).toEqual({
+        requests: 100,
+        window: '1m',
+        mitigationTimeout: 7200,
+        countingExpression: 'http.request.method eq "POST"',
+      })
+    })
   })
 
   describe('validateUnifiedConfig', () => {

@@ -155,6 +155,28 @@ describe('commonSchemas', () => {
     it('rejects invalid window format', () => {
       expect(rateLimitSchema.safeParse({ requests: 100, window: 'invalid' }).success).toBe(false)
     })
+
+    // Regression test: mitigationTimeout/countingExpression are on
+    // UnifiedAction['rateLimit'] (types/unified.ts) and read by every
+    // translator, but were missing from this schema — Zod silently strips
+    // unrecognized keys, so `success: true` alone doesn't prove they
+    // survive; asserting on the parsed data does.
+    it('round-trips mitigationTimeout and countingExpression without stripping them', () => {
+      const result = rateLimitSchema.safeParse({
+        requests: 100,
+        window: '1m',
+        mitigationTimeout: 7200,
+        countingExpression: 'http.request.method eq "POST"',
+      })
+      expect(result.success).toBe(true)
+      expect(result.success && result.data.mitigationTimeout).toBe(7200)
+      expect(result.success && result.data.countingExpression).toBe('http.request.method eq "POST"')
+    })
+
+    it('rejects a non-positive mitigationTimeout', () => {
+      const result = rateLimitSchema.safeParse({ requests: 100, window: '1m', mitigationTimeout: 0 })
+      expect(result.success).toBe(false)
+    })
   })
 
   describe('redirectSchema', () => {

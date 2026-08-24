@@ -1063,6 +1063,55 @@ describe('VercelFirewallService', () => {
       expect(changes.hasChanges).toBe(false)
     })
 
+    // Regression test: rateLimitSchema didn't validate mitigationTimeout/
+    // countingExpression, so Zod silently stripped them — getChanges diffs
+    // against `configValidation.data` (the *parsed* config), not the raw
+    // one, so a rule authored with either field lost it before ever
+    // reaching unifiedToVercel. Asserting on rulesToAdd (sourced straight
+    // from configValidation.data.rules for a pure addition) proves the
+    // fields now survive that parse.
+    it('preserves rateLimit.mitigationTimeout and countingExpression through getChanges (regression test)', async () => {
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
+        ...mockVercelConfig,
+        rules: [],
+        ips: [],
+      })
+
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'rule_rl',
+            name: 'Rate Limit API',
+            enabled: true,
+            conditionLogic: 'AND',
+            conditions: [{ field: 'path', operator: 'starts_with', value: '/api/', group: 0 }],
+            action: {
+              type: 'rate_limit',
+              rateLimit: {
+                requests: 100,
+                window: '1m',
+                mitigationTimeout: 7200,
+                countingExpression: 'http.request.method eq "POST"',
+              },
+            },
+          },
+        ],
+        ips: [],
+      }
+
+      const changes = await service.getChanges(config)
+
+      expect(changes.rulesToAdd).toHaveLength(1)
+      expect(changes.rulesToAdd[0]?.action.rateLimit).toEqual({
+        requests: 100,
+        window: '1m',
+        mitigationTimeout: 7200,
+        countingExpression: 'http.request.method eq "POST"',
+      })
+    })
+
     it('should detect no changes for a redirect rule with permanent unset (regression test for #203)', async () => {
       jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
         ...mockVercelConfig,
