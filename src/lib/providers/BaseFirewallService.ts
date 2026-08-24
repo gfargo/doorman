@@ -231,6 +231,29 @@ export abstract class BaseFirewallService implements IFirewallProvider {
   }
 
   /**
+   * Guards the "fails clearly rather than silently no-op'ing" half of #183:
+   * a provider that doesn't implement managed rule groups (every provider
+   * except Cloudflare, currently) throws a clear, specific error the moment
+   * a config declares any, instead of `getChanges`/`syncRules` just
+   * ignoring `config.managedRules` and reporting a clean diff/sync.
+   *
+   * Called explicitly from each non-Cloudflare provider's `getChanges`
+   * rather than wired through `IFirewallProvider.validateConfig()` —
+   * nothing in the CLI command layer actually calls `validateConfig()`
+   * today (a separate, pre-existing gap, out of scope for #183), so gating
+   * here is what actually protects a real `sync`/`diff`/`status` run.
+   */
+  protected assertManagedRulesSupported(config: UnifiedConfig): void {
+    if (!config.managedRules || config.managedRules.length === 0) return
+    if (this.getSupportedFeatures().supportsManagedRules) return
+
+    throw new Error(
+      `${this.name} does not support managed rule groups, but this config declares ${config.managedRules.length}. ` +
+        'Remove `managedRules` from the config, or switch to a provider that supports them (currently Cloudflare only).',
+    )
+  }
+
+  /**
    * Validate rule count against provider limits
    */
   protected validateRuleCount(count: number, limit: number | undefined): void {
@@ -302,6 +325,12 @@ export abstract class BaseFirewallService implements IFirewallProvider {
       logger.info(`  IPs added: ${result.ipsAdded}`)
       logger.info(`  IPs updated: ${result.ipsUpdated}`)
       logger.info(`  IPs deleted: ${result.ipsDeleted}`)
+    }
+
+    if (result.managedRulesAdded !== undefined) {
+      logger.info(`  Managed rule groups added: ${result.managedRulesAdded}`)
+      logger.info(`  Managed rule groups updated: ${result.managedRulesUpdated}`)
+      logger.info(`  Managed rule groups deleted: ${result.managedRulesDeleted}`)
     }
 
     if (result.version) {

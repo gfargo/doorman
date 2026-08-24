@@ -408,6 +408,118 @@ describe('CloudflareClient', () => {
     })
   })
 
+  describe('getOrCreateManagedRulesRuleset', () => {
+    it('should return existing managed-rules ruleset, matched by phase alone', async () => {
+      // Deliberately a `kind` other than 'zone' — the lookup matches on
+      // `phase` alone (see CloudflareClient.getOrCreateManagedRulesRuleset's
+      // doc comment on why `kind` isn't part of the match), so this proves
+      // the lookup doesn't silently depend on an unverified `kind` value.
+      const existingRuleset: CloudflareRuleset = {
+        id: 'existing-managed-ruleset',
+        name: 'Existing Managed Rules',
+        description: 'Existing Description',
+        kind: 'zone',
+        phase: 'http_request_firewall_managed',
+        version: '1',
+        rules: [],
+      }
+
+      const mockResponse: CloudflareAPIResponse<CloudflareRuleset[]> = {
+        success: true,
+        errors: [],
+        messages: [],
+        result: [existingRuleset],
+      }
+
+      fetchMock.mockResolvedValueOnce(makeResponse({ ok: true, status: 200, jsonBody: mockResponse }))
+
+      const result = await client.getOrCreateManagedRulesRuleset()
+
+      expect(result).toEqual(existingRuleset)
+      expect(fetchMock).toHaveBeenCalledTimes(1) // Only list, no create
+    })
+
+    it('should create a new managed-rules ruleset if none exists', async () => {
+      const listResponse: CloudflareAPIResponse<CloudflareRuleset[]> = {
+        success: true,
+        errors: [],
+        messages: [],
+        result: [], // No existing rulesets
+      }
+
+      const newRuleset: CloudflareRuleset = {
+        id: 'new-managed-ruleset',
+        name: 'Doorman Managed Rules',
+        description: 'Managed rule groups deployed by Doorman',
+        kind: 'zone',
+        phase: 'http_request_firewall_managed',
+        version: '1',
+        rules: [],
+      }
+
+      const createResponse: CloudflareAPIResponse<CloudflareRuleset> = {
+        success: true,
+        errors: [],
+        messages: [],
+        result: newRuleset,
+      }
+
+      fetchMock
+        .mockResolvedValueOnce(makeResponse({ ok: true, status: 200, jsonBody: listResponse }))
+        .mockResolvedValueOnce(makeResponse({ ok: true, status: 200, jsonBody: createResponse }))
+
+      const result = await client.getOrCreateManagedRulesRuleset()
+
+      expect(result.name).toBe('Doorman Managed Rules')
+      expect(result.phase).toBe('http_request_firewall_managed')
+      expect(fetchMock).toHaveBeenCalledTimes(2) // List + create
+    })
+
+    it('does not match a custom firewall ruleset (different phase)', async () => {
+      const customRuleset: CloudflareRuleset = {
+        id: 'custom-ruleset',
+        name: 'Doorman Custom Firewall Rules',
+        description: 'Custom firewall rules managed by Doorman',
+        kind: 'custom',
+        phase: 'http_request_firewall_custom',
+        version: '1',
+        rules: [],
+      }
+      const listResponse: CloudflareAPIResponse<CloudflareRuleset[]> = {
+        success: true,
+        errors: [],
+        messages: [],
+        result: [customRuleset],
+      }
+      const newRuleset: CloudflareRuleset = {
+        id: 'new-managed-ruleset',
+        name: 'Doorman Managed Rules',
+        description: 'Managed rule groups deployed by Doorman',
+        kind: 'zone',
+        phase: 'http_request_firewall_managed',
+        version: '1',
+        rules: [],
+      }
+      const createResponse: CloudflareAPIResponse<CloudflareRuleset> = {
+        success: true,
+        errors: [],
+        messages: [],
+        result: newRuleset,
+      }
+
+      fetchMock
+        .mockResolvedValueOnce(makeResponse({ ok: true, status: 200, jsonBody: listResponse }))
+        .mockResolvedValueOnce(makeResponse({ ok: true, status: 200, jsonBody: createResponse }))
+
+      const result = await client.getOrCreateManagedRulesRuleset()
+
+      // The custom-rules ruleset must not be mistaken for the managed-rules
+      // one — a new one gets created instead.
+      expect(result.id).toBe('new-managed-ruleset')
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+  })
+
   describe('verifyCredentials', () => {
     it('should return true for valid credentials', async () => {
       const mockResponse: CloudflareAPIResponse<CloudflareRuleset[]> = {

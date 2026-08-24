@@ -1,5 +1,5 @@
 import { OperationSafety } from '../operationSafety'
-import type { UnifiedConfig } from '../../types/unified'
+import type { UnifiedConfig, UnifiedManagedRuleGroup } from '../../types/unified'
 import type { ChangeSet } from '../../providers/IFirewallProvider'
 
 // Mock the logger
@@ -224,6 +224,27 @@ describe('OperationSafety', () => {
       const changes = changesWith({ rulesToUpdate: [{}] as UnifiedConfig['rules'] })
       expect(OperationSafety.assessOperationRisk(changes, configWithRules(5))).toBe('medium')
     })
+
+    // #183 — managed rule groups must feed the same risk signals rules/ips
+    // already do; a config that only touches managedRules shouldn't be
+    // silently classified as 'low' risk just because assessOperationRisk
+    // never looked at those fields.
+    it('is medium risk for managed rule group updates', () => {
+      const changes = changesWith({ managedRulesToUpdate: [{}] as UnifiedManagedRuleGroup[] })
+      expect(OperationSafety.assessOperationRisk(changes, configWithRules(0))).toBe('medium')
+    })
+
+    it('is high risk when the total change count exceeds 50, counting managed rule group additions', () => {
+      const changes = changesWith({
+        managedRulesToAdd: Array.from({ length: 51 }, () => ({})) as UnifiedManagedRuleGroup[],
+      })
+      expect(OperationSafety.assessOperationRisk(changes, configWithRules(0))).toBe('high')
+    })
+
+    it('is medium risk for a managed rule group deletion alone (deletion gate is not rules/ips-only)', () => {
+      const changes = changesWith({ managedRulesToDelete: [{}] as UnifiedManagedRuleGroup[] })
+      expect(OperationSafety.assessOperationRisk(changes, configWithRules(10))).toBe('medium')
+    })
   })
 
   describe('confirmDestructiveOperation', () => {
@@ -297,6 +318,32 @@ describe('OperationSafety', () => {
       })
 
       expect(confirmed).toBe(true)
+    })
+
+    // #183 — the deletion gate must count managed rule group deletions too,
+    // not just rules/ips, or a config that only removes a managed ruleset
+    // could slip through a non-interactive --force/--ci run unconfirmed.
+    it('refuses a non-interactive operation that would delete managed rule groups without allowDeletions', async () => {
+      const changesWithManagedRuleDeletions: ChangeSet = {
+        rulesToAdd: [],
+        rulesToUpdate: [],
+        rulesToDelete: [],
+        ipsToAdd: [],
+        ipsToUpdate: [],
+        ipsToDelete: [],
+        managedRulesToDelete: [{}] as UnifiedManagedRuleGroup[],
+        hasChanges: true,
+      }
+
+      const confirmed = await OperationSafety.confirmDestructiveOperation({
+        operation: 'sync rules',
+        target: 'Cloudflare zone test',
+        changes: changesWithManagedRuleDeletions,
+        riskLevel: 'high',
+        skipConfirmation: true,
+      })
+
+      expect(confirmed).toBe(false)
     })
   })
 

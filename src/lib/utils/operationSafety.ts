@@ -63,7 +63,10 @@ export class OperationSafety {
       return true
     }
 
-    const deletionCount = (changes?.rulesToDelete?.length || 0) + (changes?.ipsToDelete?.length || 0)
+    const deletionCount =
+      (changes?.rulesToDelete?.length || 0) +
+      (changes?.ipsToDelete?.length || 0) +
+      (changes?.managedRulesToDelete?.length || 0)
 
     if (skipConfirmation) {
       // `skipConfirmation` (--force/--ci) authorizes running non-interactively,
@@ -161,6 +164,9 @@ export class OperationSafety {
       ipsToAdd: [],
       ipsToUpdate: [],
       ipsToDelete: [],
+      managedRulesToAdd: [],
+      managedRulesToUpdate: [],
+      managedRulesToDelete: [],
       hasChanges: false,
     }
 
@@ -207,12 +213,17 @@ export class OperationSafety {
   public static assessOperationRisk(changes: ChangeSet, config: UnifiedConfig): 'low' | 'medium' | 'high' {
     const totalRules = config.rules.length
     const totalIPs = config.ips?.length || 0
-    const totalDeletions = (changes.rulesToDelete?.length || 0) + (changes.ipsToDelete?.length || 0)
+    const totalDeletions =
+      (changes.rulesToDelete?.length || 0) +
+      (changes.ipsToDelete?.length || 0) +
+      (changes.managedRulesToDelete?.length || 0)
     const totalChanges =
       (changes.rulesToAdd?.length || 0) +
       (changes.rulesToUpdate?.length || 0) +
       (changes.ipsToAdd?.length || 0) +
       (changes.ipsToUpdate?.length || 0) +
+      (changes.managedRulesToAdd?.length || 0) +
+      (changes.managedRulesToUpdate?.length || 0) +
       totalDeletions
 
     // High risk conditions
@@ -252,6 +263,10 @@ export class OperationSafety {
 
     if (changes.rulesToUpdate && changes.rulesToUpdate.length > 0) {
       return 'medium' // Rule updates can be risky
+    }
+
+    if (changes.managedRulesToUpdate && changes.managedRulesToUpdate.length > 0) {
+      return 'medium' // Overriding a managed ruleset's actions/enablement can be risky
     }
 
     // Low risk - only additions or small changes
@@ -405,6 +420,15 @@ export class OperationSafety {
     if (changes.ipsToDelete?.length) {
       logger.info(`   • IPs to delete: ${changes.ipsToDelete.length}`)
     }
+    if (changes.managedRulesToAdd?.length) {
+      logger.info(`   • Managed rule groups to add: ${changes.managedRulesToAdd.length}`)
+    }
+    if (changes.managedRulesToUpdate?.length) {
+      logger.info(`   • Managed rule groups to update: ${changes.managedRulesToUpdate.length}`)
+    }
+    if (changes.managedRulesToDelete?.length) {
+      logger.info(`   • Managed rule groups to delete: ${changes.managedRulesToDelete.length}`)
+    }
 
     if (!changes.hasChanges) {
       logger.info('   • No changes detected')
@@ -494,12 +518,17 @@ export class OperationSafety {
    */
   private static validateChanges(changes: ChangeSet, warnings: string[]): void {
     // Check for excessive deletions
-    const totalDeletions = (changes.rulesToDelete?.length || 0) + (changes.ipsToDelete?.length || 0)
+    const totalDeletions =
+      (changes.rulesToDelete?.length || 0) +
+      (changes.ipsToDelete?.length || 0) +
+      (changes.managedRulesToDelete?.length || 0)
     const totalChanges =
       (changes.rulesToAdd?.length || 0) +
       (changes.rulesToUpdate?.length || 0) +
       (changes.ipsToAdd?.length || 0) +
       (changes.ipsToUpdate?.length || 0) +
+      (changes.managedRulesToAdd?.length || 0) +
+      (changes.managedRulesToUpdate?.length || 0) +
       totalDeletions
 
     if (totalDeletions > 0 && totalChanges > 0) {

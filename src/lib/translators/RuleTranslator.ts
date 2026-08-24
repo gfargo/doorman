@@ -1,5 +1,11 @@
 import { vercelToUnified, unifiedToVercel, vercelIPToUnified } from '../providers/vercel/translator'
-import { cloudflareToUnified, unifiedToCloudflare, unifiedIPToCloudflare } from '../providers/cloudflare/translator'
+import {
+  cloudflareToUnified,
+  unifiedToCloudflare,
+  unifiedIPToCloudflare,
+  unifiedManagedRuleGroupToCloudflare,
+  cloudflareToUnifiedManagedRuleGroup,
+} from '../providers/cloudflare/translator'
 import {
   fastlyToUnified,
   unifiedToFastly,
@@ -46,6 +52,8 @@ export class RuleTranslator {
   static cloudflareToUnified = cloudflareToUnified
   static unifiedToCloudflare = unifiedToCloudflare
   static unifiedIPToCloudflare = unifiedIPToCloudflare
+  static unifiedManagedRuleGroupToCloudflare = unifiedManagedRuleGroupToCloudflare
+  static cloudflareToUnifiedManagedRuleGroup = cloudflareToUnifiedManagedRuleGroup
 
   static fastlyToUnified = fastlyToUnified
   static unifiedToFastly = unifiedToFastly

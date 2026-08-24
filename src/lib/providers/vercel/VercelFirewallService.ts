@@ -418,6 +418,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
     if (!configValidation.success) {
       throw new Error(`Invalid firewall configuration: ${configValidation.error.message}`)
     }
+    this.assertManagedRulesSupported(config)
 
     try {
       logger.debug('Fetching existing firewall configuration')

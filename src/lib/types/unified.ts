@@ -117,6 +117,44 @@ export interface UnifiedIPRule {
 }
 
 /**
+ * A per-rule override within a managed/vendor rule group — e.g. "enable the
+ * vendor ruleset but downgrade this one noisy rule to log-only."
+ */
+export interface UnifiedManagedRuleGroupOverride {
+  ruleId: string
+  action?: ActionType
+  enabled?: boolean
+}
+
+/**
+ * Unified managed rule group
+ * Provider-agnostic representation of a vendor-managed/preconfigured
+ * ruleset (Cloudflare Managed Ruleset, AWS Managed Rules, GCP preconfigured
+ * WAF, OWASP CRS, …) deployed as a whole, with optional per-rule overrides.
+ *
+ * A genuinely different kind of thing from `UnifiedRule` — no conditions,
+ * and its identity is a vendor ruleset id rather than a user-authored
+ * expression, so it isn't forced into `UnifiedRule[]`. See #183.
+ */
+export interface UnifiedManagedRuleGroup {
+  /**
+   * Provider-assigned identity for diff/sync matching — mirrors
+   * `UnifiedRule.id`. Omitted for a new declaration not yet synced.
+   */
+  id?: string
+  /** The vendor's managed-ruleset identifier being deployed (e.g. Cloudflare Managed Ruleset's well-known id). Opaque to doorman. */
+  ruleset: string
+  /** Optional human label. */
+  name?: string
+  /** Whether this managed-ruleset deployment is active. */
+  enabled: boolean
+  /** Ruleset-wide action override — e.g. downgrade every rule in the group to `log`. */
+  action?: ActionType
+  /** Per-rule overrides within the ruleset. */
+  overrides?: UnifiedManagedRuleGroupOverride[]
+}
+
+/**
  * Unified firewall configuration
  * Provider-agnostic configuration format supporting all providers
  */
@@ -127,6 +165,7 @@ export interface UnifiedConfig {
   providers?: ProvidersConfig // Provider-specific settings
   rules: UnifiedRule[]
   ips?: UnifiedIPRule[]
+  managedRules?: UnifiedManagedRuleGroup[]
   metadata?: ConfigMetadata
 }
 

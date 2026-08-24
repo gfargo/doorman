@@ -292,8 +292,13 @@ export class CloudflareOptimizer {
    * determine wire behavior. `id`/`last_updated`/`version`/`ref`/`categories`
    * are deliberately excluded — they're either identity (already used for
    * matching, not equality) or metadata Cloudflare manages itself.
+   *
+   * Public so CloudflareFirewallService.getChanges can reuse it directly for
+   * managed rule groups (#183) — those diff in native space too, for the
+   * same reason custom rules do (see diffCloudflareRules' doc comment), so
+   * duplicating this comparison would just be two copies to keep in sync.
    */
-  private cloudflareRulesEqual(a: CloudflareRule, b: CloudflareRule): boolean {
+  public cloudflareRulesEqual(a: CloudflareRule, b: CloudflareRule): boolean {
     return (
       a.action === b.action &&
       a.expression === b.expression &&
