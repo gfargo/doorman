@@ -7,7 +7,9 @@
       "priority": 1000,
       "description": "Block Bad Bots",
       "match": {
-        "expr": { "expression": "(has(request.headers['user-agent']) && request.headers['user-agent'].contains('bot'))" }
+        "expr": {
+          "expression": "(has(request.headers['user-agent']) && request.headers['user-agent'].contains('bot'))"
+        }
       },
       "action": "deny(403)"
     },

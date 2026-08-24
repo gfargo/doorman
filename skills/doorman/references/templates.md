@@ -27,6 +27,7 @@ doorman template ai-bots
 Detected bots include: GPTBot, ChatGPT-User, ClaudeBot, Claude-Web, Bytespider, CCBot, Google-Extended, GoogleOther, Amazonbot, Applebot-Extended, Meta-ExternalAgent, PerplexityBot, OAI-SearchBot, Diffbot, anthropic-ai, cohere-ai, and many more.
 
 **Rule added:**
+
 ```json
 {
   "id": "rule_detect_ai_bots",
@@ -58,6 +59,7 @@ doorman template bad-bots
 Includes: scrapers (HTTrack, WebCopier, SiteRipper), vulnerability scanners (Nikto, Nmap, Acunetix, SQLmap, WPScan, Nuclei), SEO crawlers (AhrefsBot, SemrushBot, MJ12bot, DotBot), and spam/attack tools (Zeus, Havij, Dirbuster).
 
 **Rule added:**
+
 ```json
 {
   "id": "rule_detect_bad_bots",
@@ -87,6 +89,7 @@ doorman template block-ofac-sanctioned-countries
 Countries blocked: Syria (SY), Iran (IR), Russia (RU), Cuba (CU), North Korea (KP).
 
 **Rule added:**
+
 ```json
 {
   "id": "rule_block_traffic_from_ofac_sanctioned_countries",
@@ -117,18 +120,28 @@ doorman template wordpress
 Paths blocked: `/wp-admin`, `/wp-login.php`, `/xmlrpc.php`, `/wp-content`, `/wp-includes`, `/wp-signup.php`, `/wp-activate.php`, `/register.php`, `/wp-register.php`
 
 **Rule added:**
+
 ```json
 {
   "name": "Deny WordPress URLs",
   "active": true,
   "conditionGroup": [
-    { "conditions": [{ "type": "path", "op": "re", "value": "/(wp-admin|wp-login\\.php|xmlrpc\\.php|wp-content|wp-includes|wp-signup\\.php|wp-activate\\.php|register\\.php|wp-register\\.php)" }] }
+    {
+      "conditions": [
+        {
+          "type": "path",
+          "op": "re",
+          "value": "/(wp-admin|wp-login\\.php|xmlrpc\\.php|wp-content|wp-includes|wp-signup\\.php|wp-activate\\.php|register\\.php|wp-register\\.php)"
+        }
+      ]
+    }
   ],
   "action": { "mitigate": { "action": "deny" } }
 }
 ```
 
 **Note**: Uses regex — for Cloudflare non-Enterprise, split into multiple `pre` (prefix) conditions:
+
 ```json
 "conditionGroup": [
   { "conditions": [{ "type": "path", "op": "pre", "value": "/wp-admin" }] },
@@ -157,9 +170,7 @@ export const myTemplate: Template = {
         name: 'My Rule',
         description: 'What it does',
         active: true,
-        conditionGroup: [
-          { conditions: [{ type: 'path', op: 'pre', value: '/protected' }] }
-        ],
+        conditionGroup: [{ conditions: [{ type: 'path', op: 'pre', value: '/protected' }] }],
         action: { mitigate: { action: 'deny' } },
       },
     ],
