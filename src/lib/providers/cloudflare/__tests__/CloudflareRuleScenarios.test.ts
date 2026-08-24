@@ -440,15 +440,21 @@ describe('Cloudflare Rule Scenarios', () => {
           type: 'challenge',
         },
         conditions: [
+          // The header name belongs in `key`, not folded into `value` — a
+          // header condition with no `key` has no Cloudflare translation at
+          // all (there's no "match any header" concept) and now throws
+          // rather than silently producing a comparison against the literal
+          // string this fixture used to pass as `value` (#269).
           {
             field: 'header',
+            key: 'X-Forwarded-For',
             operator: 'eq',
-            value: 'X-Forwarded-For: suspicious-proxy',
+            value: 'suspicious-proxy',
           },
           {
             field: 'header',
+            key: 'X-Real-IP',
             operator: 'not_exists',
-            value: 'X-Real-IP',
           },
         ],
       }

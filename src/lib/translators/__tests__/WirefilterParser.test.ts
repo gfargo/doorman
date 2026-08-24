@@ -197,14 +197,20 @@ describe('parseWirefilterExpression', () => {
       expect(parsed!.conditions[0]).toMatchObject({ field: 'user_agent', operator: 'not_contains', value: 'bot' })
     })
 
-    it('round-trips a header condition with a bracket key', () => {
+    // #269: a keyed header condition now compiles to any(...), not a bare
+    // bracket comparison — see the `any(...)/has_key(...)` describe block
+    // below for the full grammar coverage. The key comes back lowercased,
+    // matching Cloudflare's own lowercase-keyed header map (verified via
+    // the Ruleset Engine field reference) — not a bug, an inherent property
+    // of what a real Cloudflare zone would report back too.
+    it('round-trips a header condition with a bracket key, lowercased', () => {
       const conditions: UnifiedCondition[] = [{ field: 'header', key: 'X-Custom', operator: 'eq', value: 'value' }]
       const expression = ExpressionBuilder.fromUnifiedConditions(conditions, 'AND')
 
       const parsed = parseWirefilterExpression(expression)
 
       expect(parsed).not.toBeNull()
-      expect(parsed!.conditions[0]).toMatchObject({ field: 'header', key: 'X-Custom', value: 'value' })
+      expect(parsed!.conditions[0]).toMatchObject({ field: 'header', key: 'x-custom', value: 'value' })
     })
 
     it('round-trips an "in" condition with an array value', () => {
@@ -215,6 +221,129 @@ describe('parseWirefilterExpression', () => {
 
       expect(parsed).not.toBeNull()
       expect(parsed!.conditions[0]).toMatchObject({ field: 'method', operator: 'in', value: ['GET', 'HEAD'] })
+    })
+  })
+
+  // #269: the parser previously had no concept of wirefilter function-call
+  // syntax at all — `any(field["key"][*] op value)` and
+  // `has_key(field, "key")` (the idiom #263 already shipped for keyed query
+  // conditions, and #269 extends to header/cookie) tokenized as a bare
+  // field named "any"/"has_key" followed by an unexpected `(`, so parsing
+  // always threw and `cloudflareToUnified` fell back to its "could not
+  // parse" warning with empty conditions. That means the #263 fix, live
+  // since it shipped, could never actually round-trip a keyed query
+  // condition back from a real Cloudflare zone — verified directly below,
+  // not just inferred.
+  describe('any(...)/has_key(...) function-call syntax (#269)', () => {
+    it('parses a direct any(...) value comparison', () => {
+      const result = parseWirefilterExpression('any(http.request.headers["content-type"][*] eq "application/json")')
+      expect(result).not.toBeNull()
+      expect(result!.conditions[0]).toMatchObject({
+        field: 'header',
+        key: 'content-type',
+        operator: 'eq',
+        value: 'application/json',
+      })
+    })
+
+    it('parses a direct has_key(...) existence check', () => {
+      const result = parseWirefilterExpression('has_key(http.request.headers, "x-api-version")')
+      expect(result).not.toBeNull()
+      expect(result!.conditions[0]).toMatchObject({ field: 'header', key: 'x-api-version', operator: 'exists' })
+    })
+
+    it('parses not (has_key(...)) as not_exists', () => {
+      const result = parseWirefilterExpression('not (has_key(http.request.headers, "x-api-version"))')
+      expect(result).not.toBeNull()
+      expect(result!.conditions[0]).toMatchObject({ field: 'header', key: 'x-api-version', operator: 'not_exists' })
+    })
+
+    it('parses not (any(field[*] contains value)) as the dedicated not_contains operator', () => {
+      const result = parseWirefilterExpression(
+        'not (any(http.request.headers["x-forwarded-for"][*] contains "1.2.3.4"))',
+      )
+      expect(result).not.toBeNull()
+      expect(result!.conditions[0]).toMatchObject({
+        field: 'header',
+        key: 'x-forwarded-for',
+        operator: 'not_contains',
+        value: '1.2.3.4',
+      })
+    })
+
+    it('parses not (any(...)) with no dedicated not_X form as negated: true', () => {
+      const result = parseWirefilterExpression('not (any(http.request.headers["x-debug"][*] eq "1"))')
+      expect(result).not.toBeNull()
+      expect(result!.conditions[0]).toMatchObject({
+        field: 'header',
+        key: 'x-debug',
+        operator: 'eq',
+        value: '1',
+        negated: true,
+      })
+    })
+
+    it('parses a keyed cookie any(...) against http.request.cookies', () => {
+      const result = parseWirefilterExpression('any(http.request.cookies["session"][*] eq "abc123")')
+      expect(result).not.toBeNull()
+      expect(result!.conditions[0]).toMatchObject({ field: 'cookie', key: 'session', value: 'abc123' })
+    })
+
+    it('rejects any(...) with something other than * inside the array index', () => {
+      expect(parseWirefilterExpression('any(http.request.headers["x"][0] eq "y")')).toBeNull()
+    })
+
+    it('rejects a bare identifier call that is neither any nor has_key (fails closed, not guessed at)', () => {
+      expect(parseWirefilterExpression('lower(http.host) eq "example.com"')).toBeNull()
+    })
+
+    describe('round-trip fidelity against ExpressionBuilder', () => {
+      it('round-trips a keyed header value comparison', () => {
+        const conditions: UnifiedCondition[] = [
+          { field: 'header', key: 'Content-Type', operator: 'eq', value: 'application/json' },
+        ]
+        const expression = ExpressionBuilder.fromUnifiedConditions(conditions, 'AND')
+        const parsed = parseWirefilterExpression(expression)
+
+        expect(parsed).not.toBeNull()
+        expect(parsed!.conditions[0]).toMatchObject({ field: 'header', key: 'content-type', value: 'application/json' })
+      })
+
+      it('round-trips a header exists/not_exists pair', () => {
+        const exists = parseWirefilterExpression(
+          ExpressionBuilder.fromUnifiedConditions([{ field: 'header', key: 'X-Trace', operator: 'exists' }]),
+        )
+        expect(exists!.conditions[0]).toMatchObject({ field: 'header', key: 'x-trace', operator: 'exists' })
+
+        const notExists = parseWirefilterExpression(
+          ExpressionBuilder.fromUnifiedConditions([{ field: 'header', key: 'X-Trace', operator: 'not_exists' }]),
+        )
+        expect(notExists!.conditions[0]).toMatchObject({ field: 'header', key: 'x-trace', operator: 'not_exists' })
+      })
+
+      it('round-trips a keyed cookie condition', () => {
+        const conditions: UnifiedCondition[] = [{ field: 'cookie', key: 'session', operator: 'eq', value: 'abc123' }]
+        const expression = ExpressionBuilder.fromUnifiedConditions(conditions, 'AND')
+        const parsed = parseWirefilterExpression(expression)
+
+        expect(parsed).not.toBeNull()
+        expect(parsed!.conditions[0]).toMatchObject({ field: 'cookie', key: 'session', value: 'abc123' })
+      })
+
+      // Regression test for the pre-existing gap this investigation found:
+      // #263 shipped the any()/has_key() builder side for keyed query
+      // conditions, but the parser side was never updated to match — so
+      // `doorman download`/`diff`/`status` against a real Cloudflare zone
+      // could never actually read a keyed query condition back. Fixed as a
+      // side effect of building the same grammar support for #269.
+      it('round-trips a keyed query condition (previously unparseable — see #263)', () => {
+        const conditions: UnifiedCondition[] = [{ field: 'query', key: 'debug', operator: 'eq', value: '1' }]
+        const expression = ExpressionBuilder.fromUnifiedConditions(conditions, 'AND')
+        const parsed = parseWirefilterExpression(expression)
+
+        expect(parsed).not.toBeNull()
+        expect(parsed!.conditions[0]).toMatchObject({ field: 'query', key: 'debug', value: '1' })
+      })
     })
   })
 

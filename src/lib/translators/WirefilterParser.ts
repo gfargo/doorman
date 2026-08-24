@@ -12,15 +12,21 @@ import { orGroupsToConditions } from './orGroupsToConditions'
  * subset `ExpressionBuilder` can produce (field/op/value comparisons,
  * `exists`, `not (...)` wrapping a single comparison/exists, `and`/`or`
  * joins, one level of AND-within-groups OR-across-groups nesting, bracket
- * key access for header/cookie, `{...}` set values, quoted-string
- * escaping). Anything outside that subset — a hand-authored expression, or
- * one from another tool — is reported as unsupported (`null`) rather than
- * guessed at, so a caller can fall back to a clearly-flagged lossy
- * conversion instead of silently misrepresenting what the rule matches.
+ * key access for a plain field, `any(field["key"][*] op value)`/
+ * `has_key(field, "key")` for a keyed query/header/cookie condition (#269),
+ * `{...}` set values, quoted-string escaping). Anything outside that
+ * subset — a hand-authored expression, or one from another tool — is
+ * reported as unsupported (`null`) rather than guessed at, so a caller can
+ * fall back to a clearly-flagged lossy conversion instead of silently
+ * misrepresenting what the rule matches.
  */
 
-// wirefilter field path -> unified condition field. Exact inverse of
-// ExpressionBuilder's private `mapUnifiedFieldToCloudflare` — keep in sync.
+// wirefilter field path -> unified condition field. Inverse of
+// ExpressionBuilder's private `mapUnifiedFieldToCloudflare` table, plus the
+// keyed `Map<Array<String>>` fields `buildKeyedMapExpression` uses inside
+// `any(...)`/`has_key(...)` calls (`http.request.uri.args`,
+// `http.request.cookies` — see parseAnyCall/parseHasKeyCall) — keep all of
+// this in sync with ExpressionBuilder.
 const CLOUDFLARE_FIELD_TO_UNIFIED: Record<string, string> = {
   'ip.src': 'ip',
   'ip.geoip.country': 'country',
@@ -32,11 +38,14 @@ const CLOUDFLARE_FIELD_TO_UNIFIED: Record<string, string> = {
   'http.request.method': 'method',
   'http.request.headers': 'header',
   'http.request.uri.query': 'query',
+  'http.request.uri.args': 'query',
   'http.cookie': 'cookie',
+  'http.request.cookies': 'cookie',
   'http.user_agent': 'user_agent',
   'http.referer': 'referer',
   ssl: 'scheme',
   'cf.edge.server_port': 'port',
+  'cf.threat_score': 'threat_score',
 }
 
 const COMPARISON_OPERATORS = new Set([
@@ -71,6 +80,16 @@ function tokenize(expression: string): Token[] {
     const ch = expression[i]!
 
     if (/\s/.test(ch)) {
+      i++
+      continue
+    }
+
+    // Argument separator inside a function call (`has_key(field, "key")`)
+    // — the only place a bare `,` appears in anything ExpressionBuilder
+    // generates. No dedicated token type needed: skipped exactly like
+    // whitespace, since parseHasKeyCall consumes its two arguments
+    // positionally rather than validating comma placement.
+    if (ch === ',') {
       i++
       continue
     }
@@ -135,9 +154,12 @@ function tokenize(expression: string): Token[] {
 
     // A maximal run of anything that isn't whitespace or a structural
     // character — covers field paths, keywords, operators, numbers, and
-    // bare (unquoted) IP/CIDR literals uniformly.
+    // bare (unquoted) IP/CIDR literals uniformly. `,` is structural too
+    // (see above) so a run stops before it instead of swallowing it, e.g.
+    // `has_key(http.request.headers, "x")` tokenizes the field as
+    // `http.request.headers`, not `http.request.headers,`.
     let j = i
-    while (j < len && !/[\s(){}[\]"]/.test(expression[j]!)) {
+    while (j < len && !/[\s(){}[\]",]/.test(expression[j]!)) {
       j++
     }
     if (j === i) {
@@ -244,7 +266,64 @@ function parseValue(stream: WirefilterTokenStream): string | number | (string | 
   return parseValueSingle(stream)
 }
 
+/**
+ * Parses `any(FIELD["key"][*] OP VALUE)` — the wirefilter idiom for a value
+ * comparison against a keyed entry of a `Map<Array<String>>`-typed field
+ * (header/cookie/query — see ExpressionBuilder.buildKeyedMapExpression,
+ * #263/#269). Produces the same `comparison` node shape the plain
+ * bracket-index path in `parseComparisonOrExists` already does, so
+ * `leafToCondition`/`isLeaf`/`orGroupsToConditions` need no changes to
+ * understand it — negation (`not (any(...))`) falls out of the existing
+ * top-level `not (...)` handling in `parseUnary` for free, since this is
+ * still ordinary recursive descent.
+ */
+function parseAnyCall(stream: WirefilterTokenStream): WirefilterNode {
+  stream.next() // 'any', already confirmed by the caller's stream.is check
+  stream.expect('LPAREN')
+  const fieldToken = stream.expect('WORD')
+  stream.expect('LBRACKET')
+  const keyToken = stream.expect('STRING')
+  stream.expect('RBRACKET')
+  stream.expect('LBRACKET')
+  const star = stream.expect('WORD')
+  if (star.value !== '*') {
+    throw new ParseError(`Expected '*' in any(...) array index but got '${star.value}'`)
+  }
+  stream.expect('RBRACKET')
+
+  const opToken = stream.next()
+  if (opToken.type !== 'WORD' || !COMPARISON_OPERATORS.has(opToken.value)) {
+    throw new ParseError(`Unsupported or unrecognized operator '${opToken.value}' inside any(...)`)
+  }
+  const value = parseValue(stream)
+  stream.expect('RPAREN')
+
+  return { type: 'comparison', field: fieldToken.value, key: keyToken.value, operator: opToken.value, value }
+}
+
+/**
+ * Parses `has_key(FIELD, "key")` — the wirefilter idiom for an existence
+ * check against a keyed entry of a `Map<Array<String>>`-typed field. See
+ * `parseAnyCall`.
+ */
+function parseHasKeyCall(stream: WirefilterTokenStream): WirefilterNode {
+  stream.next() // 'has_key', already confirmed by the caller's stream.is check
+  stream.expect('LPAREN')
+  const fieldToken = stream.expect('WORD')
+  const keyToken = stream.expect('STRING') // the tokenizer skips the separating ',' like whitespace
+  stream.expect('RPAREN')
+
+  return { type: 'exists', field: fieldToken.value, key: keyToken.value }
+}
+
 function parseComparisonOrExists(stream: WirefilterTokenStream): WirefilterNode {
+  if (stream.is('WORD', 'any')) {
+    return parseAnyCall(stream)
+  }
+  if (stream.is('WORD', 'has_key')) {
+    return parseHasKeyCall(stream)
+  }
+
   const { field, key } = parseFieldRef(stream)
 
   if (stream.is('WORD', 'exists')) {
