@@ -109,14 +109,6 @@ export class CloudArmorFirewallService extends BaseFirewallService implements IF
       // is a hand-created one doorman can't represent, and gets a warning —
       // an "explicit, warned failure... never silent corruption" per #187's
       // acceptance criteria — rather than a crash or a silent drop.
-      // Not every rule is CEL — doorman only ever writes `match.expr`, but
-      // must tolerate reading the basic `versionedExpr`/`config` shape too
-      // (see CloudArmorMatch's doc comment). The mandatory default rule is
-      // silently skipped (it's server-injected infrastructure every real
-      // policy has, not user-managed content); any other basic-shape rule
-      // is a hand-created one doorman can't represent, and gets a warning —
-      // an "explicit, warned failure... never silent corruption" per #187's
-      // acceptance criteria — rather than a crash or a silent drop.
       if (!rule.match.expr) {
         if (rule.priority !== DEFAULT_RULE_PRIORITY) {
           logger.warn(
