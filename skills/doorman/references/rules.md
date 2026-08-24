@@ -73,30 +73,33 @@ Each condition has:
 
 ### Condition Types
 
-| Type                 | Description                      | Example Value           |
-| -------------------- | -------------------------------- | ----------------------- |
-| `path`               | URL path                         | `"/api/users"`          |
-| `method`             | HTTP method                      | `"POST"`                |
-| `host`               | Hostname                         | `"example.com"`         |
-| `user_agent`         | User-Agent header                | `"Googlebot"`           |
-| `ip_address`         | Client IP                        | `"192.168.1.1"`         |
-| `header`             | HTTP header (requires `key`)     | `"application/json"`    |
-| `query`              | Query parameter (requires `key`) | `"true"`                |
-| `cookie`             | Cookie value (requires `key`)    | `"session_abc"`         |
-| `geo_country`        | Country code (ISO 3166-1)        | `"US"` or `["US","CA"]` |
-| `geo_city`           | City name                        | `"New York"`            |
-| `geo_continent`      | Continent code                   | `"NA"`                  |
-| `geo_country_region` | Region/state code                | `"CA"`                  |
-| `geo_as_number`      | ASN number                       | `13335`                 |
-| `scheme`             | URL scheme                       | `"https"`               |
-| `protocol`           | HTTP protocol version            | `"HTTP/2"`              |
+These translate cleanly to the unified format's condition fields (`mapVercelTypeToUnified` in `src/lib/providers/vercel/translator.ts`), so a rule built from them survives migration to Cloudflare or Fastly:
 
-**Vercel-only types** (not available on Cloudflare):
+| Type            | Description                      | Example Value           |
+| --------------- | -------------------------------- | ----------------------- |
+| `path`          | URL path                         | `"/api/users"`          |
+| `method`        | HTTP method                      | `"POST"`                |
+| `host`          | Hostname                         | `"example.com"`         |
+| `user_agent`    | User-Agent header                | `"Googlebot"`           |
+| `ip_address`    | Client IP                        | `"192.168.1.1"`         |
+| `header`        | HTTP header (requires `key`)     | `"application/json"`    |
+| `query`         | Query parameter (requires `key`) | `"true"`                |
+| `cookie`        | Cookie value (requires `key`)    | `"session_abc"`         |
+| `geo_country`   | Country code (ISO 3166-1)        | `"US"` or `["US","CA"]` |
+| `geo_city`      | City name                        | `"New York"`            |
+| `geo_as_number` | ASN number                       | `13335`                 |
+| `scheme`        | URL scheme                       | `"https"`               |
 
+**Vercel-only types** — these round-trip fine between the legacy shape and the unified format (Vercel stays Vercel), but have no _other_ provider's equivalent: migrating to Fastly drops them with a translation warning, while migrating to Cloudflare currently produces a broken filter expression with no warning at all (`mapUnifiedFieldToCloudflare` in `src/lib/translators/ExpressionBuilder.ts` has no entry for them and falls through to the bare field name, which isn't valid Wirefilter syntax) — avoid these in a rule you intend to sync to Cloudflare:
+
+- `geo_continent` — continent code (`"NA"`)
+- `geo_country_region` — region/state code (`"CA"`) — distinct from `region` below, not interchangeable
+- `protocol` — HTTP protocol version (`"HTTP/2"`) — distinct from `scheme` above, not interchangeable
+- `target_path` — URL path, alternate to `path` (no unified mapping despite the similar name)
+- `region` — Vercel edge region (e.g. `"sfo1"`)
 - `environment` — deployment environment (`"production"`, `"preview"`)
 - `ja3_digest` — TLS fingerprint
 - `ja4_digest` — TLS fingerprint v4
-- `region` — Vercel edge region
 - `rate_limit_api_id` — rate limit API identifier
 
 ### Operators
