@@ -87,9 +87,12 @@ export interface ConfigWriteBack<T extends FirewallConfig | UnifiedConfig> {
  * that happen to share a field name only on the legacy shape.
  *
  * Also applies any `idRemappings` from the sync result to matching
- * `config.rules[i].id` values — a rule with an `oldId` match is updated by
- * id; an id-less rule (no `oldId` in the remapping) is matched by `name`
- * instead, since there was no previous id to compare against.
+ * `config.rules[i].id` and `config.ips[i].id` values — an item with an
+ * `oldId` match is updated by id; an id-less item (no `oldId` in the
+ * remapping) is matched by name instead (a rule's `name`, or an IP rule's
+ * `ip` — see `CloudArmorFirewallService.syncRules`, which reuses this same
+ * `{oldId, newId, name}` shape for IP remappings by putting the IP address
+ * itself in `name`), since there was no previous id to compare against.
  */
 export function applySyncResultToConfig<T extends FirewallConfig | UnifiedConfig>(
   originalConfig: T,
@@ -131,18 +134,35 @@ export function applySyncResultToConfig<T extends FirewallConfig | UnifiedConfig
       result.idRemappings.filter((r) => !r.oldId).map((r) => [r.name, r.newId] as [string, string]),
     )
 
+    // Shared by both loops below: an item with a prior id is remapped by
+    // that id; an id-less item (brand-new, just assigned one by this sync)
+    // is remapped by `nameKey` instead — `rule.name` for rules, `ip.ip` for
+    // IP rules, per this function's doc comment.
+    const remapId = <Item extends { id?: string }>(item: Item, nameKey: string): Item => {
+      const newId = item.id ? remapByOldId.get(item.id) : remapByName.get(nameKey)
+      return newId && newId !== item.id ? { ...item, id: newId } : item
+    }
+
     let rulesChanged = false
     const remappedRules = (config.rules as Array<{ id?: string; name: string }>).map((rule) => {
-      const newId = rule.id ? remapByOldId.get(rule.id) : remapByName.get(rule.name)
-      if (newId && newId !== rule.id) {
-        rulesChanged = true
-        return { ...rule, id: newId }
-      }
-      return rule
+      const remapped = remapId(rule, rule.name)
+      if (remapped !== rule) rulesChanged = true
+      return remapped
     })
 
-    if (rulesChanged) {
-      config = { ...config, rules: remappedRules } as FirewallConfig | UnifiedConfig
+    let ipsChanged = false
+    const remappedIps = ((config.ips ?? []) as Array<{ id?: string; ip: string }>).map((ip) => {
+      const remapped = remapId(ip, ip.ip)
+      if (remapped !== ip) ipsChanged = true
+      return remapped
+    })
+
+    if (rulesChanged || ipsChanged) {
+      config = {
+        ...config,
+        rules: remappedRules,
+        ...(ipsChanged ? { ips: remappedIps } : {}),
+      } as FirewallConfig | UnifiedConfig
       changed = true
     }
   }

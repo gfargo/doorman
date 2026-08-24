@@ -213,6 +213,48 @@ describe('vercelConfigAdapter', () => {
       expect(config.rules[0]?.id).toBe('unrelated_id')
     })
 
+    it('remaps an IP rule id by matching on oldId', () => {
+      const legacy = makeLegacyConfig({ ips: [makeLegacyIPRule({ id: 'stale_ip_id', ip: '203.0.113.7' })] })
+
+      const { config, changed } = applySyncResultToConfig(legacy, {
+        idRemappings: [{ oldId: 'stale_ip_id', newId: '3000', name: '203.0.113.7' }],
+      })
+
+      expect(changed).toBe(true)
+      expect(config.ips?.[0]?.id).toBe('3000')
+    })
+
+    // The real bug this covers: a brand-new IP rule (no id yet) gets one
+    // assigned during sync (Cloud Armor's priority-as-id — see
+    // CloudArmorFirewallService.syncRules), which must be matched by the IP
+    // address itself, the same way an id-less *rule* is matched by name.
+    // Reproduced against a real GCP project during #187's e2e verification:
+    // this write-back previously only ever touched `config.rules`, so a
+    // freshly-synced `ips[]` entry kept its `id: undefined` forever — every
+    // following `status`/`diff` then read it as a brand-new local IP with no
+    // remote match, and the real remote entry as an orphaned delete.
+    it('remaps an id-less IP rule by matching on its ip address', () => {
+      const legacy = makeLegacyConfig({ ips: [makeLegacyIPRule({ id: undefined, ip: '198.51.100.9' })] })
+
+      const { config, changed } = applySyncResultToConfig(legacy, {
+        idRemappings: [{ newId: '4000', name: '198.51.100.9' }],
+      })
+
+      expect(changed).toBe(true)
+      expect(config.ips?.[0]?.id).toBe('4000')
+    })
+
+    it('does not touch ips with no matching remapping', () => {
+      const legacy = makeLegacyConfig({ ips: [makeLegacyIPRule({ id: 'unrelated_ip_id', ip: '192.0.2.1' })] })
+
+      const { config, changed } = applySyncResultToConfig(legacy, {
+        idRemappings: [{ oldId: 'stale_ip_id', newId: '3000', name: '203.0.113.7' }],
+      })
+
+      expect(changed).toBe(false)
+      expect(config.ips?.[0]?.id).toBe('unrelated_ip_id')
+    })
+
     it('reports unchanged and returns an equivalent config when there is nothing to write back', () => {
       const legacy = makeLegacyConfig({ version: 5 })
 
