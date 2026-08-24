@@ -383,6 +383,45 @@ describe('CloudArmorFirewallService', () => {
       expect(result.errors![0]).toContain('boom')
     })
 
+    it('a translation failure on one rule does not discard another rule already added in the same sync (#250)', async () => {
+      jest.spyOn(client, 'getPolicy').mockResolvedValue(policy([]))
+      const addRuleSpy = jest.spyOn(client, 'addRule').mockResolvedValue(undefined)
+
+      const config: UnifiedConfig = {
+        ...baseConfig,
+        rules: [
+          {
+            name: 'Rule A (translatable)',
+            enabled: true,
+            conditions: [{ field: 'path', operator: 'eq', value: '/a' }],
+            action: { type: 'deny' },
+          },
+          {
+            // `region` has no CEL mapping in CelExpressionBuilder — throws
+            // during translation, not during the network call.
+            name: 'Rule B (untranslatable)',
+            enabled: true,
+            conditions: [{ field: 'region', operator: 'eq', value: 'US' }],
+            action: { type: 'deny' },
+          },
+        ],
+      }
+
+      const result = await service.syncRules(config)
+
+      // syncRules must return a normal result, not throw — a thrown error
+      // here means the caller (src/commands/sync.ts) never reaches
+      // applySyncResultToConfig, leaving the local config permanently
+      // desynced from the rule that DID get created remotely.
+      expect(result.success).toBe(false)
+      expect(result.rulesAdded).toBe(1)
+      expect(addRuleSpy).toHaveBeenCalledTimes(1)
+      expect(result.idRemappings).toHaveLength(1)
+      expect(result.idRemappings![0]!.name).toBe('Rule A (translatable)')
+      expect(result.errors).toHaveLength(1)
+      expect(result.errors![0]).toContain('Rule B (untranslatable)')
+    })
+
     it('does not delete+recreate a rules[]-authored single-IP rule on a second sync (#248)', async () => {
       const singleIpRule: UnifiedRule = {
         id: '1000',

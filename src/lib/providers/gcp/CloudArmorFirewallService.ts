@@ -220,9 +220,16 @@ export class CloudArmorFirewallService extends BaseFirewallService implements IF
       let rulesAdded = 0
       for (const rule of rulesToAdd) {
         const priority = rule.priority ?? assignPriority()
-        const translation = RuleTranslator.unifiedToGcp({ ...rule, priority })
-        translation.warnings.forEach((w) => warnings.push(w.message))
+        // Translation happens inside the try, not before it: it can throw
+        // (CelExpressionBuilder rejects unsupported fields, parseWindowToSeconds
+        // rejects a malformed rate-limit window) just as easily as the network
+        // call can fail, and a throw here needs the exact same per-item
+        // isolation — recorded in errors[], loop moves on — rather than
+        // escaping to the outer catch and discarding every rule already
+        // added by an earlier iteration in this same loop (#250).
         try {
+          const translation = RuleTranslator.unifiedToGcp({ ...rule, priority })
+          translation.warnings.forEach((w) => warnings.push(w.message))
           logger.debug(`Adding Cloud Armor rule at priority ${priority}: ${translation.result.description}`)
           await this.client.addRule(translation.result)
           rulesAdded++
@@ -238,20 +245,23 @@ export class CloudArmorFirewallService extends BaseFirewallService implements IF
         const oldPriority = priorityOf(rule.id)
         if (oldPriority === undefined) continue
 
-        const translation = RuleTranslator.unifiedToGcp(rule)
-        translation.warnings.forEach((w) => warnings.push(w.message))
-
-        // Cloud Armor has no "change priority" operation (see types/gcp.ts's
-        // CloudArmorRule doc comment) — a PATCH is always addressed by, and
-        // can only touch, the rule already at oldPriority; a body that also
-        // carries a different desired priority doesn't relocate it, the
-        // field is just ignored server-side. Route a priority change through
-        // remove-then-add-at-the-new-priority instead, the one relocation
-        // path the real API supports, with the same idRemappings bookkeeping
-        // a brand-new rule gets — this rule's addressing id is changing too
-        // (#249).
-        const relocating = rule.priority !== undefined && rule.priority !== oldPriority
+        // Translation (and the relocation check that depends on it) happens
+        // inside the try — see the identical reasoning on the rulesToAdd
+        // loop above (#250).
         try {
+          const translation = RuleTranslator.unifiedToGcp(rule)
+          translation.warnings.forEach((w) => warnings.push(w.message))
+
+          // Cloud Armor has no "change priority" operation (see types/gcp.ts's
+          // CloudArmorRule doc comment) — a PATCH is always addressed by, and
+          // can only touch, the rule already at oldPriority; a body that also
+          // carries a different desired priority doesn't relocate it, the
+          // field is just ignored server-side. Route a priority change through
+          // remove-then-add-at-the-new-priority instead, the one relocation
+          // path the real API supports, with the same idRemappings bookkeeping
+          // a brand-new rule gets — this rule's addressing id is changing too
+          // (#249).
+          const relocating = rule.priority !== undefined && rule.priority !== oldPriority
           if (relocating) {
             logger.debug(`Relocating Cloud Armor rule from priority ${oldPriority} to ${rule.priority}`)
             await this.client.removeRule(oldPriority)
@@ -271,8 +281,10 @@ export class CloudArmorFirewallService extends BaseFirewallService implements IF
       let ipsAdded = 0
       for (const ip of ipsToAdd) {
         const priority = priorityOf(ip.id) ?? assignPriority()
-        const translated = RuleTranslator.unifiedIPToGcp(ip, priority)
+        // Translation inside the try — unifiedIPToGcp throws on an invalid
+        // IP/CIDR, same isolation reasoning as rulesToAdd above (#250).
         try {
+          const translated = RuleTranslator.unifiedIPToGcp(ip, priority)
           logger.debug(`Adding Cloud Armor IP rule at priority ${priority}: ${ip.ip}`)
           await this.client.addRule(translated)
           ipsAdded++
