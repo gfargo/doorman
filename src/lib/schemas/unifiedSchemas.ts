@@ -1,5 +1,13 @@
 import { z } from 'zod'
-import type { UnifiedCondition, UnifiedAction, UnifiedRule, UnifiedIPRule, UnifiedConfig } from '../types/unified'
+import type {
+  UnifiedCondition,
+  UnifiedAction,
+  UnifiedRule,
+  UnifiedIPRule,
+  UnifiedManagedRuleGroupOverride,
+  UnifiedManagedRuleGroup,
+  UnifiedConfig,
+} from '../types/unified'
 import {
   actionTypeSchema,
   operatorSchema,
@@ -92,11 +100,29 @@ export const unifiedIPRuleSchema = z.object({
   action: z.enum(['deny', 'allow']),
 }) satisfies z.ZodType<UnifiedIPRule>
 
+// Managed rule group per-rule override schema
+export const unifiedManagedRuleGroupOverrideSchema = z.object({
+  ruleId: z.string().min(1, 'ruleId is required'),
+  action: actionTypeSchema.optional(),
+  enabled: z.boolean().optional(),
+}) satisfies z.ZodType<UnifiedManagedRuleGroupOverride>
+
+// Managed rule group schema (#183)
+export const unifiedManagedRuleGroupSchema = z.object({
+  id: idSchema,
+  ruleset: z.string().min(1, 'ruleset is required'),
+  name: z.string().optional(),
+  enabled: z.boolean(),
+  action: actionTypeSchema.optional(),
+  overrides: z.array(unifiedManagedRuleGroupOverrideSchema).optional(),
+}) satisfies z.ZodType<UnifiedManagedRuleGroup>
+
 // Unified config schema
 export const unifiedConfigSchema = baseConfigSchema.extend({
   providers: providersConfigSchema.optional(),
   rules: z.array(unifiedRuleSchema),
   ips: z.array(unifiedIPRuleSchema).optional(),
+  managedRules: z.array(unifiedManagedRuleGroupSchema).optional(),
   metadata: configMetadataSchema.optional(),
 }) satisfies z.ZodType<UnifiedConfig>
 

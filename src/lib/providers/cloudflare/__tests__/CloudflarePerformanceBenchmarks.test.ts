@@ -604,6 +604,21 @@ describe('Cloudflare Performance Benchmarks', () => {
      */
     it('should maintain consistent performance across multiple operations', async () => {
       const mockRuleset = TestDataGenerator.generateCloudflareRuleset(20)
+      // #183: fetchConfig now also looks up the managed-rules ruleset
+      // (separate phase). Included here alongside the custom one so a single
+      // cached `listRulesets()` response satisfies both lookups — matching a
+      // real zone that already has both provisioned — rather than each of
+      // the 10 fetchConfig() calls falling through to an uncached
+      // createRuleset() call and exhausting this fixed-size mock queue.
+      const mockManagedRuleset: CloudflareRuleset = {
+        id: 'managed-ruleset-1',
+        name: 'Doorman Managed Rules',
+        description: 'Managed rule groups deployed by Doorman',
+        kind: 'zone',
+        phase: 'http_request_firewall_managed',
+        version: '1',
+        rules: [],
+      }
 
       // Mock responses for multiple operations
       for (let i = 0; i < 10; i++) {
@@ -611,7 +626,7 @@ describe('Cloudflare Performance Benchmarks', () => {
           new Response(
             JSON.stringify({
               success: true,
-              result: [mockRuleset],
+              result: [mockRuleset, mockManagedRuleset],
             }),
           ),
         )

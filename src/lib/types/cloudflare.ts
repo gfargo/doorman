@@ -31,6 +31,7 @@ export type CloudflareAction =
   | 'allow'
   | 'rewrite'
   | 'redirect'
+  | 'execute' // Deploys a managed/vendor ruleset (#183) — see CloudflareExecuteActionParameters.
 
 /**
  * Cloudflare action parameters for block actions
@@ -78,12 +79,53 @@ export interface CloudflareSkipActionParameters {
 }
 
 /**
+ * A single rule's override within an executed managed ruleset, referenced
+ * by that rule's id within the vendor ruleset (not doorman's own id space).
+ */
+export interface CloudflareManagedRuleOverride {
+  id: string
+  action?: CloudflareAction
+  enabled?: boolean
+}
+
+/**
+ * A tag/category-level override within an executed managed ruleset — applies
+ * to every rule in the ruleset carrying that tag (e.g. Cloudflare's
+ * "wordpress" tag on its Managed Ruleset).
+ */
+export interface CloudflareManagedRuleCategoryOverride {
+  category: string
+  action?: CloudflareAction
+  enabled?: boolean
+}
+
+/**
+ * Cloudflare action parameters for the `execute` action — deploys a
+ * vendor-managed ruleset, identified by `id`, with optional overrides at
+ * the ruleset, category/tag, and individual-rule level. Confirmed against
+ * https://developers.cloudflare.com/ruleset-engine/managed-rulesets/override-managed-ruleset/
+ * (#183) — doorman only models ruleset-level and rule-level overrides today
+ * (see UnifiedManagedRuleGroup); `categories` exists here because it's part
+ * of the real API shape, but nothing currently populates it.
+ */
+export interface CloudflareExecuteActionParameters {
+  id: string
+  overrides?: {
+    action?: CloudflareAction
+    enabled?: boolean
+    categories?: CloudflareManagedRuleCategoryOverride[]
+    rules?: CloudflareManagedRuleOverride[]
+  }
+}
+
+/**
  * Cloudflare action parameters union
  */
 export type CloudflareActionParameters =
   | CloudflareBlockActionParameters
   | CloudflareRedirectActionParameters
   | CloudflareSkipActionParameters
+  | CloudflareExecuteActionParameters
 
 /**
  * Cloudflare rule

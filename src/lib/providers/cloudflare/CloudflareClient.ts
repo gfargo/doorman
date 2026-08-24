@@ -428,6 +428,47 @@ export class CloudflareClient extends BaseFirewallClient {
   }
 
   /**
+   * Get or create the managed-rules (execute) ruleset (#183).
+   *
+   * Deployed rulesets (Cloudflare Managed Ruleset, OWASP CRS, etc.) live in
+   * their own phase entrypoint, `http_request_firewall_managed`, entirely
+   * separate from the custom-rules ruleset above — Cloudflare evaluates the
+   * two phases in a fixed order (custom rules always run first, zone-wide,
+   * not configurable), so the two rulesets never interact or need
+   * cross-referencing.
+   *
+   * Looked up by `phase` alone, not `phase` + `kind` like the custom-rules
+   * lookup above: a zone can only have one entrypoint ruleset bound to a
+   * given phase, so `phase` alone is already a unique match — this avoids
+   * depending on the exact `kind` value Cloudflare assigns to a zone-owned
+   * phase entrypoint ruleset, which wasn't confirmed against a live API
+   * response while building this (see #183's implementation notes). The
+   * `kind: 'zone'` used on create is the standard Rulesets API convention
+   * for a customer-owned phase entrypoint; verify this against a real zone
+   * or the mock server before trusting it in production.
+   */
+  public async getOrCreateManagedRulesRuleset(): Promise<CloudflareRuleset> {
+    logger.debug('Looking for existing managed-rules ruleset')
+
+    const rulesets = await this.listRulesets()
+    const existingRuleset = rulesets.find((rs) => rs.phase === 'http_request_firewall_managed')
+
+    if (existingRuleset) {
+      logger.debug(`Found existing managed-rules ruleset: ${existingRuleset.id}`)
+      return existingRuleset
+    }
+
+    logger.info('No existing managed-rules ruleset found, creating new one')
+    return this.createRuleset({
+      name: 'Doorman Managed Rules',
+      kind: 'zone',
+      phase: 'http_request_firewall_managed',
+      description: 'Managed rule groups deployed by Doorman',
+      rules: [],
+    })
+  }
+
+  /**
    * Verify API credentials and connectivity
    */
   public async verifyCredentials(): Promise<boolean> {

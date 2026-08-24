@@ -4,6 +4,7 @@ import {
   unifiedRuleSchema,
   unifiedIPRuleSchema,
   unifiedConfigSchema,
+  unifiedManagedRuleGroupSchema,
   validateUnifiedConfig,
 } from '../unifiedSchemas'
 
@@ -215,6 +216,51 @@ describe('unifiedSchemas', () => {
     })
   })
 
+  // #183 — managed rule group support.
+  describe('unifiedManagedRuleGroupSchema', () => {
+    it('accepts a minimal managed rule group', () => {
+      const result = unifiedManagedRuleGroupSchema.safeParse({
+        ruleset: 'efb7b8c949ac4650a09736fc376e9aee',
+        enabled: true,
+      })
+      expect(result.success).toBe(true)
+    })
+
+    it('accepts a managed rule group with all optional fields', () => {
+      const result = unifiedManagedRuleGroupSchema.safeParse({
+        id: 'execute-1',
+        ruleset: 'efb7b8c949ac4650a09736fc376e9aee',
+        name: 'OWASP Core Ruleset',
+        enabled: true,
+        action: 'log',
+        overrides: [
+          { ruleId: 'cf-rule-1', action: 'deny', enabled: true },
+          { ruleId: 'cf-rule-2', enabled: false },
+        ],
+      })
+      expect(result.success).toBe(true)
+    })
+
+    it('rejects a missing ruleset', () => {
+      const result = unifiedManagedRuleGroupSchema.safeParse({ enabled: true })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects a missing enabled', () => {
+      const result = unifiedManagedRuleGroupSchema.safeParse({ ruleset: 'efb7b8c949ac4650a09736fc376e9aee' })
+      expect(result.success).toBe(false)
+    })
+
+    it('rejects an override missing ruleId', () => {
+      const result = unifiedManagedRuleGroupSchema.safeParse({
+        ruleset: 'efb7b8c949ac4650a09736fc376e9aee',
+        enabled: true,
+        overrides: [{ action: 'deny' }],
+      })
+      expect(result.success).toBe(false)
+    })
+  })
+
   describe('unifiedConfigSchema', () => {
     const validConfig = {
       rules: [
@@ -249,6 +295,30 @@ describe('unifiedSchemas', () => {
     it('rejects config without rules', () => {
       const result = unifiedConfigSchema.safeParse({})
       expect(result.success).toBe(false)
+    })
+
+    // #183 — Zod has no `.strict()` anywhere in this schema, so it silently
+    // *strips* unknown keys rather than rejecting them. A `managedRules`
+    // field added only to the `UnifiedConfig` TS type (and not wired into
+    // this schema) would vanish here on every safeParse — `success: true`
+    // alone wouldn't catch that, since a silently-stripped field still
+    // "successfully" parses. Asserting on `result.data.managedRules` itself
+    // is the part that actually proves the field survives.
+    it('round-trips managedRules through safeParse without stripping it', () => {
+      const managedRules = [
+        {
+          id: 'execute-1',
+          ruleset: 'efb7b8c949ac4650a09736fc376e9aee',
+          name: 'OWASP Core Ruleset',
+          enabled: true,
+          action: 'log' as const,
+          overrides: [{ ruleId: 'cf-rule-1', action: 'deny' as const, enabled: true }],
+        },
+      ]
+      const result = unifiedConfigSchema.safeParse({ ...validConfig, managedRules })
+
+      expect(result.success).toBe(true)
+      expect(result.success && result.data.managedRules).toEqual(managedRules)
     })
   })
 

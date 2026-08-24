@@ -818,6 +818,20 @@ describe('VercelFirewallService', () => {
       ips: [],
     }
 
+    // #183 — Vercel doesn't implement managed rule groups. A config that
+    // declares them must fail loudly (BaseFirewallService.assertManagedRulesSupported),
+    // not silently report a clean diff/sync while quietly ignoring what the
+    // user asked for.
+    it('throws a clear error when the config declares managedRules', async () => {
+      const configWithManagedRules: UnifiedConfig = {
+        ...unifiedConfig,
+        rules: [],
+        managedRules: [{ ruleset: 'some-vendor-ruleset', enabled: true }],
+      }
+
+      await expect(service.getChanges(configWithManagedRules)).rejects.toThrow(/does not support managed rule groups/)
+    })
+
     it('should detect additions', async () => {
       jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({
         ...mockVercelConfig,

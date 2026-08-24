@@ -52,6 +52,9 @@ export interface SyncResult {
   ipsAdded?: number
   ipsUpdated?: number
   ipsDeleted?: number
+  managedRulesAdded?: number
+  managedRulesUpdated?: number
+  managedRulesDeleted?: number
   version?: number
   /** Provider's post-sync timestamp, paired with `version` for local
    * config metadata write-back. Optional — not every provider tracks one. */
@@ -100,6 +103,9 @@ export interface ChangeSet {
   ipsToAdd?: import('../types/unified').UnifiedIPRule[]
   ipsToUpdate?: import('../types/unified').UnifiedIPRule[]
   ipsToDelete?: import('../types/unified').UnifiedIPRule[]
+  managedRulesToAdd?: import('../types/unified').UnifiedManagedRuleGroup[]
+  managedRulesToUpdate?: import('../types/unified').UnifiedManagedRuleGroup[]
+  managedRulesToDelete?: import('../types/unified').UnifiedManagedRuleGroup[]
   /** The provider's current remote version, if it tracks one. Lets a caller
    * detect version-only drift (e.g. another tool synced since the local
    * config was last saved) even when there are no rule/IP changes to make
@@ -117,14 +123,13 @@ export interface FeatureSet {
   supportsRateLimiting: boolean
   /**
    * Whether the provider offers vendor-managed rule groups (Cloudflare
-   * Managed Rulesets, AWS Managed Rules, GCP preconfigured WAF, …).
+   * Managed Rulesets, AWS Managed Rules, GCP preconfigured WAF, …) and can
+   * act on `UnifiedConfig.managedRules[]` (#183).
    *
-   * **Reserved — declared but not yet actionable.** Nothing consumes this
-   * today because `UnifiedConfig` has no surface for declaring *which*
-   * managed rulesets to enable or how to override individual rules within
-   * them. Kept as the capability signal the config surface will gate on
-   * once that lands; see the managed-rule-groups issue. Do not treat a
-   * `true` here as meaning doorman can currently manage those rules.
+   * Gated by `BaseFirewallService.assertManagedRulesSupported`: a provider
+   * that declares `false` here throws a clear error from `getChanges`/
+   * `syncRules` if a config declares any `managedRules`, rather than
+   * silently no-op'ing. Only Cloudflare implements this today.
    */
   supportsManagedRules: boolean
   supportsGeoBlocking: boolean

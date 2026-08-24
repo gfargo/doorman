@@ -67,6 +67,20 @@ describe('CloudflareFirewallService', () => {
       modified_on: '2024-01-01T00:00:00Z',
     })
     jest.spyOn(mockClient, 'getListItems').mockResolvedValue([])
+
+    // Default managed-rules ruleset (#183): empty, so fetchConfig/getChanges/
+    // syncRules tests that don't care about managed rule groups get a fast,
+    // deterministic response instead of falling through to a real network
+    // call. Tests that do care override this with their own mock.
+    jest.spyOn(mockClient, 'getOrCreateManagedRulesRuleset').mockResolvedValue({
+      id: 'managed-ruleset-1',
+      name: 'Doorman Managed Rules',
+      description: 'Managed rule groups deployed by Doorman',
+      kind: 'zone',
+      phase: 'http_request_firewall_managed',
+      version: '1',
+      rules: [],
+    })
   })
 
   afterEach(() => {
@@ -1417,6 +1431,247 @@ describe('CloudflareFirewallService', () => {
       expect(changes.rulesToUpdate).toHaveLength(1)
       expect(changes.rulesToDelete).toHaveLength(0)
       expect(changes.hasChanges).toBe(true)
+    })
+  })
+
+  // #183 — managed rule group support. `managedRules` is optional and
+  // independent of `rules`/`ips`: a config that never declares it should
+  // never touch the managed-rules ruleset at all (opt-in, not "empty means
+  // clear"). Every scenario below sets up its own custom-rules mocks rather
+  // than relying on shared fixtures, matching the surrounding describe
+  // blocks' convention.
+  describe('managed rule groups (#183)', () => {
+    const emptyCustomRuleset: CloudflareRuleset = {
+      id: 'ruleset-1',
+      name: 'Test Ruleset',
+      description: 'Test',
+      kind: 'custom',
+      phase: 'http_request_firewall_custom',
+      version: '1',
+      rules: [],
+    }
+
+    it('fetchConfig includes managed rule groups translated from the managed-rules ruleset', async () => {
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(emptyCustomRuleset)
+      jest.spyOn(mockClient, 'getOrCreateManagedRulesRuleset').mockResolvedValue({
+        id: 'managed-ruleset-1',
+        name: 'Doorman Managed Rules',
+        description: 'Test',
+        kind: 'zone',
+        phase: 'http_request_firewall_managed',
+        version: '1',
+        rules: [
+          {
+            id: 'execute-1',
+            action: 'execute',
+            expression: 'true',
+            description: 'OWASP Core Ruleset',
+            enabled: true,
+            action_parameters: { id: 'efb7b8c949ac4650a09736fc376e9aee' } as any,
+          },
+        ],
+      })
+
+      const config = await service.fetchConfig()
+
+      expect(config.managedRules).toHaveLength(1)
+      expect(config.managedRules?.[0]).toEqual({
+        id: 'execute-1',
+        ruleset: 'efb7b8c949ac4650a09736fc376e9aee',
+        enabled: true,
+        name: 'OWASP Core Ruleset',
+      })
+    })
+
+    it('getChanges does not touch the managed-rules ruleset when the config does not declare managedRules', async () => {
+      const localConfig: UnifiedConfig = { version: '2.0', provider: 'cloudflare', rules: [], ips: [] }
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(emptyCustomRuleset)
+      const managedRulesSpy = jest.spyOn(mockClient, 'getOrCreateManagedRulesRuleset')
+
+      const changes = await service.getChanges(localConfig)
+
+      expect(managedRulesSpy).not.toHaveBeenCalled()
+      expect(changes.managedRulesToAdd).toEqual([])
+      expect(changes.managedRulesToUpdate).toEqual([])
+      expect(changes.managedRulesToDelete).toEqual([])
+      expect(changes.hasChanges).toBe(false)
+    })
+
+    it('getChanges detects a managed rule group to add when none exists remotely', async () => {
+      const localConfig: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [],
+        ips: [],
+        managedRules: [{ id: 'execute-1', ruleset: 'efb7b8c949ac4650a09736fc376e9aee', enabled: true }],
+      }
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(emptyCustomRuleset)
+      jest.spyOn(mockClient, 'getOrCreateManagedRulesRuleset').mockResolvedValue({
+        id: 'managed-ruleset-1',
+        name: 'Doorman Managed Rules',
+        description: 'Test',
+        kind: 'zone',
+        phase: 'http_request_firewall_managed',
+        version: '1',
+        rules: [], // nothing deployed remotely yet
+      })
+
+      const changes = await service.getChanges(localConfig)
+
+      expect(changes.managedRulesToAdd).toHaveLength(1)
+      expect(changes.managedRulesToAdd?.[0]?.ruleset).toBe('efb7b8c949ac4650a09736fc376e9aee')
+      expect(changes.managedRulesToUpdate).toHaveLength(0)
+      expect(changes.managedRulesToDelete).toHaveLength(0)
+      expect(changes.hasChanges).toBe(true)
+    })
+
+    // Regression coverage for a real bug caught while building this test:
+    // diffing managed rule groups by round-tripping the remote rule through
+    // cloudflareToUnifiedManagedRuleGroup (Unified space) synthesizes a
+    // `name` from Cloudflare's `description` field — so a group declared
+    // with no explicit `name` would never deep-equal its own remote
+    // round-trip, showing `toUpdate` on every sync forever, even a genuine
+    // no-op. getChanges diffs in Cloudflare's native space instead (see its
+    // doc comment), which this proves: the group below has no `name`.
+    it('detects no changes for a declared managed rule group matching its remote counterpart (diff-on-declaration)', async () => {
+      const localConfig: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [],
+        ips: [],
+        managedRules: [{ id: 'execute-1', ruleset: 'efb7b8c949ac4650a09736fc376e9aee', enabled: true, action: 'log' }],
+      }
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(emptyCustomRuleset)
+      jest.spyOn(mockClient, 'getOrCreateManagedRulesRuleset').mockResolvedValue({
+        id: 'managed-ruleset-1',
+        name: 'Doorman Managed Rules',
+        description: 'Test',
+        kind: 'zone',
+        phase: 'http_request_firewall_managed',
+        version: '1',
+        rules: [
+          {
+            id: 'execute-1',
+            action: 'execute',
+            expression: 'true',
+            // No explicit name was declared locally, so this is exactly what
+            // unifiedManagedRuleGroupToCloudflare's fallback produces.
+            description: 'Managed ruleset efb7b8c949ac4650a09736fc376e9aee',
+            enabled: true,
+            action_parameters: {
+              id: 'efb7b8c949ac4650a09736fc376e9aee',
+              overrides: { action: 'log' },
+            } as any,
+          },
+        ],
+      })
+
+      const changes = await service.getChanges(localConfig)
+
+      expect(changes.managedRulesToAdd).toHaveLength(0)
+      expect(changes.managedRulesToUpdate).toHaveLength(0)
+      expect(changes.managedRulesToDelete).toHaveLength(0)
+      expect(changes.hasChanges).toBe(false)
+    })
+
+    it('getChanges detects an update and a delete together', async () => {
+      const localConfig: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [],
+        ips: [],
+        managedRules: [{ id: 'execute-b', ruleset: 'ruleset-b', enabled: true, action: 'log' }],
+      }
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(emptyCustomRuleset)
+      jest.spyOn(mockClient, 'getOrCreateManagedRulesRuleset').mockResolvedValue({
+        id: 'managed-ruleset-1',
+        name: 'Doorman Managed Rules',
+        description: 'Test',
+        kind: 'zone',
+        phase: 'http_request_firewall_managed',
+        version: '1',
+        rules: [
+          {
+            // Same id as the local group, but no override — content differs,
+            // so this should show as an update, not add+delete.
+            id: 'execute-b',
+            action: 'execute',
+            expression: 'true',
+            description: 'Managed ruleset ruleset-b',
+            enabled: true,
+            action_parameters: { id: 'ruleset-b' } as any,
+          },
+          {
+            // Not declared locally at all — should show as a delete.
+            id: 'execute-c',
+            action: 'execute',
+            expression: 'true',
+            description: 'Managed ruleset ruleset-c',
+            enabled: true,
+            action_parameters: { id: 'ruleset-c' } as any,
+          },
+        ],
+      })
+
+      const changes = await service.getChanges(localConfig)
+
+      expect(changes.managedRulesToAdd).toHaveLength(0)
+      expect(changes.managedRulesToUpdate).toHaveLength(1)
+      expect(changes.managedRulesToUpdate?.[0]?.id).toBe('execute-b')
+      expect(changes.managedRulesToDelete).toHaveLength(1)
+      expect(changes.managedRulesToDelete?.[0]?.ruleset).toBe('ruleset-c')
+      expect(changes.hasChanges).toBe(true)
+    })
+
+    it('syncRules writes the managed-rules ruleset and reports counts when the config declares managedRules', async () => {
+      const localConfig: UnifiedConfig = {
+        version: '2.0',
+        provider: 'cloudflare',
+        rules: [],
+        ips: [],
+        managedRules: [{ id: 'execute-1', ruleset: 'efb7b8c949ac4650a09736fc376e9aee', enabled: true }],
+      }
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(emptyCustomRuleset)
+      jest.spyOn(mockClient, 'updateRuleset').mockImplementation(async (id) => ({
+        ...emptyCustomRuleset,
+        id,
+        version: '2',
+      }))
+      jest.spyOn(mockClient, 'getOrCreateManagedRulesRuleset').mockResolvedValue({
+        id: 'managed-ruleset-1',
+        name: 'Doorman Managed Rules',
+        description: 'Test',
+        kind: 'zone',
+        phase: 'http_request_firewall_managed',
+        version: '1',
+        rules: [], // nothing remote yet, so this is an add
+      })
+
+      const result = await service.syncRules(localConfig)
+
+      expect(result.success).toBe(true)
+      expect(result.managedRulesAdded).toBe(1)
+      expect(mockClient.updateRuleset).toHaveBeenCalledWith(
+        'managed-ruleset-1',
+        expect.objectContaining({
+          rules: [expect.objectContaining({ id: 'execute-1', action: 'execute' })],
+        }),
+      )
+    })
+
+    it('syncRules does not touch the managed-rules ruleset when the config does not declare managedRules', async () => {
+      const localConfig: UnifiedConfig = { version: '2.0', provider: 'cloudflare', rules: [], ips: [] }
+      jest.spyOn(mockClient, 'getOrCreateFirewallRuleset').mockResolvedValue(emptyCustomRuleset)
+      jest.spyOn(mockClient, 'updateRuleset').mockResolvedValue({ ...emptyCustomRuleset, version: '2' })
+      const managedRulesetSpy = jest.spyOn(mockClient, 'getOrCreateManagedRulesRuleset')
+
+      const result = await service.syncRules(localConfig)
+
+      expect(result.success).toBe(true)
+      expect(managedRulesetSpy).not.toHaveBeenCalled()
+      expect(result.managedRulesAdded).toBe(0)
+      expect(result.managedRulesUpdated).toBe(0)
+      expect(result.managedRulesDeleted).toBe(0)
     })
   })
 

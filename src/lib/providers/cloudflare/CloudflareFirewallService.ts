@@ -8,7 +8,7 @@ import { CloudflareErrorHandler } from './CloudflareErrorHandler'
 import { cloudflareErrors } from '../../errors'
 import { sortRulesByPriority } from '../../utils/sortRulesByPriority'
 import type { ProviderType, SyncOptions, SyncResult, ChangeSet, FeatureSet, HealthScore } from '../IFirewallProvider'
-import type { UnifiedConfig, UnifiedRule, UnifiedIPRule } from '../../types/unified'
+import type { UnifiedConfig, UnifiedRule, UnifiedIPRule, UnifiedManagedRuleGroup } from '../../types/unified'
 import type { CloudflareRule } from '../../types/cloudflare'
 // CloudflareRuleset imported for future caching use
 // import type { CloudflareRuleset } from '../../types/cloudflare'
@@ -167,6 +167,26 @@ export class CloudflareFirewallService extends BaseFirewallService {
         }
       }
 
+      // Managed rule groups (#183) live in the separate managed-rules phase
+      // entrypoint ruleset, not the custom-rules one processed above.
+      const managedRules: UnifiedManagedRuleGroup[] = []
+      try {
+        const managedRuleset = await this.client.getOrCreateManagedRulesRuleset()
+        for (const rule of managedRuleset.rules) {
+          if (!rule || rule.action !== 'execute') continue
+          const translation = RuleTranslator.cloudflareToUnifiedManagedRuleGroup(rule)
+          managedRules.push(translation.result)
+          if (translation.warnings.length > 0) {
+            translation.warnings.forEach((w) => {
+              const { TranslationWarningSystem } = require('../../translators/TranslationWarningSystem')
+              translationWarnings.push(TranslationWarningSystem.formatWarning(w))
+            })
+          }
+        }
+      } catch (error) {
+        logger.warn(`Failed to fetch managed rule groups: ${error instanceof Error ? error.message : String(error)}`)
+      }
+
       if (translationWarnings.length > 0) {
         logger.warn('Translation warnings detected:')
         translationWarnings.forEach((warning) => logger.warn(warning))
@@ -190,6 +210,7 @@ export class CloudflareFirewallService extends BaseFirewallService {
         },
         rules,
         ips,
+        managedRules,
         metadata: {
           version: parseInt(ruleset.version, 10),
           updatedAt: ruleset.last_updated,
@@ -232,6 +253,9 @@ export class CloudflareFirewallService extends BaseFirewallService {
         ipsAdded: dryRunResult.changes.ipsToAdd?.length || 0,
         ipsUpdated: dryRunResult.changes.ipsToUpdate?.length || 0,
         ipsDeleted: dryRunResult.changes.ipsToDelete?.length || 0,
+        managedRulesAdded: dryRunResult.changes.managedRulesToAdd?.length || 0,
+        managedRulesUpdated: dryRunResult.changes.managedRulesToUpdate?.length || 0,
+        managedRulesDeleted: dryRunResult.changes.managedRulesToDelete?.length || 0,
         warnings: dryRunResult.warnings,
       }
     }
@@ -399,6 +423,40 @@ export class CloudflareFirewallService extends BaseFirewallService {
       rules: cloudflareRules,
     })
 
+    // Managed rule groups (#183) live in a separate ruleset/phase, written
+    // independently of the custom-rules ruleset above. Only touched when the
+    // config actually declares `managedRules` — mirrors the `if
+    // (config.managedRules)` gate in getChanges, so a config that never
+    // opts in never has this ruleset created or modified, and an explicit
+    // `managedRules: []` clears it (full-array replace, same semantics as
+    // custom rules).
+    let managedRulesAdded = 0
+    let managedRulesUpdated = 0
+    let managedRulesDeleted = 0
+    if (config.managedRules) {
+      const managedCloudflareRules: CloudflareRule[] = []
+      for (const group of config.managedRules) {
+        const translation = RuleTranslator.unifiedManagedRuleGroupToCloudflare(group)
+        managedCloudflareRules.push(translation.result)
+
+        if (translation.warnings.length > 0) {
+          translation.warnings.forEach((w) => {
+            const { TranslationWarningSystem } = require('../../translators/TranslationWarningSystem')
+            logger.warn(TranslationWarningSystem.formatWarning(w))
+          })
+        }
+      }
+
+      const managedRuleset = await this.client.getOrCreateManagedRulesRuleset()
+      await this.client.updateRuleset(managedRuleset.id, {
+        rules: managedCloudflareRules,
+      })
+
+      managedRulesAdded = dryRunResult.changes.managedRulesToAdd?.length || 0
+      managedRulesUpdated = dryRunResult.changes.managedRulesToUpdate?.length || 0
+      managedRulesDeleted = dryRunResult.changes.managedRulesToDelete?.length || 0
+    }
+
     const result: SyncResult = {
       success: true,
       // The actual write below is a full-ruleset replace, not incremental
@@ -415,6 +473,9 @@ export class CloudflareFirewallService extends BaseFirewallService {
       ipsAdded,
       ipsUpdated,
       ipsDeleted,
+      managedRulesAdded,
+      managedRulesUpdated,
+      managedRulesDeleted,
       version: parseInt(updatedRuleset.version, 10),
       warnings: dryRunResult.warnings?.length ? dryRunResult.warnings : undefined,
     }
@@ -472,6 +533,56 @@ export class CloudflareFirewallService extends BaseFirewallService {
       ipDiff = this.optimizer.diffIPRules(config.ips, remoteIPs)
     }
 
+    // Managed rule groups (#183) live in a separate ruleset/phase entirely
+    // (see CloudflareClient.getOrCreateManagedRulesRuleset), so they're
+    // fetched and diffed independently of custom rules above — but diffed
+    // the *same way* custom rules are: in Cloudflare's native space, not
+    // Unified space. `cloudflareToUnifiedManagedRuleGroup` synthesizes a
+    // `name` from Cloudflare's (always-present) `description` field, so a
+    // local group declared with no explicit `name` would never deep-equal
+    // its own remote round-trip in Unified space — a phantom `toUpdate` on
+    // every sync, forever. Comparing native CloudflareRule objects directly
+    // (translating only the local side, never the remote side) sidesteps
+    // that entirely — see diffCloudflareRules' doc comment for the identical
+    // reasoning applied to custom rules. This also means the diff is
+    // inherently on the *declaration* — the vendor ruleset's actual current
+    // rule contents are never fetched at all — never on content that could
+    // drift out from under it as the vendor updates the ruleset, exactly the
+    // risk the issue calls out.
+    let managedRulesDiff: {
+      toAdd: UnifiedManagedRuleGroup[]
+      toUpdate: UnifiedManagedRuleGroup[]
+      toDelete: UnifiedManagedRuleGroup[]
+    } = { toAdd: [], toUpdate: [], toDelete: [] }
+    if (config.managedRules) {
+      const managedRuleset = await this.client.getOrCreateManagedRulesRuleset()
+      const remoteManagedRules = managedRuleset.rules.filter((r) => r && r.id && r.action === 'execute')
+
+      const localManagedTranslations = config.managedRules.map((group) => ({
+        group,
+        translated: RuleTranslator.unifiedManagedRuleGroupToCloudflare(group).result,
+      }))
+      const groupByTranslatedId = new Map(localManagedTranslations.map((t) => [t.translated.id, t.group]))
+
+      const nativeDiff = this.diffItems<CloudflareRule>(
+        localManagedTranslations.map((t) => t.translated),
+        remoteManagedRules,
+        (a, b) => this.optimizer.cloudflareRulesEqual(a, b),
+      )
+
+      managedRulesDiff = {
+        // Every entry in nativeDiff.toAdd/toUpdate originated from
+        // groupByTranslatedId above (built from the same localManagedTranslations
+        // this diff was fed), so the lookup can't miss.
+        toAdd: nativeDiff.toAdd.map((r) => groupByTranslatedId.get(r.id)!),
+        toUpdate: nativeDiff.toUpdate.map((r) => groupByTranslatedId.get(r.id)!),
+        // No local counterpart for a remote-only group — best-effort
+        // translation back to Unified is fine for a delete preview, same
+        // reasoning as rulesToDelete above.
+        toDelete: nativeDiff.toDelete.map((r) => RuleTranslator.cloudflareToUnifiedManagedRuleGroup(r).result),
+      }
+    }
+
     return {
       rulesToAdd: ruleDiff.toAdd,
       rulesToUpdate: ruleDiff.toUpdate,
@@ -479,6 +590,9 @@ export class CloudflareFirewallService extends BaseFirewallService {
       ipsToAdd: ipDiff.toAdd,
       ipsToUpdate: ipDiff.toUpdate,
       ipsToDelete: ipDiff.toDelete,
+      managedRulesToAdd: managedRulesDiff.toAdd,
+      managedRulesToUpdate: managedRulesDiff.toUpdate,
+      managedRulesToDelete: managedRulesDiff.toDelete,
       version: parseInt(ruleset.version, 10),
       hasChanges:
         ruleDiff.toAdd.length > 0 ||
@@ -486,7 +600,10 @@ export class CloudflareFirewallService extends BaseFirewallService {
         rulesToDelete.length > 0 ||
         ipDiff.toAdd.length > 0 ||
         ipDiff.toUpdate.length > 0 ||
-        ipDiff.toDelete.length > 0,
+        ipDiff.toDelete.length > 0 ||
+        managedRulesDiff.toAdd.length > 0 ||
+        managedRulesDiff.toUpdate.length > 0 ||
+        managedRulesDiff.toDelete.length > 0,
     }
   }
 

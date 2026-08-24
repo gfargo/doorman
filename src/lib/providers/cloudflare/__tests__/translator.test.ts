@@ -2,9 +2,15 @@ jest.mock('../../../logger', () => ({
   logger: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }))
 
-import { cloudflareToUnified, unifiedToCloudflare, unifiedIPToCloudflare } from '../translator'
-import type { CloudflareRule } from '../../../types/cloudflare'
-import type { UnifiedRule, UnifiedIPRule } from '../../../types/unified'
+import {
+  cloudflareToUnified,
+  unifiedToCloudflare,
+  unifiedIPToCloudflare,
+  unifiedManagedRuleGroupToCloudflare,
+  cloudflareToUnifiedManagedRuleGroup,
+} from '../translator'
+import type { CloudflareRule, CloudflareExecuteActionParameters } from '../../../types/cloudflare'
+import type { UnifiedRule, UnifiedIPRule, UnifiedManagedRuleGroup } from '../../../types/unified'
 
 // Split out of the former RuleTranslator.test.ts as part of #196 — this
 // covers exactly the Cloudflare <-> Unified directions now living in
@@ -451,4 +457,168 @@ describe('cloudflare/translator', () => {
       expect(() => unifiedIPToCloudflare(ip)).toThrow('Invalid IP address or CIDR range')
     })
   })
+
+  // #183 — managed rule group support. These `execute` rules deploy a vendor
+  // ruleset (e.g. Cloudflare Managed Ruleset) rather than encoding custom
+  // logic, so the translation is structural (ruleset id, enabled, overrides)
+  // rather than the wirefilter-expression parsing the other tests exercise.
+  describe('unifiedManagedRuleGroupToCloudflare', () => {
+    function makeGroup(overrides: Partial<UnifiedManagedRuleGroup> = {}): UnifiedManagedRuleGroup {
+      return {
+        ruleset: 'efb7b8c949ac4650a09736fc376e9aee',
+        enabled: true,
+        ...overrides,
+      }
+    }
+
+    it('translates a minimal group to an execute rule with no overrides', () => {
+      const { result, warnings } = unifiedManagedRuleGroupToCloudflare(makeGroup())
+
+      expect(result.action).toBe('execute')
+      expect(result.expression).toBe('true')
+      expect(result.enabled).toBe(true)
+      expect(result.description).toBe('Managed ruleset efb7b8c949ac4650a09736fc376e9aee')
+      const params = result.action_parameters as CloudflareExecuteActionParameters
+      expect(params.id).toBe('efb7b8c949ac4650a09736fc376e9aee')
+      expect(params.overrides).toBeUndefined()
+      expect(warnings).toEqual([])
+    })
+
+    it('uses the provided id, or generates one when absent', () => {
+      const withId = unifiedManagedRuleGroupToCloudflare(makeGroup({ id: 'rule-abc' }))
+      expect(withId.result.id).toBe('rule-abc')
+
+      const withoutId = unifiedManagedRuleGroupToCloudflare(makeGroup())
+      expect(typeof withoutId.result.id).toBe('string')
+      expect(withoutId.result.id.length).toBeGreaterThan(0)
+    })
+
+    it('uses the group name as the description when present', () => {
+      const { result } = unifiedManagedRuleGroupToCloudflare(makeGroup({ name: 'OWASP Core Ruleset' }))
+      expect(result.description).toBe('OWASP Core Ruleset')
+    })
+
+    it('maps a ruleset-wide action override', () => {
+      const { result, warnings } = unifiedManagedRuleGroupToCloudflare(makeGroup({ action: 'log' }))
+      const params = result.action_parameters as CloudflareExecuteActionParameters
+      expect(params.overrides?.action).toBe('log')
+      expect(warnings).toEqual([])
+    })
+
+    it('warns and omits the override when the ruleset-wide action has no managed-rule equivalent', () => {
+      const { result, warnings } = unifiedManagedRuleGroupToCloudflare(makeGroup({ id: 'grp-1', action: 'redirect' }))
+      const params = result.action_parameters as CloudflareExecuteActionParameters
+      expect(params.overrides?.action).toBeUndefined()
+      expect(warnings.length).toBe(1)
+      expect(warnings[0]!.field).toBe('action')
+      expect(warnings[0]!.rule).toBe('grp-1')
+    })
+
+    it('maps per-rule overrides, including a bare enabled toggle with no action', () => {
+      const { result, warnings } = unifiedManagedRuleGroupToCloudflare(
+        makeGroup({
+          overrides: [
+            { ruleId: 'cf-rule-1', action: 'deny', enabled: true },
+            { ruleId: 'cf-rule-2', enabled: false },
+          ],
+        }),
+      )
+      const params = result.action_parameters as CloudflareExecuteActionParameters
+      expect(params.overrides?.rules).toEqual([
+        { id: 'cf-rule-1', action: 'block', enabled: true },
+        { id: 'cf-rule-2', enabled: false },
+      ])
+      expect(warnings).toEqual([])
+    })
+
+    it('warns per-rule when an override action has no managed-rule equivalent, identifying the specific ruleId', () => {
+      const { warnings } = unifiedManagedRuleGroupToCloudflare(
+        makeGroup({ id: 'grp-2', overrides: [{ ruleId: 'cf-rule-9', action: 'bypass' }] }),
+      )
+      expect(warnings.length).toBe(1)
+      expect(warnings[0]!.field).toBe('overrides[cf-rule-9].action')
+      expect(warnings[0]!.rule).toBe('grp-2')
+    })
+  })
+
+  describe('cloudflareToUnifiedManagedRuleGroup', () => {
+    it('translates a minimal execute rule back to a managed rule group', () => {
+      const rule: CloudflareRule = {
+        id: 'cf-execute-1',
+        action: 'execute',
+        expression: 'true',
+        description: 'Managed ruleset efb7b8c949ac4650a09736fc376e9aee',
+        enabled: true,
+        action_parameters: { id: 'efb7b8c949ac4650a09736fc376e9aee' } as CloudflareExecuteActionParameters,
+      }
+      const { result, warnings } = cloudflareToUnifiedManagedRuleGroup(rule)
+
+      expect(result).toEqual({
+        id: 'cf-execute-1',
+        ruleset: 'efb7b8c949ac4650a09736fc376e9aee',
+        enabled: true,
+        name: 'Managed ruleset efb7b8c949ac4650a09736fc376e9aee',
+      })
+      expect(warnings).toEqual([])
+    })
+
+    it('falls back to an empty ruleset id when action_parameters is missing', () => {
+      const rule: CloudflareRule = {
+        id: 'cf-execute-2',
+        action: 'execute',
+        expression: 'true',
+        enabled: true,
+      }
+      const { result } = cloudflareToUnifiedManagedRuleGroup(rule)
+      expect(result.ruleset).toBe('')
+    })
+
+    it('maps overrides.action and overrides.rules back to unified shape', () => {
+      const rule: CloudflareRule = {
+        id: 'cf-execute-3',
+        action: 'execute',
+        expression: 'true',
+        enabled: true,
+        action_parameters: {
+          id: 'efb7b8c949ac4650a09736fc376e9aee',
+          overrides: {
+            action: 'log',
+            rules: [
+              { id: 'cf-rule-1', action: 'block', enabled: true },
+              { id: 'cf-rule-2', enabled: false },
+            ],
+          },
+        } as CloudflareExecuteActionParameters,
+      }
+      const { result } = cloudflareToUnifiedManagedRuleGroup(rule)
+
+      expect(result.action).toBe('log')
+      expect(result.overrides).toEqual([
+        { ruleId: 'cf-rule-1', action: 'deny', enabled: true },
+        { ruleId: 'cf-rule-2', enabled: false },
+      ])
+    })
+
+    it('round-trips through unifiedManagedRuleGroupToCloudflare and back', () => {
+      const original = makeManagedGroup()
+      const { result: cfRule } = unifiedManagedRuleGroupToCloudflare(original)
+      const { result: roundTripped } = cloudflareToUnifiedManagedRuleGroup(cfRule)
+
+      expect(roundTripped).toEqual(original)
+    })
+  })
 })
+
+function makeManagedGroup(): UnifiedManagedRuleGroup {
+  return {
+    id: 'grp-roundtrip',
+    ruleset: 'efb7b8c949ac4650a09736fc376e9aee',
+    name: 'OWASP Core Ruleset',
+    enabled: true,
+    action: 'log',
+    overrides: [
+      { ruleId: 'cf-rule-1', action: 'deny', enabled: true },
+      { ruleId: 'cf-rule-2', enabled: false },
+    ],
+  }
+}

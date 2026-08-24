@@ -1,5 +1,5 @@
-import type { CloudflareRule } from '../../types/cloudflare'
-import type { UnifiedRule, UnifiedIPRule, UnifiedAction } from '../../types/unified'
+import type { CloudflareRule, CloudflareAction, CloudflareExecuteActionParameters } from '../../types/cloudflare'
+import type { UnifiedRule, UnifiedIPRule, UnifiedAction, UnifiedManagedRuleGroup } from '../../types/unified'
 import type { ActionType } from '../../types/common'
 import type { TranslationResult, TranslationWarning } from '../../translators/TranslationTypes'
 import { TranslationWarningSystem } from '../../translators/TranslationWarningSystem'
@@ -215,6 +215,136 @@ export function unifiedIPToCloudflare(ip: UnifiedIPRule): CloudflareRule {
   }
 }
 
+/**
+ * Translate a Unified managed rule group to a Cloudflare `execute` rule.
+ * Deploys via a phase-entrypoint ruleset the same way custom rules do, just
+ * targeting `http_request_firewall_managed` instead of
+ * `http_request_firewall_custom` — see CloudflareClient.getOrCreateManagedRulesRuleset.
+ * `expression: 'true'` means the ruleset applies to every request; doorman
+ * doesn't currently expose a way to scope *when* a managed ruleset applies,
+ * only whether it's enabled and how its own rules are overridden (#183).
+ */
+export function unifiedManagedRuleGroupToCloudflare(group: UnifiedManagedRuleGroup): TranslationResult<CloudflareRule> {
+  const warnings: TranslationWarning[] = []
+  const overrides: NonNullable<CloudflareExecuteActionParameters['overrides']> = {}
+
+  if (group.action) {
+    const { action, warning } = mapUnifiedActionToManagedRuleOverride(group.action, group.id, 'action')
+    if (warning) warnings.push(warning)
+    if (action) overrides.action = action
+  }
+
+  if (group.overrides && group.overrides.length > 0) {
+    overrides.rules = group.overrides.map((override) => {
+      const ruleOverride: { id: string; action?: CloudflareAction; enabled?: boolean } = { id: override.ruleId }
+      if (override.enabled !== undefined) ruleOverride.enabled = override.enabled
+      if (override.action) {
+        const { action, warning } = mapUnifiedActionToManagedRuleOverride(
+          override.action,
+          group.id,
+          `overrides[${override.ruleId}].action`,
+        )
+        if (warning) warnings.push(warning)
+        if (action) ruleOverride.action = action
+      }
+      return ruleOverride
+    })
+  }
+
+  const actionParameters: CloudflareExecuteActionParameters = {
+    id: group.ruleset,
+    ...(Object.keys(overrides).length > 0 ? { overrides } : {}),
+  }
+
+  const cloudflareRule: CloudflareRule = {
+    id: group.id || crypto.randomUUID(),
+    action: 'execute',
+    expression: 'true',
+    description: group.name || `Managed ruleset ${group.ruleset}`,
+    enabled: group.enabled,
+    action_parameters: actionParameters,
+  }
+
+  return { result: cloudflareRule, warnings }
+}
+
+/**
+ * Translate a Cloudflare `execute` rule back to a Unified managed rule group.
+ */
+export function cloudflareToUnifiedManagedRuleGroup(rule: CloudflareRule): TranslationResult<UnifiedManagedRuleGroup> {
+  const warnings: TranslationWarning[] = []
+  const params = rule.action_parameters as CloudflareExecuteActionParameters | undefined
+
+  const group: UnifiedManagedRuleGroup = {
+    id: rule.id,
+    ruleset: params?.id ?? '',
+    enabled: rule.enabled ?? true,
+    ...(rule.description ? { name: rule.description } : {}),
+  }
+
+  if (params?.overrides?.action) {
+    group.action = mapManagedRuleOverrideActionToUnified(params.overrides.action)
+  }
+
+  if (params?.overrides?.rules && params.overrides.rules.length > 0) {
+    group.overrides = params.overrides.rules.map((override) => ({
+      ruleId: override.id,
+      ...(override.action !== undefined ? { action: mapManagedRuleOverrideActionToUnified(override.action) } : {}),
+      ...(override.enabled !== undefined ? { enabled: override.enabled } : {}),
+    }))
+  }
+
+  return { result: group, warnings }
+}
+
+/**
+ * Managed-ruleset overrides accept a narrower action set than an ordinary
+ * custom rule — they're overriding a single WAF signature rule's response,
+ * not building general rule logic, so `bypass`(skip)/`rate_limit`/`redirect`
+ * don't apply. Deliberately separate from mapUnifiedActionToCloudflare
+ * rather than reusing it, so an unsupported value is caught and warned about
+ * here instead of silently producing an override Cloudflare's API rejects.
+ */
+function mapUnifiedActionToManagedRuleOverride(
+  action: ActionType,
+  ruleId: string | undefined,
+  field: string,
+): { action?: CloudflareAction; warning?: TranslationWarning } {
+  const mapping: Partial<Record<ActionType, CloudflareAction>> = {
+    log: 'log',
+    deny: 'block',
+    block: 'block',
+    challenge: 'managed_challenge',
+    allow: 'allow',
+  }
+
+  const mapped = mapping[action]
+  if (mapped) return { action: mapped }
+
+  return {
+    warning: TranslationWarningSystem.createUnsupportedFeatureWarning(
+      `'${action}' as a managed-ruleset override action`,
+      'unified config',
+      'Cloudflare',
+      ruleId,
+      field,
+    ),
+  }
+}
+
+function mapManagedRuleOverrideActionToUnified(action: CloudflareAction): ActionType {
+  const mapping: Partial<Record<CloudflareAction, ActionType>> = {
+    log: 'log',
+    block: 'deny',
+    challenge: 'challenge',
+    managed_challenge: 'challenge',
+    js_challenge: 'challenge',
+    allow: 'allow',
+  }
+
+  return mapping[action] || 'deny'
+}
+
 function mapCloudflareActionToUnified(action: CloudflareRule['action']): ActionType {
   const mapping: Record<CloudflareRule['action'], ActionType> = {
     block: 'deny',
@@ -226,6 +356,13 @@ function mapCloudflareActionToUnified(action: CloudflareRule['action']): ActionT
     allow: 'allow',
     rewrite: 'bypass',
     redirect: 'redirect',
+    // Unreachable in practice: `execute` rules deploy managed rulesets and
+    // live only in the http_request_firewall_managed phase ruleset, which
+    // this function never sees — CloudflareFirewallService.fetchConfig only
+    // passes custom-rules-phase rules through cloudflareToUnified.
+    // cloudflareToUnifiedManagedRuleGroup (#183) handles execute rules.
+    // Present only to satisfy Record's exhaustiveness over CloudflareAction.
+    execute: 'log',
   }
 
   return mapping[action] || 'deny'
