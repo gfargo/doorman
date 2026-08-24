@@ -12,12 +12,28 @@ import { ipAddressSchema } from '../schemas/commonSchemas'
 const UNQUOTED_IP_FIELDS = new Set(['ip.src'])
 
 /**
- * Cloudflare's indexable query-args field. Distinct from
- * `http.request.uri.query` (the whole query string, a scalar `String`) —
- * this one is a `Map<Array<String>>` keyed by argument name, used only when
- * a query condition carries a `key`. See `buildKeyedQueryExpression`.
+ * Cloudflare fields that type as `Map<Array<String>>` rather than a scalar
+ * `String` — indexing one yields an `Array<String>`, so a naive
+ * `field["key"] eq "value"` is an Array-vs-String type mismatch the
+ * Cloudflare API rejects (verified against Cloudflare's Ruleset Engine
+ * field + function references, #263/#269). The correct idiom is
+ * `any(field["key"][*] <op> value)` for comparisons, `has_key(field, "key")`
+ * for existence — see `buildKeyedMapExpression`.
+ *
+ * `QUERY_ARGS_FIELD` is distinct from `http.request.uri.query` (the whole
+ * query string, a scalar `String`); `HEADERS_FIELD` is Cloudflare's real
+ * `header` field regardless of keying (there's no separate "all headers as
+ * one value" concept, unlike cookie); `COOKIES_MAP_FIELD` is distinct from
+ * `http.cookie` (the whole Cookie header as one scalar `String`, still used
+ * for a non-keyed cookie condition) — `http.request.cookies` requires
+ * Cloudflare Pro/Business/Enterprise (Ruleset Engine field reference), so
+ * doorman emits it regardless and lets Cloudflare's API reject it on an
+ * unsupported plan, the same policy already applied to `matches`/regex
+ * (see cloudflare.md).
  */
 const QUERY_ARGS_FIELD = 'http.request.uri.args'
+const HEADERS_FIELD = 'http.request.headers'
+const COOKIES_MAP_FIELD = 'http.request.cookies'
 
 /**
  * Builds Cloudflare wirefilter expressions from structured conditions
@@ -111,15 +127,32 @@ export class ExpressionBuilder {
    * Build expression from a single unified condition
    */
   public static fromUnifiedCondition(condition: UnifiedCondition): string {
-    // A keyed query condition can't reuse the generic bracket-index path
-    // below the way header/cookie do: Cloudflare's indexable query-args
-    // field (`http.request.uri.args`, aliased as QUERY_ARGS_FIELD) types as
-    // `Map<Array<String>>`, so `args["key"] eq "value"` is an Array-vs-String
-    // type mismatch the Cloudflare API rejects — it needs `any(args["key"][*]
-    // eq "value")` (and `has_key(...)` for exists/not_exists) instead. See
-    // buildKeyedQueryExpression.
+    // Keyed query/cookie conditions, and header conditions (always keyed —
+    // see the throw below), can't reuse the generic bracket-index path
+    // further down: their Cloudflare fields are `Map<Array<String>>` (see
+    // the field-constants comment above `QUERY_ARGS_FIELD`), so they need
+    // `buildKeyedMapExpression`'s `any(...)`/`has_key(...)` construct
+    // instead of a bare bracket comparison.
     if (condition.key && condition.field === 'query') {
-      return this.buildKeyedQueryExpression(condition, condition.key)
+      return this.buildKeyedMapExpression(QUERY_ARGS_FIELD, condition.key, condition)
+    }
+    if (condition.field === 'header') {
+      if (!condition.key) {
+        // Unlike `cookie` below, `header` has no scalar "all headers as one
+        // string" field to fall back to — Cloudflare's header field is a
+        // Map, full stop — so a header condition genuinely needs to name
+        // which header it means. Fail loudly rather than silently emit
+        // `http.request.headers eq "..."`, comparing a Map against a String.
+        throw new Error('A "header" condition requires a key naming the header')
+      }
+      // Cloudflare's header map is keyed by lowercased header name (Ruleset
+      // Engine field reference, verified #269) — a mixed-case key would
+      // silently never match otherwise, since `any()` over a missing map
+      // entry is simply false, not an error.
+      return this.buildKeyedMapExpression(HEADERS_FIELD, condition.key.toLowerCase(), condition)
+    }
+    if (condition.key && condition.field === 'cookie') {
+      return this.buildKeyedMapExpression(COOKIES_MAP_FIELD, condition.key, condition)
     }
 
     const baseField = this.mapUnifiedFieldToCloudflare(condition.field)
@@ -132,16 +165,8 @@ export class ExpressionBuilder {
         `Unsupported condition field '${condition.field}' for Cloudflare — filter it out with a warning before calling fromUnifiedCondition (see unifiedToCloudflare).`,
       )
     }
-    // `key` only makes sense as a bracket index for header/cookie fields
-    // (matching FieldMapper's Vercel-side behavior) — a header or cookie
-    // condition's key must not fall through to the headers field regardless
-    // of which of the two it actually is.
-    const field =
-      condition.key && (condition.field === 'header' || condition.field === 'cookie')
-        ? `${baseField}["${escapeWirefilterString(condition.key)}"]`
-        : baseField
 
-    let expression = this.buildUnifiedExpression(field, condition.operator, condition.value)
+    let expression = this.buildUnifiedExpression(baseField, condition.operator, condition.value)
 
     if (condition.negated) {
       expression = `not (${expression})`
@@ -151,31 +176,30 @@ export class ExpressionBuilder {
   }
 
   /**
-   * Build a keyed query-parameter expression against Cloudflare's
-   * `Map<Array<String>>`-typed `http.request.uri.args` field — see the
-   * comment in `fromUnifiedCondition` for why this can't share the generic
-   * field-string path the way header/cookie conditions do. Mirrors
-   * Cloudflare's own documented idioms: `any(args["key"][*] <op> value)` for
-   * value comparisons (a query param can repeat, so this matches if *any*
-   * occurrence satisfies the operator) and `has_key(args, "key")` for
-   * existence.
+   * Builds a keyed comparison/exists expression against a Cloudflare
+   * `Map<Array<String>>`-typed field's keyed entry — query args, headers,
+   * or (Pro+) per-cookie values. See the field-constants comment above
+   * `QUERY_ARGS_FIELD`. Mirrors Cloudflare's own documented idioms:
+   * `any(field["key"][*] <op> value)` for value comparisons (an entry can
+   * repeat, so this matches if *any* occurrence satisfies the operator) and
+   * `has_key(field, "key")` for existence.
    */
-  private static buildKeyedQueryExpression(condition: UnifiedCondition, key: string): string {
+  private static buildKeyedMapExpression(mapField: string, key: string, condition: UnifiedCondition): string {
     const escapedKey = escapeWirefilterString(key)
-    const keyedField = `${QUERY_ARGS_FIELD}["${escapedKey}"]`
+    const keyedField = `${mapField}["${escapedKey}"]`
 
     let expression: string
     if (condition.operator === 'exists') {
-      expression = `has_key(${QUERY_ARGS_FIELD}, "${escapedKey}")`
+      expression = `has_key(${mapField}, "${escapedKey}")`
     } else if (condition.operator === 'not_exists') {
-      expression = `not (has_key(${QUERY_ARGS_FIELD}, "${escapedKey}"))`
+      expression = `not (has_key(${mapField}, "${escapedKey}"))`
     } else if (condition.operator === 'not_contains') {
-      expression = `not (any(${keyedField}[*] contains ${this.formatValue(QUERY_ARGS_FIELD, condition.value)}))`
+      expression = `not (any(${keyedField}[*] contains ${this.formatValue(mapField, condition.value)}))`
     } else if (condition.operator === 'not_in') {
-      expression = `not (any(${keyedField}[*] in ${this.formatValue(QUERY_ARGS_FIELD, condition.value)}))`
+      expression = `not (any(${keyedField}[*] in ${this.formatValue(mapField, condition.value)}))`
     } else {
       const operator = this.mapUnifiedOperator(condition.operator)
-      expression = `any(${keyedField}[*] ${operator} ${this.formatValue(QUERY_ARGS_FIELD, condition.value)})`
+      expression = `any(${keyedField}[*] ${operator} ${this.formatValue(mapField, condition.value)})`
     }
 
     return condition.negated ? `not (${expression})` : expression

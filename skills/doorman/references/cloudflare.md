@@ -60,24 +60,26 @@ Doorman translates its unified rule format (`conditions`/`enabled`/`action: {typ
 
 Cloudflare supports all 16 unified condition fields:
 
-| Doorman Field  | Cloudflare Field              | Notes                                                                                                                                           |
-| -------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ip`           | `ip.src`                      |                                                                                                                                                 |
-| `country`      | `ip.geoip.country`            |                                                                                                                                                 |
-| `region`       | `ip.geoip.subdivision_1`      | Client geo subdivision (e.g. `"CA"`) — see the legacy-field note below for how this differs from Vercel's own `region`                          |
-| `city`         | `ip.geoip.city`               |                                                                                                                                                 |
-| `asn`          | `ip.geoip.asnum`              |                                                                                                                                                 |
-| `path`         | `http.request.uri.path`       |                                                                                                                                                 |
-| `host`         | `http.host`                   |                                                                                                                                                 |
-| `method`       | `http.request.method`         |                                                                                                                                                 |
-| `header`       | `http.request.headers["key"]` | Requires `key` (the header name)                                                                                                                |
-| `query`        | `http.request.uri.query`      | ⚠️ `key` is currently ignored — matches the whole query string, not one parameter ([doorman#263](https://github.com/gfargo/doorman/issues/263)) |
-| `cookie`       | `http.cookie["key"]`          | Requires `key` (the cookie name)                                                                                                                |
-| `user_agent`   | `http.user_agent`             |                                                                                                                                                 |
-| `referer`      | `http.referer`                |                                                                                                                                                 |
-| `scheme`       | `ssl` (boolean)               |                                                                                                                                                 |
-| `port`         | `cf.edge.server_port`         |                                                                                                                                                 |
-| `threat_score` | `cf.threat_score`             | Cloudflare bot/attack threat score (0-100)                                                                                                      |
+| Doorman Field  | Cloudflare Field                                                                        | Notes                                                                                                                         |
+| -------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `ip`           | `ip.src`                                                                                |                                                                                                                               |
+| `country`      | `ip.geoip.country`                                                                      |                                                                                                                               |
+| `region`       | `ip.geoip.subdivision_1`                                                                | Client geo subdivision (e.g. `"CA"`) — see the legacy-field note below for how this differs from Vercel's own `region`        |
+| `city`         | `ip.geoip.city`                                                                         |                                                                                                                               |
+| `asn`          | `ip.geoip.asnum`                                                                        |                                                                                                                               |
+| `path`         | `http.request.uri.path`                                                                 |                                                                                                                               |
+| `host`         | `http.host`                                                                             |                                                                                                                               |
+| `method`       | `http.request.method`                                                                   |                                                                                                                               |
+| `header`       | `any(http.request.headers["key"][*] op value)` / `has_key(...)`                         | Requires `key` (the header name, lowercased before compiling) — see the keyed-field note below                                |
+| `query`        | `http.request.uri.query`, or `any(http.request.uri.args["key"][*] op value)` when keyed | Unkeyed matches the whole query string; `key` scopes to one parameter — see the keyed-field note below                        |
+| `cookie`       | `http.cookie`, or `any(http.request.cookies["key"][*] op value)` when keyed             | Unkeyed matches the whole `Cookie` header; keyed requires Cloudflare Pro/Business/Enterprise — see the keyed-field note below |
+| `user_agent`   | `http.user_agent`                                                                       |                                                                                                                               |
+| `referer`      | `http.referer`                                                                          |                                                                                                                               |
+| `scheme`       | `ssl` (boolean)                                                                         |                                                                                                                               |
+| `port`         | `cf.edge.server_port`                                                                   |                                                                                                                               |
+| `threat_score` | `cf.threat_score`                                                                       | Cloudflare bot/attack threat score (0-100)                                                                                    |
+
+**Keyed `header`/`cookie`/`query` conditions** ([doorman#269](https://github.com/gfargo/doorman/issues/269)): `http.request.headers`, `http.request.cookies`, and (when keyed) `http.request.uri.args` all type as Cloudflare's `Map<Array<String>>`, not a scalar `String` — indexing one yields an `Array<String>`, so a bare `field["key"] eq "value"` is an Array-vs-String type mismatch the Cloudflare API rejects. Doorman compiles a keyed condition to the idiom Cloudflare's Ruleset Engine actually documents instead: `any(field["key"][*] <op> value)` for a value comparison, `has_key(field, "key")` for `exists`/`not_exists`. A `header` condition always requires `key` — there's no "all headers as one value" fallback the way `cookie`'s unkeyed `http.cookie` is. `http.request.cookies` requires Cloudflare Pro, Business, or Enterprise; doorman emits it regardless of plan and lets Cloudflare's API reject it on an unsupported plan, the same policy already applied to `matches`/regex below.
 
 ### Operator Mapping
 
@@ -134,7 +136,7 @@ The `RuleTranslator` surfaces warnings when a translation is lossy:
 - **Unmapped managed-ruleset override action** — an `action`/`overrides[].action` in `managedRules` with no Cloudflare equivalent (only `log`/`deny`/`challenge`/`allow` map cleanly) is dropped with a warning
 - **Negation edge cases** — complex negated conditions may produce subtly different behavior in Wirefilter
 
-Doorman does **not** currently warn on the `rate_limit`/`redirect` omitted-config-object cases noted in Action Mapping above, or the `query`-condition `key`-ignored case noted in Field Mapping above ([doorman#263](https://github.com/gfargo/doorman/issues/263)) — both are known gaps, not something `doorman validate` catches today. Double-check those specifically rather than relying on validation output.
+Doorman does **not** currently warn on the `rate_limit`/`redirect` omitted-config-object cases noted in Action Mapping above — a known gap, not something `doorman validate` catches today. Double-check those specifically rather than relying on validation output.
 
 Run `doorman validate` to surface the warnings that do exist before deploying — it auto-detects Cloudflare from the config's `provider` field.
 
