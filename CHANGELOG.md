@@ -1,3 +1,10 @@
+# [3.14.0](https://github.com/gfargo/doorman/compare/v3.13.11...v3.14.0) (2026-08-24)
+
+
+### Features
+
+* **cloudflare:** add managed rule group support ([#260](https://github.com/gfargo/doorman/issues/260)) ([ff69938](https://github.com/gfargo/doorman/commit/ff699385bbd03a7578cb21ef634c3eb0d780a24c))
+
 ## [3.13.11](https://github.com/gfargo/doorman/compare/v3.13.10...v3.13.11) (2026-08-24)
 
 
