@@ -148,6 +148,69 @@ describe('cloudflare/translator', () => {
       expect(result.expression).not.toBe('http.request.uri.query eq "1"')
     })
 
+    // Regression tests for #273 Bug 1: `region` in the unified vocabulary
+    // means the client's geo subdivision. A Vercel-originated condition
+    // that collided with this name (fixed by renaming it to `vercel_region`
+    // in providers/vercel/translator.ts) must never be able to reach here
+    // and silently produce this same expression.
+    it('maps a genuine unified region condition to ip.geoip.subdivision_1', () => {
+      const rule = makeUnifiedRule({
+        conditions: [{ field: 'region', operator: 'eq', value: 'CA' }],
+      })
+      const { result, warnings } = unifiedToCloudflare(rule)
+      expect(result.expression).toBe('ip.geoip.subdivision_1 eq "CA"')
+      expect(warnings).toHaveLength(0)
+    })
+
+    it('drops a Vercel-namespaced vercel_region condition with a warning instead of translating it', () => {
+      const rule = makeUnifiedRule({
+        conditions: [
+          { field: 'path', operator: 'eq', value: '/admin' },
+          { field: 'vercel_region', operator: 'eq', value: 'sfo1' },
+        ],
+      })
+      const { result, warnings } = unifiedToCloudflare(rule)
+      expect(result.expression).toBe('http.request.uri.path eq "/admin"')
+      expect(result.expression).not.toContain('subdivision_1')
+      expect(warnings.some((w) => w.field === 'vercel_region' && w.severity === 'critical')).toBe(true)
+    })
+
+    // Regression tests for #273 Bug 2: a Vercel-only legacy field with no
+    // Cloudflare equivalent must be dropped with a warning, never leaked
+    // into the generated wirefilter expression as a bare, invalid
+    // identifier (e.g. the literal, non-existent field `geo_continent`).
+    it.each([
+      'geo_continent',
+      'protocol',
+      'target_path',
+      'environment',
+      'ja3_digest',
+      'ja4_digest',
+      'rate_limit_api_id',
+    ])('drops unsupported legacy field %s with a warning instead of emitting invalid wirefilter', (field) => {
+      const rule = makeUnifiedRule({
+        conditions: [
+          { field: 'path', operator: 'eq', value: '/admin' },
+          { field, operator: 'eq', value: 'test' },
+        ],
+      })
+      const { result, warnings } = unifiedToCloudflare(rule)
+      expect(result.expression).toBe('http.request.uri.path eq "/admin"')
+      expect(result.expression).not.toContain(field)
+      expect(warnings.some((w) => w.field === field)).toBe(true)
+    })
+
+    // Regression test: if every condition on a rule is unsupported by
+    // Cloudflare, there's nothing safe to drop down to — this must fail
+    // loudly rather than sync a rule with zero conditions (which would
+    // match all traffic). Mirrors unifiedToVercel's identical guard.
+    it('throws when no condition on the rule has a Cloudflare equivalent', () => {
+      const rule = makeUnifiedRule({
+        conditions: [{ field: 'environment', operator: 'eq', value: 'preview' }],
+      })
+      expect(() => unifiedToCloudflare(rule)).toThrow(/no conditions Cloudflare can represent/)
+    })
+
     it('maps unified actions to Cloudflare actions', () => {
       const actionMappings: Array<{ unified: string; cf: string }> = [
         { unified: 'log', cf: 'log' },

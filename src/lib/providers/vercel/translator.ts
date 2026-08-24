@@ -305,12 +305,35 @@ function mapUnifiedOperatorToVercel(op: string): VercelRuleOperator {
 }
 
 /**
- * Vercel types with no entry here (e.g. `target_path`, `region`, `protocol`,
- * `environment`, `geo_continent`, `geo_country_region`, `ja4_digest`,
- * `ja3_digest`, `rate_limit_api_id`) fall through to `mapping[type] || type`
- * below and are preserved as-is as the unified field name. `mapUnifiedTypeToVercel`
- * (the reverse direction) has an explicit entry for every one of those
+ * Vercel types with no entry here (e.g. `target_path`, `protocol`,
+ * `environment`, `geo_continent`, `ja4_digest`, `ja3_digest`,
+ * `rate_limit_api_id`) fall through to `mapping[type] || type` below and are
+ * preserved as-is as the unified field name. `mapUnifiedTypeToVercel` (the
+ * reverse direction) has an explicit entry for every one of those
  * pass-through fields so the round trip is lossless — keep the two in sync.
+ *
+ * `region` and `geo_country_region` are deliberately NOT among those
+ * pass-through fields, for opposite reasons:
+ *
+ * - Vercel's `region` means the edge/deployment region a request is served
+ *   from (e.g. `sfo1`), but the unified schema already has a `region`
+ *   FieldType meaning something else entirely — the client's geographic
+ *   subdivision (see `FieldType` in `types/common.ts`, mapped by
+ *   Cloudflare's translator to `ip.geoip.subdivision_1`). Passing it through
+ *   unchanged would silently collide with that field: the resulting
+ *   condition looks like a valid client-geo check to every downstream
+ *   translator, compiles with zero warnings, and just never matches
+ *   anything (see #273). Mapped to the Vercel-namespaced `vercel_region`
+ *   instead, which no other provider's field vocabulary uses — downstream
+ *   translators with no mapping for it drop it with a warning.
+ * - Vercel's `geo_country_region` is documented (`rules.md`) as "Region/state
+ *   code", e.g. `"CA"` — the *same* real-world concept the unified `region`
+ *   FieldType already names, unlike `region` above. So unlike the other
+ *   pass-through fields, it maps directly to unified `region` rather than to
+ *   a same- or Vercel-namespaced name — of the 8 fields #273 flagged, this
+ *   is the one that turned out not to need external verification: it's an
+ *   internal doorman-vocabulary match, not a claim about another provider's
+ *   field names.
  */
 function mapVercelTypeToUnified(type: string): string {
   const mapping: Record<string, string> = {
@@ -326,6 +349,8 @@ function mapVercelTypeToUnified(type: string): string {
     geo_city: 'city',
     geo_as_number: 'asn',
     scheme: 'scheme',
+    region: 'vercel_region',
+    geo_country_region: 'region',
   }
 
   return mapping[type] || type
@@ -335,9 +360,13 @@ function mapVercelTypeToUnified(type: string): string {
  * Unified condition fields with a Vercel condition-type equivalent. Covers
  * both the renamed unified fields (e.g. `ip` -> `ip_address`) and every
  * Vercel-native type `mapVercelTypeToUnified` passes through unchanged
- * (`region`, `protocol`, `environment`, `geo_continent`, `geo_country_region`,
- * `ja4_digest`, `ja3_digest`, `rate_limit_api_id`, `target_path`) — those must
- * map back to themselves, not fall through to a default.
+ * (`protocol`, `environment`, `geo_continent`, `ja4_digest`, `ja3_digest`,
+ * `rate_limit_api_id`, `target_path`) — those must map back to themselves,
+ * not fall through to a default. `vercel_region` and `region` are the two
+ * non-identity exceptions (see `mapVercelTypeToUnified`'s doc comment):
+ * `vercel_region` maps back to Vercel's native `region`, and the real
+ * unified `region` (client geo) maps to Vercel's `geo_country_region`, the
+ * field that actually represents that concept on Vercel.
  */
 const UNIFIED_TO_VERCEL_TYPE_MAP: Record<string, VercelRuleType> = {
   host: 'host',
@@ -353,11 +382,11 @@ const UNIFIED_TO_VERCEL_TYPE_MAP: Record<string, VercelRuleType> = {
   asn: 'geo_as_number',
   scheme: 'scheme',
   target_path: 'target_path',
-  region: 'region',
+  vercel_region: 'region',
+  region: 'geo_country_region',
   protocol: 'protocol',
   environment: 'environment',
   geo_continent: 'geo_continent',
-  geo_country_region: 'geo_country_region',
   ja4_digest: 'ja4_digest',
   ja3_digest: 'ja3_digest',
   rate_limit_api_id: 'rate_limit_api_id',

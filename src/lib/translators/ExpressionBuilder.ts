@@ -123,6 +123,15 @@ export class ExpressionBuilder {
     }
 
     const baseField = this.mapUnifiedFieldToCloudflare(condition.field)
+    if (baseField === null) {
+      // Should be unreachable: callers must filter with `isFieldSupported`
+      // and warn before calling this. Throwing rather than interpolating
+      // `null` (or falling back to the unmapped field name) keeps a future
+      // caller that skips the filter from reintroducing #273 silently.
+      throw new Error(
+        `Unsupported condition field '${condition.field}' for Cloudflare — filter it out with a warning before calling fromUnifiedCondition (see unifiedToCloudflare).`,
+      )
+    }
     // `key` only makes sense as a bracket index for header/cookie fields
     // (matching FieldMapper's Vercel-side behavior) — a header or cookie
     // condition's key must not fall through to the headers field regardless
@@ -255,9 +264,17 @@ export class ExpressionBuilder {
   }
 
   /**
-   * Map unified field types to Cloudflare fields
+   * Map unified field types to Cloudflare fields. Returns `null` for a field
+   * with no Cloudflare equivalent (e.g. Vercel-only pass-through fields like
+   * `vercel_region`, `environment`, `ja3_digest`) — mirrors the
+   * `?? null` pattern `mapUnifiedTypeToVercel` (providers/vercel/translator.ts)
+   * and `mapUnifiedFieldToFastly` (providers/fastly/translator.ts) already
+   * use, rather than leaking an unmapped field name into the generated
+   * wirefilter expression as a bare (invalid) identifier. See #273 — callers
+   * must drop the condition and warn on `null`, not interpolate it; use
+   * `isFieldSupported` to filter before calling `fromUnifiedCondition`.
    */
-  private static mapUnifiedFieldToCloudflare(field: string): string {
+  private static mapUnifiedFieldToCloudflare(field: string): string | null {
     const mapping: Record<string, string> = {
       ip: 'ip.src',
       country: 'ip.geoip.country',
@@ -274,9 +291,27 @@ export class ExpressionBuilder {
       referer: 'http.referer',
       scheme: 'ssl',
       port: 'cf.edge.server_port',
+      // Added while fixing #273: this field's absence here meant an
+      // unrelated pre-existing test ("threat_score" challenge rules) relied
+      // on the exact bug #273 fixes (the removed `|| field` fallback) to
+      // silently produce the invalid bare identifier `threat_score` instead
+      // of throwing. `cf.threat_score` is Cloudflare's real field (also
+      // independently declared in `CloudflareFieldType`, types/cloudflare.ts).
+      threat_score: 'cf.threat_score',
     }
 
-    return mapping[field] || field
+    return mapping[field] ?? null
+  }
+
+  /**
+   * Whether a unified condition field has a Cloudflare equivalent. Callers
+   * building a rule's conditions (e.g. `unifiedToCloudflare`) must filter out
+   * unsupported fields — with a warning — before calling
+   * `fromUnifiedCondition`/`fromUnifiedConditions`, which throw on one rather
+   * than silently mistranslating it. See #273.
+   */
+  public static isFieldSupported(field: string): boolean {
+    return this.mapUnifiedFieldToCloudflare(field) !== null
   }
 
   /**

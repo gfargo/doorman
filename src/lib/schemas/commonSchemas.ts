@@ -64,6 +64,7 @@ export const fieldTypeSchema = z.enum([
   'referer',
   'scheme',
   'port',
+  'threat_score',
 ]) satisfies z.ZodType<FieldType>
 
 // Duration regex

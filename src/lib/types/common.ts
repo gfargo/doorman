@@ -48,6 +48,7 @@ export type FieldType =
   | 'referer' // Referer header
   | 'scheme' // Protocol scheme (http/https)
   | 'port' // Port number
+  | 'threat_score' // Cloudflare bot/attack threat score (0-100)
 
 /**
  * Configuration metadata
