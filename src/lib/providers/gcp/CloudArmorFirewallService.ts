@@ -25,6 +25,14 @@ function priorityOf(id: string | undefined): number | undefined {
 }
 
 /**
+ * Every Cloud Armor security policy has a mandatory, server-injected rule at
+ * this priority (`2^31 - 1`) that cannot be removed — only its action can be
+ * changed. It uses the basic `versionedExpr`/`config.srcIpRanges` match
+ * shape doorman never writes (see `CloudArmorMatch`'s doc comment), not CEL.
+ */
+const DEFAULT_RULE_PRIORITY = 2147483647
+
+/**
  * GCP Cloud Armor Firewall Service. Implements `IFirewallProvider` for
  * Cloud Armor's `securityPolicies` API.
  *
@@ -93,6 +101,31 @@ export class CloudArmorFirewallService extends BaseFirewallService implements IF
     const ips: UnifiedIPRule[] = []
 
     for (const rule of policy.rules) {
+      // Not every rule is CEL — doorman only ever writes `match.expr`, but
+      // must tolerate reading the basic `versionedExpr`/`config` shape too
+      // (see CloudArmorMatch's doc comment). The mandatory default rule is
+      // silently skipped (it's server-injected infrastructure every real
+      // policy has, not user-managed content); any other basic-shape rule
+      // is a hand-created one doorman can't represent, and gets a warning —
+      // an "explicit, warned failure... never silent corruption" per #187's
+      // acceptance criteria — rather than a crash or a silent drop.
+      // Not every rule is CEL — doorman only ever writes `match.expr`, but
+      // must tolerate reading the basic `versionedExpr`/`config` shape too
+      // (see CloudArmorMatch's doc comment). The mandatory default rule is
+      // silently skipped (it's server-injected infrastructure every real
+      // policy has, not user-managed content); any other basic-shape rule
+      // is a hand-created one doorman can't represent, and gets a warning —
+      // an "explicit, warned failure... never silent corruption" per #187's
+      // acceptance criteria — rather than a crash or a silent drop.
+      if (!rule.match.expr) {
+        if (rule.priority !== DEFAULT_RULE_PRIORITY) {
+          logger.warn(
+            `Cloud Armor rule at priority ${rule.priority} uses a basic IP-range match (not CEL) — doorman can't represent this rule shape and will leave it unmanaged. Recreate it as a CEL expression, or manage it directly via gcloud/Console.`,
+          )
+        }
+        continue
+      }
+
       // Parsed once and threaded through both the classification check and
       // whichever translation follows it, rather than each re-parsing the
       // same CEL expression from scratch.

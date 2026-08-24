@@ -23,20 +23,32 @@ export type CloudArmorAction =
   | 'throttle'
 
 /**
- * A CEL-based rule's match — `expr.expression` is the only shape doorman's
- * translator produces or accepts (via `CelExpressionBuilder`/`CelParser`).
- * The alternative `versionedExpr`/`config.srcIpRanges` shape (basic,
- * non-CEL IP-list matching, capped at 10 ranges) exists on the real API but
- * is deliberately not used here — CEL's `inIpRange()`/`==` (already built
+ * A rule's match — `expr.expression` (CEL) is the only shape doorman's
+ * translator ever *writes* (via `CelExpressionBuilder`/`CelParser`). The
+ * alternative `versionedExpr`/`config.srcIpRanges` shape (basic, non-CEL
+ * IP-list matching, capped at 10 ranges) is deliberately never produced by
+ * `unifiedToGcp`/`unifiedIPToGcp` — CEL's `inIpRange()`/`==` (already built
  * for custom rules) represents IP conditions with no range cap and no
  * separate code path to maintain.
+ *
+ * Reading must still tolerate `versionedExpr`/`config` — every real security
+ * policy carries a mandatory, server-injected default rule (priority
+ * `2147483647`) in exactly this shape, and a user can hand-create other
+ * basic-match rules outside doorman (`gcloud ... --src-ip-ranges`, or the
+ * Console). Confirmed against a real policy fetched during #187's e2e
+ * verification: `expr` is absent entirely on the default rule, not merely
+ * empty, so a translator that assumes it's always present throws on every
+ * single real policy. See `CloudArmorFirewallService.translatePolicy` for
+ * how these are handled on read.
  */
 export interface CloudArmorMatch {
-  expr: {
+  expr?: {
     expression: string
     title?: string
     description?: string
   }
+  versionedExpr?: 'SRC_IPS_V1'
+  config?: { srcIpRanges?: string[] }
 }
 
 export interface CloudArmorRateLimitOptions {

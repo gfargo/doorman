@@ -9,6 +9,7 @@ jest.mock('../../../logger', () => ({
 }))
 
 import { OperationSafety } from '../../../utils/operationSafety'
+import { logger } from '../../../logger'
 
 function policy(rules: CloudArmorRule[] = []): CloudArmorSecurityPolicy {
   return { id: 'policy-1', name: 'doorman-policy', rules, fingerprint: 'fp-1' }
@@ -72,6 +73,41 @@ describe('CloudArmorFirewallService', () => {
       expect(result.rules).toHaveLength(1)
       expect(result.ips).toHaveLength(1)
       expect(result.ips![0]).toMatchObject({ ip: '203.0.113.9', action: 'deny' })
+    })
+
+    it("does not crash on Cloud Armor's mandatory default rule, and excludes it from rules/ips", async () => {
+      // Every real security policy has this server-injected rule — confirmed
+      // against a live GCP policy during #187's e2e verification. `expr` is
+      // absent entirely (not empty), which crashed `parseCelExpression` on
+      // every single real fetchConfig/getChanges call before this fix.
+      const defaultRule: CloudArmorRule = {
+        priority: 2147483647,
+        description: 'default rule',
+        match: { versionedExpr: 'SRC_IPS_V1', config: { srcIpRanges: ['*'] } },
+        action: 'allow',
+      }
+      jest.spyOn(client, 'getPolicy').mockResolvedValue(policy([blockAdminRule, defaultRule]))
+
+      const result = await service.fetchConfig()
+
+      expect(result.rules).toHaveLength(1)
+      expect(result.rules[0]!.name).toBe('Block admin')
+      expect(result.ips).toHaveLength(0)
+    })
+
+    it('warns and skips a hand-created basic-match rule doorman cannot represent, without crashing', async () => {
+      const basicMatchRule: CloudArmorRule = {
+        priority: 3000,
+        description: 'hand-created via gcloud --src-ip-ranges',
+        match: { versionedExpr: 'SRC_IPS_V1', config: { srcIpRanges: ['10.0.0.0/8'] } },
+        action: 'deny(403)',
+      }
+      jest.spyOn(client, 'getPolicy').mockResolvedValue(policy([blockAdminRule, basicMatchRule]))
+
+      const result = await service.fetchConfig()
+
+      expect(result.rules).toHaveLength(1)
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('priority 3000'))
     })
   })
 
@@ -360,7 +396,7 @@ describe('CloudArmorFirewallService', () => {
       expect(result.ipsAdded).toBe(1)
       expect(addRuleSpy).toHaveBeenCalledTimes(1)
       const addedRule = addRuleSpy.mock.calls[0]![0] as CloudArmorRule
-      expect(addedRule.match.expr.expression).toBe("origin.ip == '203.0.113.9'")
+      expect(addedRule.match.expr!.expression).toBe("origin.ip == '203.0.113.9'")
     })
 
     it('reports a per-rule failure in errors[] without aborting the rest of the sync', async () => {

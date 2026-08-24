@@ -25,6 +25,23 @@ import { ipAddressSchema } from '../../schemas/commonSchemas'
  */
 
 /**
+ * `rule.match.expr` is only absent for the basic `versionedExpr`/`config`
+ * match shape (see `CloudArmorMatch`'s doc comment) — `CloudArmorFirewall
+ * Service.translatePolicy` must filter those out before a rule reaches
+ * `gcpToUnified`/`looksLikeIpRule`/`gcpToUnifiedIP`, all three of which are
+ * CEL-only. Throwing here (rather than a silent `!` assertion) turns a
+ * missed filter upstream into a clear error instead of `undefined.expression`.
+ */
+function requireCelExpression(rule: CloudArmorRule): string {
+  if (!rule.match.expr) {
+    throw new Error(
+      `Cloud Armor rule at priority ${rule.priority} has no CEL match expression (uses the basic versionedExpr/config shape) — caller must filter these out before translating.`,
+    )
+  }
+  return rule.match.expr.expression
+}
+
+/**
  * `rule.priority` is required — Cloud Armor's priority space doubles as
  * both evaluation order and the rule's addressing key, so unlike every
  * other provider's translator there is no client-generated id to fall back
@@ -102,7 +119,7 @@ export function gcpToUnified(rule: CloudArmorRule, preparsed?: CelParseResult | 
   // (e.g. translatePolicy, to classify it via looksLikeIpRule first) pass
   // that result through instead of re-running the tokenizer/parser on an
   // identical string — see CloudArmorFirewallService.translatePolicy.
-  const parsed = preparsed !== undefined ? preparsed : parseCelExpression(rule.match.expr.expression)
+  const parsed = preparsed !== undefined ? preparsed : parseCelExpression(requireCelExpression(rule))
 
   let conditions: UnifiedRule['conditions'] = []
   let conditionLogic: UnifiedRule['conditionLogic']
@@ -170,14 +187,14 @@ export function gcpToUnified(rule: CloudArmorRule, preparsed?: CelParseResult | 
 export function looksLikeIpRule(rule: CloudArmorRule, preparsed?: CelParseResult | null): boolean {
   if (rule.action !== 'allow' && rule.action !== 'deny(403)') return false
   if (rule.preview) return false
-  const parsed = preparsed !== undefined ? preparsed : parseCelExpression(rule.match.expr.expression)
+  const parsed = preparsed !== undefined ? preparsed : parseCelExpression(requireCelExpression(rule))
   if (!parsed || parsed.conditions.length !== 1) return false
   const condition = parsed.conditions[0]!
   return condition.field === 'ip' && (condition.operator === 'eq' || condition.operator === 'in') && !condition.key
 }
 
 export function gcpToUnifiedIP(rule: CloudArmorRule, preparsed?: CelParseResult | null): UnifiedIPRule {
-  const parsed = preparsed !== undefined ? preparsed : parseCelExpression(rule.match.expr.expression)
+  const parsed = preparsed !== undefined ? preparsed : parseCelExpression(requireCelExpression(rule))
   const condition = parsed!.conditions[0]!
   const value = condition.value
   return {
