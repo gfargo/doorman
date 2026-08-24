@@ -18,7 +18,7 @@ describe('unifiedToGcp', () => {
 
   it('builds a CEL match expression from conditions', () => {
     const { result } = unifiedToGcp(baseRule)
-    expect(result.match.expr.expression).toBe("request.path == '/admin'")
+    expect(result.match.expr!.expression).toBe("request.path == '/admin'")
     expect(result.priority).toBe(1000)
   })
 
@@ -189,7 +189,7 @@ describe('looksLikeIpRule / unifiedIPToGcp / gcpToUnifiedIP', () => {
 
   it('uses inIpRange() for a CIDR value', () => {
     const rule = unifiedIPToGcp({ ip: '198.51.100.0/24', action: 'deny' }, 3002)
-    expect(rule.match.expr.expression).toBe("inIpRange(origin.ip, '198.51.100.0/24')")
+    expect(rule.match.expr!.expression).toBe("inIpRange(origin.ip, '198.51.100.0/24')")
   })
 
   it('throws for an invalid IP value', () => {

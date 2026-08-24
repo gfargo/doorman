@@ -1,4 +1,4 @@
-import { getConfig } from '../../lib/utils/config'
+import { getConfig, saveConfig } from '../../lib/utils/config'
 import { logger } from '../../lib/logger'
 import { CloudflareClient } from '../../lib/providers/cloudflare/CloudflareClient'
 import { mockCloudflareClientPrototype, emptyCloudflareRuleset } from '../../tests/testHelpers/providerMocks'
@@ -9,6 +9,7 @@ jest.mock('../../lib/utils/config', () => ({ getConfig: jest.fn(), saveConfig: j
 jest.mock('../../lib/providers/cloudflare/CloudflareClient')
 
 const mockedGetConfig = getConfig as jest.MockedFunction<typeof getConfig>
+const mockedSaveConfig = saveConfig as jest.MockedFunction<typeof saveConfig>
 const MockedCloudflareClient = CloudflareClient as jest.MockedClass<typeof CloudflareClient>
 
 describe('download command — Cloudflare provider (regression test for #82)', () => {
@@ -42,5 +43,26 @@ describe('download command — Cloudflare provider (regression test for #82)', (
 
     expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Remote Custom Rules to Download (1)'))
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Dry run completed'))
+  })
+
+  // `--ci` is documented as this command's non-interactive mode, but the
+  // confirmation prompt was never actually gated on it — every non-dry-run
+  // download call to prompt.ts's `prompt()` throws outside a real TTY,
+  // regardless of `--ci`. Deliberately *not* passing `dryRun: true` here —
+  // pairing `ci: true` with `dryRun: true` (as the test above does) exits
+  // before ever reaching the prompt, which is exactly how this went
+  // undetected. Found running a real, non-interactive GCP e2e pass (#187).
+  it('does not prompt (and completes the download) when --ci is set, without --dryRun', async () => {
+    await handler({
+      provider: 'cloudflare',
+      apiToken: 'cf-token',
+      zoneId: '0123456789abcdef0123456789abcdef',
+      dryRun: false,
+      debug: false,
+      ci: true,
+    } as any)
+
+    expect(mockedSaveConfig).toHaveBeenCalledTimes(1)
+    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Remote Custom Rules to Download (1)'))
   })
 })
