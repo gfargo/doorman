@@ -54,37 +54,50 @@ doorman list --provider cloudflare          # Show deployed rules
 
 ## Rule Translation
 
-Doorman translates its unified rule format into Cloudflare Wirefilter expressions automatically. The translation is bidirectional — `doorman download` pulls Cloudflare expressions back into the unified format.
+Doorman translates its unified rule format (`conditions`/`enabled`/`action: {type}` — different from the legacy shape [rules.md](rules.md) documents) into Cloudflare Wirefilter expressions automatically. The translation is bidirectional — `doorman download` pulls Cloudflare expressions back into the unified format. Cloudflare requires the unified format — a config with `provider: "cloudflare"` cannot use the legacy `conditionGroup`/`mitigate` shape.
 
 ### Field Mapping
 
-| Doorman Type         | Cloudflare Field              |
-| -------------------- | ----------------------------- |
-| `path`               | `http.request.uri.path`       |
-| `method`             | `http.request.method`         |
-| `host`               | `http.host`                   |
-| `user_agent`         | `http.user_agent`             |
-| `ip_address`         | `ip.src`                      |
-| `header`             | `http.request.headers["key"]` |
-| `query`              | `http.request.uri.query`      |
-| `cookie`             | `http.cookie`                 |
-| `geo_country`        | `ip.geoip.country`            |
-| `geo_city`           | `ip.geoip.city`               |
-| `geo_continent`      | `ip.geoip.continent`          |
-| `geo_country_region` | `ip.geoip.subdivision_1`      |
-| `geo_as_number`      | `ip.geoip.asnum`              |
-| `scheme`             | `ssl` (boolean)               |
+Cloudflare supports all 15 unified condition fields:
+
+| Doorman Field | Cloudflare Field              | Notes                                                                                    |
+| -------------- | ------------------------------ | ------------------------------------------------------------------------------------------ |
+| `ip`          | `ip.src`                      |                                                                                          |
+| `country`     | `ip.geoip.country`            |                                                                                          |
+| `region`      | `ip.geoip.subdivision_1`      |                                                                                          |
+| `city`        | `ip.geoip.city`                |                                                                                          |
+| `asn`         | `ip.geoip.asnum`               |                                                                                          |
+| `path`        | `http.request.uri.path`       |                                                                                          |
+| `host`        | `http.host`                   |                                                                                          |
+| `method`      | `http.request.method`         |                                                                                          |
+| `header`      | `http.request.headers["key"]` | Requires `key` (the header name)                                                        |
+| `query`       | `http.request.uri.query`      | ⚠️ `key` is currently ignored — matches the whole query string, not one parameter ([doorman#263](https://github.com/gfargo/doorman/issues/263)) |
+| `cookie`      | `http.cookie["key"]`          | Requires `key` (the cookie name)                                                         |
+| `user_agent`  | `http.user_agent`             |                                                                                          |
+| `referer`     | `http.referer`                |                                                                                          |
+| `scheme`      | `ssl` (boolean)                |                                                                                          |
+| `port`        | `cf.edge.server_port`         |                                                                                          |
+
+### Operator Mapping
+
+Cloudflare supports all 15 unified operators exactly, no approximation — `not_contains`/`not_in`/`not_exists` compile to a wrapped `not (...)` expression rather than a single wirefilter token, but the semantics are exact:
+
+`eq`, `ne`, `contains`, `not_contains`, `starts_with`, `ends_with`, `matches`, `in`, `not_in`, `gt`, `ge`, `lt`, `le`, `exists`, `not_exists`
+
+`matches` (regex) may be plan-restricted on Cloudflare's side — regex matching in the Ruleset Engine is an Enterprise-plan feature on some plans. Doorman always emits the correct `matches` expression regardless of plan; Cloudflare's API may reject it if your zone's plan doesn't support regex. Use `contains`/`starts_with`/`ends_with` as fallbacks if you hit this.
 
 ### Action Mapping
 
-| Doorman Action | Cloudflare Action                |
-| -------------- | -------------------------------- |
-| `deny`         | `block`                          |
-| `challenge`    | `managed_challenge`              |
-| `rate_limit`   | `block` + `ratelimit` config     |
-| `redirect`     | `redirect` + `from_value` params |
-| `log`          | `log`                            |
-| `bypass`       | `skip`                           |
+| Doorman Action | Cloudflare Action                | Notes                                                                                                                  |
+| --------------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `log`          | `log`                              |                                                                                                                        |
+| `deny`         | `block`                            |                                                                                                                        |
+| `challenge`    | `managed_challenge`                | Cloudflare's `challenge`/`managed_challenge`/`js_challenge` all fold back to unified `challenge` on `download` — a one-way narrowing, not a failure |
+| `bypass`       | `skip`                             |                                                                                                                        |
+| `allow`        | `allow`                            |                                                                                                                        |
+| `block`        | `block`                            | Same target as `deny`                                                                                                  |
+| `rate_limit`   | `block` + `ratelimit` config       | ⚠️ If `action.rateLimit` is omitted, this silently becomes a plain unconditional `block` rule with no rate-limit effect — no error raised locally |
+| `redirect`     | `redirect` + `from_value` params   | ⚠️ If `action.redirect` is omitted, this silently becomes a rule with no redirect target — no error raised locally |
 
 ## Lists API (Bulk IP Management)
 
@@ -99,27 +112,27 @@ Without `CLOUDFLARE_ACCOUNT_ID`, IP blocking falls back to individual WAF rules 
 
 ## Limitations & Differences
 
-| Feature                   | Vercel              | Cloudflare                    | Notes                                             |
-| ------------------------- | ------------------- | ----------------------------- | ------------------------------------------------- |
-| `re` operator             | All plans           | Enterprise only               | Use `sub`/`pre`/`suf` as alternatives             |
-| `environment` type        | Yes                 | No                            | Vercel-specific concept                           |
-| `ja3_digest`/`ja4_digest` | Yes                 | No                            | Vercel TLS fingerprints                           |
-| `region` type             | Yes                 | No                            | Vercel edge region                                |
-| IP Lists (bulk)           | Individual rules    | Lists API                     | Cloudflare needs `accountId`                      |
-| Max custom rules          | ~100                | 5-125 (plan dependent)        | Free: 5, Pro: 20, Business: 100, Enterprise: 125+ |
-| Rate limit                | Via rule action     | Separate phase                | Different underlying mechanism                    |
-| Rule order                | Parallel evaluation | Sequential (first match wins) | Ordering matters on Cloudflare                    |
+`environment`, `ja3_digest`, `ja4_digest` are **legacy-format-only concepts** — they exist on Vercel's native rule type but have no unified-format equivalent at all, so they're not reachable through a `provider`/`providers`-tagged config for *any* provider, not just Cloudflare. Every other unified field maps to something on Cloudflare — see Field Mapping above.
+
+| Feature                   | Cloudflare                    | Notes                                             |
+| -------------------------- | ------------------------------ | ------------------------------------------------- |
+| `matches` (regex)         | Enterprise-plan-restricted on some plans | Doorman emits it regardless; Cloudflare's API may reject it — see Operator Mapping above |
+| IP Lists (bulk)           | Lists API                      | Needs `accountId`; without it, falls back to individual `ip.src` rules |
+| Max custom rules          | 5-125 (plan dependent)         | Free: 5, Pro: 20, Business: 100, Enterprise: 125+ |
+| Rate limit                | Separate phase                 | `ratelimit` config attached to a `block` action, not a distinct rule type |
+| Rule order                | Sequential (first match wins)  | `priority` is fully honoured — unlike Vercel, which can't reposition rules that already exist remotely |
+| Managed rule groups       | Supported via `managedRules`   | See [Managed Rule Groups](#managed-rule-groups) below — Cloudflare-only among doorman's providers today |
 
 ## Translation Warnings
 
 The `RuleTranslator` surfaces warnings when a translation is lossy:
 
-- **Regex on non-Enterprise** — `re` operator only works on Cloudflare Enterprise; downgraded to `contains` with a warning
-- **Unsupported types** — Vercel-only fields (`environment`, `ja3_digest`, `ja4_digest`, `region`) are dropped with a warning
-- **Duration differences** — `actionDuration` maps differently between providers
+- **Unmapped managed-ruleset override action** — an `action`/`overrides[].action` in `managedRules` with no Cloudflare equivalent (only `log`/`deny`/`challenge`/`allow` map cleanly) is dropped with a warning
 - **Negation edge cases** — complex negated conditions may produce subtly different behavior in Wirefilter
 
-Run `doorman validate` to surface warnings before deploying — it auto-detects Cloudflare from the config's `provider` field.
+Doorman does **not** currently warn on the `rate_limit`/`redirect` omitted-config-object cases noted in Action Mapping above, or the `query`-condition `key`-ignored case noted in Field Mapping above ([doorman#263](https://github.com/gfargo/doorman/issues/263)) — both are known gaps, not something `doorman validate` catches today. Double-check those specifically rather than relying on validation output.
+
+Run `doorman validate` to surface the warnings that do exist before deploying — it auto-detects Cloudflare from the config's `provider` field.
 
 ## Cloudflare-Specific Validation
 
@@ -139,6 +152,39 @@ The `CloudflareOptimizer` consolidates rules for efficient deployment:
 - Deduplicates IP entries across rules and Lists
 - Computes minimal changesets to avoid unnecessary API calls (diff-based sync)
 
+## Managed Rule Groups
+
+Cloudflare is the only provider doorman can deploy vendor-managed rulesets (Cloudflare Managed Ruleset, OWASP CRS, etc.) for today. Add a `managedRules` array alongside `rules`/`ips`:
+
+```json
+{
+  "managedRules": [
+    {
+      "id": "execute-owasp-crs",
+      "ruleset": "efb7b8c949ac4650a09736fc376e9aee",
+      "name": "OWASP Core Ruleset",
+      "enabled": true,
+      "action": "log",
+      "overrides": [
+        { "ruleId": "981176", "action": "deny" },
+        { "ruleId": "981245", "enabled": false }
+      ]
+    }
+  ]
+}
+```
+
+| Property | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | No | Doorman's diff/sync identifier for this deployment. Omit for a new declaration — doorman assigns one on first sync. |
+| `ruleset` | string | Yes | The vendor ruleset id to deploy (e.g. Cloudflare Managed Ruleset's well-known id shown above) |
+| `name` | string | No | Human label |
+| `enabled` | boolean | Yes | Whether this deployment is active |
+| `action` | string | No | Ruleset-wide override — downgrade every rule in the group to this action. One of `log`, `deny`, `challenge`, `allow` |
+| `overrides` | array | No | Per-rule overrides within the ruleset — `{ "ruleId": string, "action"?: string, "enabled"?: boolean }`, referenced by the *vendor's* rule id within that ruleset, not a doorman id |
+
+Managed rule groups deploy in Cloudflare's separate managed-rules phase, evaluated independently of custom `rules` — no ordering interaction to think about between the two. `getChanges`/`syncRules` diff `managedRules` the same way as `rules`/`ips` — `doorman diff`/`doorman sync` cover it with no extra flags.
+
 ## Example: Full Cloudflare Config
 
 ```json
@@ -156,29 +202,35 @@ The `CloudflareOptimizer` consolidates rules for efficient deployment:
       "id": "rule_block_bots",
       "name": "Block Bad Bots",
       "description": "Block known malicious crawlers",
-      "active": true,
-      "conditionGroup": [
-        { "conditions": [{ "type": "user_agent", "op": "sub", "value": "AhrefsBot" }] },
-        { "conditions": [{ "type": "user_agent", "op": "sub", "value": "SemrushBot" }] }
+      "enabled": true,
+      "conditions": [
+        { "field": "user_agent", "operator": "contains", "value": "AhrefsBot", "group": 0 },
+        { "field": "user_agent", "operator": "contains", "value": "SemrushBot", "group": 1 }
       ],
-      "action": { "mitigate": { "action": "deny" } }
+      "action": { "type": "deny" }
     },
     {
       "id": "rule_rate_limit_api",
       "name": "Rate Limit API",
       "description": "Limit API requests to 100/min per IP",
-      "active": true,
-      "conditionGroup": [{ "conditions": [{ "type": "path", "op": "pre", "value": "/api/" }] }],
+      "enabled": true,
+      "conditions": [{ "field": "path", "operator": "starts_with", "value": "/api/" }],
       "action": {
-        "mitigate": {
-          "action": "rate_limit",
-          "rateLimit": {
-            "requests": 100,
-            "window": "1m",
-            "characteristics": ["ip.src"]
-          }
+        "type": "rate_limit",
+        "rateLimit": {
+          "requests": 100,
+          "window": "1m",
+          "characteristics": ["ip.src"]
         }
       }
+    }
+  ],
+  "managedRules": [
+    {
+      "ruleset": "efb7b8c949ac4650a09736fc376e9aee",
+      "name": "OWASP Core Ruleset",
+      "enabled": true,
+      "action": "log"
     }
   ],
   "ips": [{ "ip": "203.0.113.0/24", "action": "deny", "notes": "Known attack subnet" }]

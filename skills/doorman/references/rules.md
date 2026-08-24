@@ -2,6 +2,8 @@
 
 Complete reference for creating and configuring Doorman firewall rules.
 
+> **Format note:** this reference covers the **legacy (Vercel-only) rule format** — no `provider`/`providers` field in the config. If your config has `provider`/`providers` set (required for Cloudflare/Fastly), rules use a different shape entirely (`conditions`/`enabled`/flat `action: {type}` instead of `conditionGroup`/`active`/`action: {mitigate}`) — see [cloudflare.md](cloudflare.md)/[fastly.md](fastly.md) for the correct format and field/operator/action support per provider, and `SKILL.md`'s "Rule Shape" section for a side-by-side comparison.
+
 ## Rule Structure
 
 Every rule in the `rules` array has this shape:
