@@ -126,13 +126,22 @@ async function downloadWithProvider(
     return
   }
 
-  const confirmed = await prompt(
-    `Do you want to download${argv.configVersion ? ` version ${argv.configVersion}` : ' the latest version'} of these rules? This will overwrite your local configuration.`,
-    { type: 'confirm' },
-  )
-  if (!confirmed) {
-    logger.info(chalk.yellow('Download cancelled.'))
-    return
+  // `--ci` (documented in this command's own builder as "non-interactive")
+  // must skip this prompt, not just get threaded through to withCredentials —
+  // otherwise `download` cannot run in CI/non-interactive contexts at all,
+  // despite advertising a flag for exactly that (confirmed while running a
+  // real GCP e2e pass against #187: this command's own `--debug`/`--ci`
+  // combination still hit prompt.ts's "no interactive terminal available"
+  // error).
+  if (!argv.ci) {
+    const confirmed = await prompt(
+      `Do you want to download${argv.configVersion ? ` version ${argv.configVersion}` : ' the latest version'} of these rules? This will overwrite your local configuration.`,
+      { type: 'confirm' },
+    )
+    if (!confirmed) {
+      logger.info(chalk.yellow('Download cancelled.'))
+      return
+    }
   }
 
   const newConfig = fromUnifiedConfig(remoteConfig, existingConfig)
