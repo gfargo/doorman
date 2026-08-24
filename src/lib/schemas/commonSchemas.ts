@@ -74,6 +74,13 @@ export const rateLimitSchema = z.object({
   requests: z.number().positive().int(),
   window: z.string().regex(/^\d+[smhd]$/),
   characteristics: z.array(z.string()).optional(),
+  // Zod strips unrecognized keys by default — without these, a rule authored
+  // with either field silently lost it on the first safeParse (every
+  // provider's getChanges/syncRules diffs against the parsed config, not the
+  // raw one), even though both are on UnifiedAction['rateLimit'] and read by
+  // every translator (unifiedToCloudflare/unifiedToVercel/buildFastlyRateLimit).
+  mitigationTimeout: z.number().positive().optional(),
+  countingExpression: z.string().optional(),
 })
 
 // Redirect schema
