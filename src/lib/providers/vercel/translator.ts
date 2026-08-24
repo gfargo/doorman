@@ -5,9 +5,10 @@ import type {
   VercelRuleCondition,
   VercelRuleOperator,
   VercelRuleType,
+  VercelActionType,
 } from '../../types/vercel'
 import type { UnifiedRule, UnifiedIPRule, UnifiedCondition, UnifiedAction } from '../../types/unified'
-import type { Operator } from '../../types/common'
+import type { Operator, ActionType } from '../../types/common'
 import type { TranslationResult, TranslationWarning } from '../../translators/TranslationTypes'
 import { TranslationWarningSystem } from '../../translators/TranslationWarningSystem'
 
@@ -166,7 +167,7 @@ export function unifiedToVercel(rule: UnifiedRule): TranslationResult<VercelCust
     conditionGroup: conditionGroups,
     action: {
       mitigate: {
-        action: rule.action.type,
+        action: mapUnifiedActionToVercel(rule.action.type),
         rateLimit: rule.action.rateLimit
           ? {
               requests: rule.action.rateLimit.requests,
@@ -345,6 +346,37 @@ function mapUnifiedOperatorToVercel(op: Operator): { op: VercelRuleOperator; for
   }
 
   return mapping[op] ?? null
+}
+
+/**
+ * Maps a unified action type to Vercel's native action enum
+ * (`VercelActionType`, types/vercel.ts) — a strict subset of the unified
+ * `ActionType`. Previously `unifiedToVercel` used `rule.action.type`
+ * directly with no mapping at all, so a rule with `action: {type: 'allow'}`
+ * or `{type: 'block'}` passed doorman's own local validation (against the
+ * wider unified schema) and was dispatched to Vercel's real API carrying a
+ * `mitigate.action` value Vercel's own native schema says is invalid. See
+ * #262.
+ *
+ * `allow` -> `bypass` (Vercel's closest equivalent: skip further mitigation,
+ * i.e. let the request through) and `block` -> `deny` (Vercel's actual
+ * block-like action) — both unconditional, meaning-preserving remaps rather
+ * than lossy drops, so every unified `ActionType` has a real Vercel action
+ * to land on and this never needs to warn or throw.
+ */
+function mapUnifiedActionToVercel(type: ActionType): VercelActionType {
+  const mapping: Record<ActionType, VercelActionType> = {
+    log: 'log',
+    deny: 'deny',
+    challenge: 'challenge',
+    bypass: 'bypass',
+    rate_limit: 'rate_limit',
+    redirect: 'redirect',
+    allow: 'bypass',
+    block: 'deny',
+  }
+
+  return mapping[type]
 }
 
 /**

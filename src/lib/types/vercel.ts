@@ -3,7 +3,17 @@
  * These types map directly to Vercel's Firewall API
  */
 
-import type { ActionType } from './common'
+/**
+ * Vercel's native mitigation-action vocabulary — a strict subset of the
+ * unified `ActionType` (which also has `allow`/`block`, valid on
+ * Cloudflare/Fastly but not natively representable on Vercel; see
+ * `mapUnifiedActionToVercel` in providers/vercel/translator.ts, #262).
+ * Mirrors `actionTypeSchema` in schemas/firewallSchemas.ts — keep the two in
+ * sync. `CloudflareAction`/`FastlyRequestActionType` (types/cloudflare.ts,
+ * types/fastly.ts) already follow this same "dedicated native type, not the
+ * shared unified one" pattern; this brings Vercel in line with them.
+ */
+export type VercelActionType = 'log' | 'deny' | 'challenge' | 'bypass' | 'rate_limit' | 'redirect'
 
 /**
  * Vercel rule operators
@@ -85,7 +95,7 @@ export interface VercelRedirect {
  * Vercel mitigation action
  */
 export interface VercelMitigationAction {
-  action: ActionType
+  action: VercelActionType
   rateLimit?: VercelRateLimit | null
   redirect?: VercelRedirect | null
   actionDuration?: string | null // e.g., "1h", "1d", "permanent"

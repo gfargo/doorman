@@ -253,6 +253,35 @@ describe('vercel/translator', () => {
       expect(result.conditionGroup[0]!.conditions).toHaveLength(1)
     })
 
+    // Regression tests for #262: unifiedToVercel previously used
+    // `rule.action.type` directly with no mapping, so a rule with
+    // `action: {type: 'allow'}`/`{type: 'block'}` passed doorman's own
+    // local validation and reached Vercel's real API carrying an action
+    // value its own native schema (log/deny/challenge/bypass/rate_limit/
+    // redirect only) says is invalid.
+    it('maps unified allow to Vercel bypass and block to Vercel deny, not the invalid native values', () => {
+      const mappings = [
+        { unified: 'allow', vercel: 'bypass' },
+        { unified: 'block', vercel: 'deny' },
+      ] as const
+
+      for (const { unified, vercel } of mappings) {
+        const rule = makeUnifiedRule({ action: { type: unified } })
+        const { result } = unifiedToVercel(rule)
+        expect(result.action.mitigate.action).toBe(vercel)
+      }
+    })
+
+    it('passes the 6 already-native Vercel action types through unchanged', () => {
+      const nativeActions = ['log', 'deny', 'challenge', 'bypass', 'rate_limit', 'redirect'] as const
+
+      for (const action of nativeActions) {
+        const rule = makeUnifiedRule({ action: { type: action } })
+        const { result } = unifiedToVercel(rule)
+        expect(result.action.mitigate.action).toBe(action)
+      }
+    })
+
     it('translates unified operators back to Vercel operators', () => {
       const ops = [
         { unified: 'eq', vercel: 'eq' },
