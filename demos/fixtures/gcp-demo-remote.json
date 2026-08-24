@@ -1,0 +1,15 @@
+{
+  "projectId": "demo-project",
+  "policyName": "doorman-demo-policy",
+  "policyId": "1234567890",
+  "rules": [
+    {
+      "priority": 1000,
+      "description": "Block Bad Bots",
+      "match": {
+        "expr": { "expression": "(has(request.headers['user-agent']) && request.headers['user-agent'].contains('bot'))" }
+      },
+      "action": "deny(403)"
+    }
+  ]
+}
