@@ -1,3 +1,10 @@
+## [3.13.10](https://github.com/gfargo/doorman/compare/v3.13.9...v3.13.10) (2026-08-24)
+
+
+### Bug Fixes
+
+* **gcp:** isolate per-rule translation failures during sync instead of aborting the whole batch ([#257](https://github.com/gfargo/doorman/issues/257)) ([29ebc29](https://github.com/gfargo/doorman/commit/29ebc29d5a88fc37ebb17d3a4fc3fb2b561eac6a)), closes [#250](https://github.com/gfargo/doorman/issues/250)
+
 ## [3.13.9](https://github.com/gfargo/doorman/compare/v3.13.8...v3.13.9) (2026-08-23)
 
 
