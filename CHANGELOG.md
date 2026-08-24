@@ -1,3 +1,10 @@
+## [3.14.1](https://github.com/gfargo/doorman/compare/v3.14.0...v3.14.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* **gcp:** three bugs found running the Cloud Armor provider against real GCP for the first time ([#264](https://github.com/gfargo/doorman/issues/264)) ([d7bf32b](https://github.com/gfargo/doorman/commit/d7bf32b0f17f3ae641c50deb9478799f8e1a0129)), closes [#187](https://github.com/gfargo/doorman/issues/187) [#187](https://github.com/gfargo/doorman/issues/187) [#187](https://github.com/gfargo/doorman/issues/187) [#187](https://github.com/gfargo/doorman/issues/187)
+
 # [3.14.0](https://github.com/gfargo/doorman/compare/v3.13.11...v3.14.0) (2026-08-24)
 
 
