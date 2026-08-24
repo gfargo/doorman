@@ -274,6 +274,89 @@ describe('vercel/translator', () => {
       }
     })
 
+    // Regression tests for #261: `ne`/`not_contains`/`not_in` previously fell
+    // through mapUnifiedOperatorToVercel's `mapping[op] || 'eq'` fallback
+    // with no warning — silently inverting a rule's intent (e.g. "method is
+    // not POST" became "method is POST"). Vercel has no dedicated negative
+    // operators for these, only a positive operator + `neg` flag (same
+    // mechanism `not_exists` already uses via `nex`), so the fix maps each
+    // to its positive Vercel operator with `neg: true` forced on.
+    it('maps ne/not_contains/not_in to their positive Vercel operator with neg forced true', () => {
+      const ops = [
+        { unified: 'ne', vercel: 'eq' },
+        { unified: 'not_contains', vercel: 'sub' },
+        { unified: 'not_in', vercel: 'inc' },
+      ] as const
+
+      for (const { unified, vercel } of ops) {
+        const rule = makeUnifiedRule({
+          conditions: [{ field: 'path', operator: unified, value: 'test' }],
+        })
+        const { result } = unifiedToVercel(rule)
+        const condition = result.conditionGroup[0]!.conditions[0]!
+        expect(condition.op).toBe(vercel)
+        expect(condition.neg).toBe(true)
+      }
+    })
+
+    it('composes a negated ne condition (double negation) back to a plain, non-negated eq', () => {
+      // `ne` already means "not equal"; `negated: true` on top of that means
+      // "NOT (not equal)" = "equal" — the two negations must cancel (XOR),
+      // not stack into a nonsensical `neg: true` re-affirmation.
+      const rule = makeUnifiedRule({
+        conditions: [{ field: 'path', operator: 'ne', value: 'test', negated: true }],
+      })
+      const { result } = unifiedToVercel(rule)
+      const condition = result.conditionGroup[0]!.conditions[0]!
+      expect(condition.op).toBe('eq')
+      expect(condition.neg).toBe(false)
+    })
+
+    it('still honors negated on an already-working operator exactly as before (eq + negated -> neg: true)', () => {
+      const rule = makeUnifiedRule({
+        conditions: [{ field: 'path', operator: 'eq', value: 'test', negated: true }],
+      })
+      const { result } = unifiedToVercel(rule)
+      const condition = result.conditionGroup[0]!.conditions[0]!
+      expect(condition.op).toBe('eq')
+      expect(condition.neg).toBe(true)
+    })
+
+    // Regression tests for #261: gt/ge/lt/le have no Vercel equivalent at
+    // all (Vercel's operator vocabulary has no numeric-comparison concept),
+    // so — unlike ne/not_contains/not_in above — there's no positive-operator
+    // fallback to map to. The condition must be dropped with a critical
+    // warning, not silently mis-mapped to eq.
+    it('drops a numeric-comparison condition (gt/ge/lt/le) and warns instead of defaulting to eq', () => {
+      const numericOps = ['gt', 'ge', 'lt', 'le'] as const
+
+      for (const op of numericOps) {
+        // `asn` (-> Vercel's geo_as_number) has a real Vercel field mapping,
+        // unlike Cloudflare-only fields like `port` — this must fail on the
+        // *operator*, not get dropped earlier for having no Vercel field at
+        // all (which would happen for `port` and not exercise this path).
+        const rule = makeUnifiedRule({
+          conditions: [
+            { field: 'asn', operator: op, value: 13335 },
+            { field: 'path', operator: 'eq', value: '/api' },
+          ],
+        })
+        const { result, warnings } = unifiedToVercel(rule)
+
+        expect(result.conditionGroup[0]!.conditions).toHaveLength(1)
+        expect(result.conditionGroup[0]!.conditions[0]!.type).toBe('path')
+        expect(warnings.some((w) => w.severity === 'critical' && w.message.includes(op))).toBe(true)
+      }
+    })
+
+    it('throws when the only condition on the rule uses an unsupported operator', () => {
+      const rule = makeUnifiedRule({
+        conditions: [{ field: 'path', operator: 'gt', value: 1024 }],
+      })
+
+      expect(() => unifiedToVercel(rule)).toThrow(/no conditions Vercel can represent/)
+    })
+
     it('translates unified field types back to Vercel types', () => {
       const mappings = [
         { unified: 'host', vercel: 'host' },

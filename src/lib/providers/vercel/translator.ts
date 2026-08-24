@@ -258,9 +258,28 @@ function buildVercelConditionGroups(
         )
         continue
       }
+      const mappedOperator = mapUnifiedOperatorToVercel(condition.operator)
+      if (!mappedOperator) {
+        warnings.push(
+          TranslationWarningSystem.createUnsupportedFeatureWarning(
+            `operator '${condition.operator}'`,
+            'unified config',
+            'Vercel',
+            ruleId,
+            condition.field,
+          ),
+        )
+        continue
+      }
       mapped.push({
-        op: mapUnifiedOperatorToVercel(condition.operator),
-        neg: condition.negated,
+        op: mappedOperator.op,
+        // XOR the operator's own required negation (e.g. `ne` -> `eq` +
+        // forced neg) with the condition's independent `negated` flag —
+        // `forceNeg: false` for every operator that doesn't need one makes
+        // this reduce to plain `condition.negated`, so this is a strict
+        // superset of the previous `neg: condition.negated` behavior, not a
+        // change for any operator already working correctly.
+        neg: mappedOperator.forceNeg !== Boolean(condition.negated),
         type,
         key: condition.key,
         value: condition.value,
@@ -289,19 +308,43 @@ function mapVercelOperatorToUnified(op: string): Operator {
   return mapping[op] || 'eq'
 }
 
-function mapUnifiedOperatorToVercel(op: string): VercelRuleOperator {
-  const mapping: Record<string, VercelRuleOperator> = {
-    eq: 'eq',
-    starts_with: 'pre',
-    ends_with: 'suf',
-    in: 'inc',
-    contains: 'sub',
-    matches: 're',
-    exists: 'ex',
-    not_exists: 'nex',
+/**
+ * Maps a unified operator to its Vercel equivalent, or `null` if Vercel has
+ * no representation for it at all. Previously this defaulted any unmapped
+ * operator to plain `eq` with no warning — silently changing what a rule
+ * matches, sometimes inverting it outright (`ne` "is not X" became `eq` "is
+ * X"). See #261.
+ *
+ * Returns `{ op, forceNeg }` rather than just `op`: Vercel has no dedicated
+ * "not equal"/"does not contain"/"is not any of" operators, only positive
+ * ones plus a `neg` flag (`VercelRuleOperator` in types/vercel.ts documents
+ * the negative form each positive operator has via `neg`, except `ex`/`nex`,
+ * which are already their own negated pair). `ne`/`not_contains`/`not_in`
+ * are fully representable this way — `forceNeg: true` — but the caller must
+ * compose that with the condition's own independent `negated` flag (XOR),
+ * not just overwrite it with one or the other.
+ *
+ * `gt`/`ge`/`lt`/`le` have no entry and return `null`: Vercel's operator
+ * vocabulary (`eq, pre, suf, inc, sub, re, ex, nex`) has no numeric
+ * comparison concept at all, so there's nothing to fall back to — the caller
+ * must drop the condition and warn rather than silently mis-map it to `eq`.
+ */
+function mapUnifiedOperatorToVercel(op: Operator): { op: VercelRuleOperator; forceNeg: boolean } | null {
+  const mapping: Partial<Record<Operator, { op: VercelRuleOperator; forceNeg: boolean }>> = {
+    eq: { op: 'eq', forceNeg: false },
+    ne: { op: 'eq', forceNeg: true },
+    starts_with: { op: 'pre', forceNeg: false },
+    ends_with: { op: 'suf', forceNeg: false },
+    in: { op: 'inc', forceNeg: false },
+    not_in: { op: 'inc', forceNeg: true },
+    contains: { op: 'sub', forceNeg: false },
+    not_contains: { op: 'sub', forceNeg: true },
+    matches: { op: 're', forceNeg: false },
+    exists: { op: 'ex', forceNeg: false },
+    not_exists: { op: 'nex', forceNeg: false },
   }
 
-  return mapping[op] || 'eq'
+  return mapping[op] ?? null
 }
 
 /**
