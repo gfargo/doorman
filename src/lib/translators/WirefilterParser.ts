@@ -1,5 +1,7 @@
 import type { UnifiedCondition } from '../types/unified'
 import { unescapeWirefilterString } from './wirefilterEscape'
+import { TokenStream, ParseError } from './TokenStream'
+import { orGroupsToConditions } from './orGroupsToConditions'
 
 /**
  * Parses a Cloudflare wirefilter expression back into `UnifiedCondition[]`.
@@ -59,8 +61,6 @@ interface Token {
   type: TokenType
   value: string
 }
-
-class ParseError extends Error {}
 
 function tokenize(expression: string): Token[] {
   const tokens: Token[] = []
@@ -157,61 +157,28 @@ type WirefilterNode =
   | { type: 'exists'; field: string; key?: string }
   | { type: 'comparison'; field: string; key?: string; operator: string; value: string | number | (string | number)[] }
 
-class TokenStream {
-  private pos = 0
-  constructor(private tokens: Token[]) {}
+type WirefilterTokenStream = TokenStream<TokenType, Token>
 
-  peek(): Token | undefined {
-    return this.tokens[this.pos]
-  }
-
-  next(): Token {
-    const token = this.tokens[this.pos]
-    if (!token) {
-      throw new ParseError('Unexpected end of expression')
-    }
-    this.pos++
-    return token
-  }
-
-  expect(type: TokenType, value?: string): Token {
-    const token = this.next()
-    if (token.type !== type || (value !== undefined && token.value !== value)) {
-      throw new ParseError(`Expected ${value ?? type} but got '${token.value}'`)
-    }
-    return token
-  }
-
-  isWord(value: string): boolean {
-    const token = this.peek()
-    return !!token && token.type === 'WORD' && token.value === value
-  }
-
-  atEnd(): boolean {
-    return this.pos >= this.tokens.length
-  }
-}
-
-function parseOr(stream: TokenStream): WirefilterNode {
+function parseOr(stream: WirefilterTokenStream): WirefilterNode {
   const children = [parseAnd(stream)]
-  while (stream.isWord('or')) {
+  while (stream.is('WORD', 'or')) {
     stream.next()
     children.push(parseAnd(stream))
   }
   return children.length === 1 ? children[0]! : { type: 'or', children }
 }
 
-function parseAnd(stream: TokenStream): WirefilterNode {
+function parseAnd(stream: WirefilterTokenStream): WirefilterNode {
   const children = [parseUnary(stream)]
-  while (stream.isWord('and')) {
+  while (stream.is('WORD', 'and')) {
     stream.next()
     children.push(parseUnary(stream))
   }
   return children.length === 1 ? children[0]! : { type: 'and', children }
 }
 
-function parseUnary(stream: TokenStream): WirefilterNode {
-  if (stream.isWord('not')) {
+function parseUnary(stream: WirefilterTokenStream): WirefilterNode {
+  if (stream.is('WORD', 'not')) {
     stream.next()
     stream.expect('LPAREN')
     const inner = parseOr(stream)
@@ -221,7 +188,7 @@ function parseUnary(stream: TokenStream): WirefilterNode {
   return parsePrimary(stream)
 }
 
-function parsePrimary(stream: TokenStream): WirefilterNode {
+function parsePrimary(stream: WirefilterTokenStream): WirefilterNode {
   const token = stream.peek()
   if (token && token.type === 'LPAREN') {
     stream.next()
@@ -232,7 +199,7 @@ function parsePrimary(stream: TokenStream): WirefilterNode {
   return parseComparisonOrExists(stream)
 }
 
-function parseFieldRef(stream: TokenStream): { field: string; key?: string } {
+function parseFieldRef(stream: WirefilterTokenStream): { field: string; key?: string } {
   const fieldToken = stream.expect('WORD')
   if (BOOLEAN_CONNECTIVES.has(fieldToken.value)) {
     throw new ParseError(`Expected a field reference but got keyword '${fieldToken.value}'`)
@@ -248,7 +215,7 @@ function parseFieldRef(stream: TokenStream): { field: string; key?: string } {
   return { field: fieldToken.value }
 }
 
-function parseValueSingle(stream: TokenStream): string | number {
+function parseValueSingle(stream: WirefilterTokenStream): string | number {
   const token = stream.next()
   if (token.type === 'STRING') {
     return token.value
@@ -264,7 +231,7 @@ function parseValueSingle(stream: TokenStream): string | number {
   throw new ParseError(`Unexpected token '${token.value}' where a value was expected`)
 }
 
-function parseValue(stream: TokenStream): string | number | (string | number)[] {
+function parseValue(stream: WirefilterTokenStream): string | number | (string | number)[] {
   if (stream.peek()?.type === 'LBRACE') {
     stream.next()
     const values: (string | number)[] = []
@@ -277,10 +244,10 @@ function parseValue(stream: TokenStream): string | number | (string | number)[] 
   return parseValueSingle(stream)
 }
 
-function parseComparisonOrExists(stream: TokenStream): WirefilterNode {
+function parseComparisonOrExists(stream: WirefilterTokenStream): WirefilterNode {
   const { field, key } = parseFieldRef(stream)
 
-  if (stream.isWord('exists')) {
+  if (stream.is('WORD', 'exists')) {
     stream.next()
     return { type: 'exists', field, key }
   }
@@ -385,28 +352,12 @@ function astToConditions(
   }
 
   if (node.type === 'or') {
-    const conditions: UnifiedCondition[] = []
-    node.children.forEach((child, groupIndex) => {
-      if (isLeaf(child)) {
-        const condition = leafToCondition(child, groupIndex)
-        if (condition) conditions.push(condition)
-        return
-      }
-      if (child.type === 'and') {
-        for (const grandchild of child.children) {
-          if (!isLeaf(grandchild)) return
-          const condition = leafToCondition(grandchild, groupIndex)
-          if (condition) conditions.push(condition)
-        }
-      }
-    })
-    // Only succeed if every child actually contributed at least one
-    // condition — a silently-dropped OR branch would change what the rule
-    // matches, so a partial result is treated the same as total failure.
-    const expectedGroups = node.children.length
-    const actualGroups = new Set(conditions.map((c) => c.group)).size
-    if (actualGroups !== expectedGroups) return null
-    return { conditions, conditionLogic: 'OR' }
+    return orGroupsToConditions(
+      node.children,
+      isLeaf,
+      (child): child is Extract<WirefilterNode, { type: 'and' }> => child.type === 'and',
+      leafToCondition,
+    )
   }
 
   return null

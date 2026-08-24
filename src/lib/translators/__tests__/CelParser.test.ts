@@ -292,4 +292,18 @@ describe('parseCelExpression', () => {
       expect(parsed!.conditions[0]!.value).toBe("/it's a\\test")
     })
   })
+
+  describe('fail-closed OR branches (#252)', () => {
+    // Shared with WirefilterParser via orGroupsToConditions — a silently-
+    // dropped OR branch would change what the rule matches (e.g. `A or B`
+    // parsing back as just `A`), so the whole parse must fail rather than
+    // return a partial result.
+    it('returns null when one OR branch is syntactically valid CEL but references an unmapped field', () => {
+      // First branch maps fine (origin.region_code -> country); second is a
+      // real comparison node the parser can't map to any unified field, so
+      // it contributes zero conditions to its group.
+      const result = parseCelExpression("origin.region_code == 'US' || nonexistent.field == 'x'")
+      expect(result).toBeNull()
+    })
+  })
 })

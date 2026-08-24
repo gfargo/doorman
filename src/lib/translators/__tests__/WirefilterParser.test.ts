@@ -217,4 +217,18 @@ describe('parseWirefilterExpression', () => {
       expect(parsed!.conditions[0]).toMatchObject({ field: 'method', operator: 'in', value: ['GET', 'HEAD'] })
     })
   })
+
+  describe('fail-closed OR branches (#252)', () => {
+    // Shared with CelParser via orGroupsToConditions — a silently-dropped OR
+    // branch would change what the rule matches (e.g. `A or B` parsing back
+    // as just `A`), so the whole parse must fail rather than return a
+    // partial result.
+    it('returns null when one OR branch is syntactically valid wirefilter but references an unmapped field', () => {
+      // First branch maps fine (http.host -> host); second is a real
+      // comparison node the parser can't map to any unified field, so it
+      // contributes zero conditions to its group.
+      const result = parseWirefilterExpression('http.host eq "test" or nonexistent.field eq "x"')
+      expect(result).toBeNull()
+    })
+  })
 })
