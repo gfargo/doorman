@@ -1,3 +1,10 @@
+## [3.15.1](https://github.com/gfargo/doorman/compare/v3.15.0...v3.15.1) (2026-08-24)
+
+
+### Bug Fixes
+
+* vercel region collides with unified region; 8 legacy fields leak invalid cloudflare wirefilter ([#275](https://github.com/gfargo/doorman/issues/275)) ([e79b4eb](https://github.com/gfargo/doorman/commit/e79b4eba5107218cbd82e5a7274bf1098e73c620)), closes [#273](https://github.com/gfargo/doorman/issues/273)
+
 # [3.15.0](https://github.com/gfargo/doorman/compare/v3.14.2...v3.15.0) (2026-08-24)
 
 
