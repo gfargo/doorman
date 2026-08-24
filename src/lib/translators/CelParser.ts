@@ -1,5 +1,7 @@
 import type { UnifiedCondition } from '../types/unified'
 import { unescapeCelString } from './celEscape'
+import { TokenStream, ParseError } from './TokenStream'
+import { orGroupsToConditions } from './orGroupsToConditions'
 
 /**
  * Parses a Google Cloud Armor CEL expression back into `UnifiedCondition[]`.
@@ -75,7 +77,7 @@ interface Token {
   value: string
 }
 
-class ParseError extends Error {}
+type CelTokenStream = TokenStream<TokenType, Token>
 
 function tokenize(expression: string): Token[] {
   const tokens: Token[] = []
@@ -219,41 +221,6 @@ function tokenize(expression: string): Token[] {
   return tokens
 }
 
-class TokenStream {
-  pos = 0
-  constructor(private tokens: Token[]) {}
-
-  peek(): Token | undefined {
-    return this.tokens[this.pos]
-  }
-
-  next(): Token {
-    const token = this.tokens[this.pos]
-    if (!token) {
-      throw new ParseError('Unexpected end of expression')
-    }
-    this.pos++
-    return token
-  }
-
-  expect(type: TokenType): Token {
-    const token = this.next()
-    if (token.type !== type) {
-      throw new ParseError(`Expected ${type} but got '${token.value}'`)
-    }
-    return token
-  }
-
-  isIdent(value: string): boolean {
-    const token = this.peek()
-    return !!token && token.type === 'IDENT' && token.value === value
-  }
-
-  atEnd(): boolean {
-    return this.pos >= this.tokens.length
-  }
-}
-
 interface FieldRef {
   field: string
   key?: string
@@ -270,7 +237,7 @@ type CelNode =
   | ({ type: 'membership'; values: (string | number)[] } & FieldRef)
 
 /** A dotted field path, stopping before a trailing `.method(` — that's a method-call suffix, parsed separately. */
-function parseFieldPath(stream: TokenStream): string {
+function parseFieldPath(stream: CelTokenStream): string {
   let path = stream.expect('IDENT').value
   while (stream.peek()?.type === 'DOT') {
     const savedPos = stream.pos
@@ -285,7 +252,7 @@ function parseFieldPath(stream: TokenStream): string {
   return path
 }
 
-function parseFieldRef(stream: TokenStream): FieldRef {
+function parseFieldRef(stream: CelTokenStream): FieldRef {
   const field = parseFieldPath(stream)
   if (stream.peek()?.type === 'LBRACKET') {
     stream.next()
@@ -296,15 +263,15 @@ function parseFieldRef(stream: TokenStream): FieldRef {
   return { field }
 }
 
-function parseLiteral(stream: TokenStream): string | number {
+function parseLiteral(stream: CelTokenStream): string | number {
   const token = stream.next()
   if (token.type === 'STRING') return token.value
   if (token.type === 'NUMBER') return Number(token.value)
   throw new ParseError(`Unexpected token '${token.value}' where a literal was expected`)
 }
 
-function parseLeaf(stream: TokenStream): CelNode {
-  if (stream.isIdent('has')) {
+function parseLeaf(stream: CelTokenStream): CelNode {
+  if (stream.is('IDENT', 'has')) {
     stream.next()
     stream.expect('LPAREN')
     const ref = parseFieldRef(stream)
@@ -312,7 +279,7 @@ function parseLeaf(stream: TokenStream): CelNode {
     return { type: 'has', ...ref }
   }
 
-  if (stream.isIdent('inIpRange')) {
+  if (stream.is('IDENT', 'inIpRange')) {
     stream.next()
     stream.expect('LPAREN')
     const ref = parseFieldRef(stream)
@@ -339,7 +306,7 @@ function parseLeaf(stream: TokenStream): CelNode {
     return { type: 'methodCall', ...ref, method, value: value.value }
   }
 
-  if (stream.isIdent('in')) {
+  if (stream.is('IDENT', 'in')) {
     stream.next()
     stream.expect('LBRACKET')
     const values: (string | number)[] = []
@@ -368,7 +335,7 @@ function parseLeaf(stream: TokenStream): CelNode {
   return { type: 'comparison', ...ref, operator, value }
 }
 
-function parsePrimary(stream: TokenStream): CelNode {
+function parsePrimary(stream: CelTokenStream): CelNode {
   if (stream.peek()?.type === 'LPAREN') {
     stream.next()
     const inner = parseOr(stream)
@@ -378,7 +345,7 @@ function parsePrimary(stream: TokenStream): CelNode {
   return parseLeaf(stream)
 }
 
-function parseUnary(stream: TokenStream): CelNode {
+function parseUnary(stream: CelTokenStream): CelNode {
   if (stream.peek()?.type === 'NOT') {
     stream.next()
     return { type: 'not', child: parsePrimary(stream) }
@@ -386,7 +353,7 @@ function parseUnary(stream: TokenStream): CelNode {
   return parsePrimary(stream)
 }
 
-function parseAnd(stream: TokenStream): CelNode {
+function parseAnd(stream: CelTokenStream): CelNode {
   const children = [parseUnary(stream)]
   while (stream.peek()?.type === 'AND') {
     stream.next()
@@ -395,7 +362,7 @@ function parseAnd(stream: TokenStream): CelNode {
   return children.length === 1 ? children[0]! : { type: 'and', children }
 }
 
-function parseOr(stream: TokenStream): CelNode {
+function parseOr(stream: CelTokenStream): CelNode {
   const children = [parseAnd(stream)]
   while (stream.peek()?.type === 'OR') {
     stream.next()
@@ -661,25 +628,12 @@ function astToConditions(node: CelNode): { conditions: UnifiedCondition[]; condi
   }
 
   if (node.type === 'or') {
-    const conditions: UnifiedCondition[] = []
-    node.children.forEach((child, groupIndex) => {
-      if (isLeaf(child)) {
-        const condition = leafToCondition(child, groupIndex)
-        if (condition) conditions.push(condition)
-        return
-      }
-      if (child.type === 'and') {
-        for (const grandchild of child.children) {
-          if (!isLeaf(grandchild)) return
-          const condition = leafToCondition(grandchild, groupIndex)
-          if (condition) conditions.push(condition)
-        }
-      }
-    })
-    const expectedGroups = node.children.length
-    const actualGroups = new Set(conditions.map((c) => c.group)).size
-    if (actualGroups !== expectedGroups) return null
-    return { conditions, conditionLogic: 'OR' }
+    return orGroupsToConditions(
+      node.children,
+      isLeaf,
+      (child): child is Extract<CelNode, { type: 'and' }> => child.type === 'and',
+      leafToCondition,
+    )
   }
 
   return null
