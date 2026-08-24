@@ -1,3 +1,10 @@
+## [3.13.11](https://github.com/gfargo/doorman/compare/v3.13.10...v3.13.11) (2026-08-24)
+
+
+### Bug Fixes
+
+* **gcp:** back off Operation polling instead of always sleeping the full interval ([#258](https://github.com/gfargo/doorman/issues/258)) ([491de02](https://github.com/gfargo/doorman/commit/491de024ce04948adbd79d621c7b1ca6d524f05d)), closes [#251](https://github.com/gfargo/doorman/issues/251) [#187](https://github.com/gfargo/doorman/issues/187) [#251](https://github.com/gfargo/doorman/issues/251)
+
 ## [3.13.10](https://github.com/gfargo/doorman/compare/v3.13.9...v3.13.10) (2026-08-24)
 
 
