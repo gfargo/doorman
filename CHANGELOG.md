@@ -1,3 +1,10 @@
+## [3.14.2](https://github.com/gfargo/doorman/compare/v3.14.1...v3.14.2) (2026-08-24)
+
+
+### Bug Fixes
+
+* Cloudflare keyed query conditions and rateLimit schema gaps ([#267](https://github.com/gfargo/doorman/issues/267)) ([ea94767](https://github.com/gfargo/doorman/commit/ea947673a5b55f6a71bb0d55134563489ad0ca7c))
+
 ## [3.14.1](https://github.com/gfargo/doorman/compare/v3.14.0...v3.14.1) (2026-08-24)
 
 
