@@ -129,9 +129,9 @@ Two different rule shapes, picked by whether the config has `provider`/`provider
 
 **Condition fields**: `ip`, `country`, `region`, `city`, `asn`, `path`, `host`, `method`, `header`, `query`, `cookie`, `user_agent`, `referer`, `scheme`, `port` — support varies by provider, see [references/cloudflare.md](references/cloudflare.md)/[references/fastly.md](references/fastly.md)/[references/gcp.md](references/gcp.md)
 
-**Operators**: `eq`, `ne`, `contains`, `not_contains`, `starts_with`, `ends_with`, `matches`, `in`, `not_in`, `gt`, `ge`, `lt`, `le`, `exists`, `not_exists` — **on Vercel specifically, `ne`/`not_contains`/`not_in`/`gt`/`ge`/`lt`/`le` currently degrade silently to `eq` (known bug, [doorman#261](https://github.com/gfargo/doorman/issues/261)) — avoid them in a Vercel-targeted config until that's fixed.**
+**Operators**: `eq`, `ne`, `contains`, `not_contains`, `starts_with`, `ends_with`, `matches`, `in`, `not_in`, `gt`, `ge`, `lt`, `le`, `exists`, `not_exists` — on Vercel, `gt`/`ge`/`lt`/`le` have no native equivalent and are dropped with a warning (Vercel has no numeric-comparison operator at all); every other operator, including `ne`/`not_contains`/`not_in`, is fully supported there.
 
-**Actions**: `log`, `deny`, `challenge`, `bypass`, `rate_limit`, `redirect`, `allow`, `block` — **`allow`/`block` are invalid on Vercel specifically ([doorman#262](https://github.com/gfargo/doorman/issues/262)); use `bypass`/`deny` there instead.**
+**Actions**: `log`, `deny`, `challenge`, `bypass`, `rate_limit`, `redirect`, `allow`, `block` — on Vercel, `allow`/`block` are automatically mapped to `bypass`/`deny` (its nearest native equivalents).
 
 ## When to Read Each Reference
 
