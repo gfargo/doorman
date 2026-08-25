@@ -1,3 +1,10 @@
+## [3.15.4](https://github.com/gfargo/doorman/compare/v3.15.3...v3.15.4) (2026-08-25)
+
+
+### Bug Fixes
+
+* map unified allow/block to valid Vercel actions instead of passing through ([#280](https://github.com/gfargo/doorman/issues/280)) ([982dc4c](https://github.com/gfargo/doorman/commit/982dc4cfd734372eef80751ca1d0c0d4d30fa290)), closes [#261](https://github.com/gfargo/doorman/issues/261)
+
 ## [3.15.3](https://github.com/gfargo/doorman/compare/v3.15.2...v3.15.3) (2026-08-24)
 
 
