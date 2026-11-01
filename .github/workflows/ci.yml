@@ -33,6 +33,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Schema is up to date
+        run: pnpm schema:check
+
       - name: Test
         run: pnpm test:ci
 
