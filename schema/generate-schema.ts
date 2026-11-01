@@ -6,6 +6,10 @@ const config = {
   path: resolve(__dirname, '../src/lib/types.ts'),
   type: 'FirewallConfig',
   additionalProperties: false,
+  // The generator type-checks the whole program, including node_modules. TypeScript 5.9 (which it
+  // resolves) rejects the pinned @types/node 20.12 d.ts files, so it threw before generating
+  // anything. doorman's own types are checked by `tsc` and the build, so skip it here.
+  skipTypeCheck: true,
 } as TsJsonSchemaGeneratorConfig
 
 const schemaOutputPath = resolve(__dirname, '../schema/firewall-config.schema.json')

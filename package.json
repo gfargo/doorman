@@ -33,7 +33,8 @@
   "scripts": {
     "prebuild": "pnpm clean",
     "build": "tsup-node",
-    "build:schema": "ts-node ./schema/generate-schema.ts; pnpm lint:fix; pnpm format:fix",
+    "build:schema": "ts-node ./schema/generate-schema.ts && prettier --write schema/firewall-config.schema.json src/constants/schema.ts",
+    "schema:check": "pnpm build:schema && git diff --exit-code -- schema/firewall-config.schema.json src/constants/schema.ts",
     "build:watch": "tsup-node --watch",
     "clean": "rimraf dist",
     "commit": "cz",
