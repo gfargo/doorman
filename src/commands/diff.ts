@@ -53,7 +53,7 @@ async function diffWithProvider(
   if (!isJson) {
     logger.start('Calculating differences...')
   }
-  const changes = await provider.getChanges(config)
+  const changes = await provider.getChanges(config, { readOnly: true })
 
   const ipsToAdd = changes.ipsToAdd ?? []
   const ipsToUpdate = changes.ipsToUpdate ?? []
