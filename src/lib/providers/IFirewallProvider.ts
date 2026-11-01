@@ -47,6 +47,9 @@ export interface SyncOptions {
 
 /** Options for `getChanges`. */
 export interface GetChangesOptions {
+  /** Never prompt for, or create, remote state: a project with no config yet is treated as empty.
+   * For read-only commands (`status`, `diff`). */
+  readOnly?: boolean
   /** See `SyncOptions.assumeYes`. */
   assumeYes?: boolean
 }

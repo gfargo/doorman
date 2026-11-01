@@ -61,7 +61,7 @@ async function statusWithProvider(
   if (!isJson) {
     logger.start('Checking sync status...')
   }
-  const changes = await provider.getChanges(config)
+  const changes = await provider.getChanges(config, { readOnly: true })
   const health = provider.getHealthScore(config)
 
   const localVersion = config.metadata?.version

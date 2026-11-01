@@ -507,6 +507,30 @@ describe('VercelFirewallService', () => {
     })
   })
 
+  describe('getChanges on a project with no remote config yet', () => {
+    it('never allows creating it when readOnly is set (status/diff)', async () => {
+      const config: UnifiedConfig = { version: '2.0', provider: 'vercel', rules: [], ips: [] }
+      const fetchSpy = jest
+        .spyOn(client, 'fetchFirewallConfig')
+        .mockResolvedValue({ ...mockVercelConfig, rules: [], ips: [] })
+
+      await service.getChanges(config, { readOnly: true })
+
+      expect(fetchSpy).toHaveBeenCalledWith(undefined, expect.objectContaining({ allowCreate: false }))
+    })
+
+    it('still allows creating it by default (sync)', async () => {
+      const config: UnifiedConfig = { version: '2.0', provider: 'vercel', rules: [], ips: [] }
+      const fetchSpy = jest
+        .spyOn(client, 'fetchFirewallConfig')
+        .mockResolvedValue({ ...mockVercelConfig, rules: [], ips: [] })
+
+      await service.getChanges(config)
+
+      expect(fetchSpy).toHaveBeenCalledWith(undefined, expect.objectContaining({ allowCreate: true }))
+    })
+  })
+
   describe('idRemappings (regression: local-config write-back needs the real server-assigned id, not a naming-convention guess)', () => {
     it('reports an id remapping when the server assigns a different id than the local rule had', async () => {
       const config: UnifiedConfig = {
