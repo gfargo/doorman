@@ -1,3 +1,10 @@
+## [3.15.5](https://github.com/gfargo/doorman/compare/v3.15.4...v3.15.5) (2026-11-01)
+
+
+### Bug Fixes
+
+* **sync:** add --yes to create a missing first firewall config non-interactively ([#284](https://github.com/gfargo/doorman/issues/284)) ([df7542b](https://github.com/gfargo/doorman/commit/df7542b833344de0efb703bce10d3e2e4de9f95e)), closes [#283](https://github.com/gfargo/doorman/issues/283)
+
 ## [3.15.4](https://github.com/gfargo/doorman/compare/v3.15.3...v3.15.4) (2026-08-25)
 
 
