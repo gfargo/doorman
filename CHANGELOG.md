@@ -1,3 +1,10 @@
+## [3.15.6](https://github.com/gfargo/doorman/compare/v3.15.5...v3.15.6) (2026-11-01)
+
+
+### Bug Fixes
+
+* **vercel:** resolve server-assigned rule ids when the create response has none ([#287](https://github.com/gfargo/doorman/issues/287)) ([7df02e9](https://github.com/gfargo/doorman/commit/7df02e9d49bd5976e26fd749fd6528f13c9e19d1))
+
 ## [3.15.5](https://github.com/gfargo/doorman/compare/v3.15.4...v3.15.5) (2026-11-01)
 
 
