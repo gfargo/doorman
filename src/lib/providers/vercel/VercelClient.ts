@@ -47,6 +47,11 @@ export interface FetchFirewallConfigOptions {
    * operation.
    */
   allowCreate?: boolean
+  /**
+   * Create the missing config without asking. For non-interactive callers
+   * (agents, CI) that passed `--yes`. Ignored when `allowCreate` is false.
+   */
+  assumeYes?: boolean
 }
 
 /**
@@ -103,7 +108,7 @@ export class VercelClient extends BaseFirewallClient {
    * @throws An error if the fetch request fails.
    */
   async fetchFirewallConfig(configVersion?: number, options?: FetchFirewallConfigOptions): Promise<VercelConfig> {
-    const { allowCreate = true } = options ?? {}
+    const { allowCreate = true, assumeYes = false } = options ?? {}
     const response = await this.get<ApiResponse>(this.getUrl(configVersion))
 
     logger.debug('Config Version:', configVersion ?? 'latest')
@@ -124,9 +129,11 @@ export class VercelClient extends BaseFirewallClient {
         return this.emptyConfigPlaceholder()
       }
 
-      const createEmptyFirstVersion = await prompt('Would you like to create one?', {
-        type: 'confirm',
-      })
+      const createEmptyFirstVersion =
+        assumeYes ||
+        (await prompt('Would you like to create one?', {
+          type: 'confirm',
+        }))
 
       if (createEmptyFirstVersion) {
         logger.debug('Creating new empty firewall configuration...')

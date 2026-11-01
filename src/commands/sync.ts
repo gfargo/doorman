@@ -15,6 +15,7 @@ interface SyncOptions extends CredentialOptions {
   debug?: boolean
   ci?: boolean
   allowDeletions?: boolean
+  yes?: boolean
 }
 
 export const command = 'sync'
@@ -38,6 +39,13 @@ export const builder = {
     type: 'boolean',
     description:
       'Required together with --ci to let a non-interactive sync delete existing rules/IPs. Without it, a --ci sync that would delete anything is refused rather than applied silently.',
+    default: false,
+  },
+  yes: {
+    alias: 'y',
+    type: 'boolean',
+    description:
+      'Create the first firewall config without asking when the project has none. Does not authorize deletions.',
     default: false,
   },
 }
@@ -83,7 +91,7 @@ async function syncWithProvider(
   const unifiedConfig = toUnifiedConfig(config)
 
   logger.start(chalk.magenta(`Calculating ${provider.name} firewall configuration changes...`))
-  const changes = await provider.getChanges(unifiedConfig)
+  const changes = await provider.getChanges(unifiedConfig, { assumeYes: argv.yes })
 
   const localVersion = unifiedConfig.metadata?.version
   const hasVersionChange = changes.version !== undefined && localVersion !== changes.version
@@ -115,7 +123,11 @@ async function syncWithProvider(
   // Providers prompt for confirmation internally (unless --ci); no need to
   // prompt again here. In --ci mode, a sync that would delete anything still
   // requires --allow-deletions — see OperationSafety.confirmDestructiveOperation.
-  const result = await provider.syncRules(unifiedConfig, { force: argv.ci, allowDeletions: argv.allowDeletions })
+  const result = await provider.syncRules(unifiedConfig, {
+    force: argv.ci,
+    allowDeletions: argv.allowDeletions,
+    assumeYes: argv.yes,
+  })
 
   if (!result.success) {
     throw new Error(`Sync failed: ${result.errors?.join(', ') || 'unknown error'}`)

@@ -39,6 +39,16 @@ export interface SyncOptions {
    * doorman's very first sync against an already-configured zone/project)
    * that's about to be silently destroyed with no one watching CI logs. */
   allowDeletions?: boolean
+  /** Answer yes to "create the first firewall config?" when the project has none, instead of
+   * prompting. Creating an empty first version is non-destructive, so it needs no `allowDeletions`.
+   * Providers that never prompt ignore it. */
+  assumeYes?: boolean
+}
+
+/** Options for `getChanges`. */
+export interface GetChangesOptions {
+  /** See `SyncOptions.assumeYes`. */
+  assumeYes?: boolean
 }
 
 /**
@@ -200,7 +210,7 @@ export interface IFirewallProvider {
    * @param config - Local configuration to compare
    * @returns Promise resolving to change set
    */
-  getChanges(config: import('../types/unified').UnifiedConfig): Promise<ChangeSet>
+  getChanges(config: import('../types/unified').UnifiedConfig, options?: GetChangesOptions): Promise<ChangeSet>
 
   /**
    * Get supported features for this provider

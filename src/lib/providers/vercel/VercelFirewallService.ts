@@ -108,7 +108,8 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       const dryRunResult = await OperationSafety.performDryRunValidation(
         config,
         'sync rules',
-        async (cfg: UnifiedConfig) => await this.getChanges(cfg, { allowCreate: !dryRun }),
+        async (cfg: UnifiedConfig) =>
+          await this.getChanges(cfg, { allowCreate: !dryRun, assumeYes: options.assumeYes }),
       )
 
       if (!dryRunResult.valid) {
@@ -402,7 +403,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
    */
   async getChanges(
     config: UnifiedConfig,
-    options?: { allowCreate?: boolean },
+    options?: { allowCreate?: boolean; assumeYes?: boolean },
   ): Promise<ChangeSet & { version: number }> {
     // Reject a structurally invalid config up front — before ever diffing
     // or contacting the API — rather than letting a rule with no
@@ -429,6 +430,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       // syncs keep the default `true`, preserving create-on-first-use.
       const activeConfig = await this.client.fetchFirewallConfig(undefined, {
         allowCreate: options?.allowCreate ?? true,
+        assumeYes: options?.assumeYes,
       })
       logger.debug(`Fetched ${activeConfig.rules.length} custom rules and ${activeConfig.ips.length} IP blocking rules`)
 
