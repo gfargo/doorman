@@ -36,7 +36,7 @@ jobs:
         run: npm i pnpm@10 -g
 
       - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
         # Production dependencies only: jest/eslint/rimraf advisories never ship in the package.
