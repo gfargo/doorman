@@ -1,5 +1,2 @@
-pnpm build:schema
-pnpm lint:fix
-pnpm format:fix
-pnpm test
-pnpm build
+# Lint/format only what is staged. The full test suite and build run in CI.
+pnpm exec lint-staged

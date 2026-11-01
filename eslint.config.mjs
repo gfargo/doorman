@@ -6,7 +6,18 @@ import jest from 'eslint-plugin-jest'
 import unusedImports from 'eslint-plugin-unused-imports'
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'bundle/**', 'coverage/**', '.yarn/**', '.www/**', 'CHANGELOG.md', 'test-sync-fix.js'] },
+  {
+    ignores: [
+      'dist/**',
+      'bundle/**',
+      'coverage/**',
+      '.yarn/**',
+      '.www/**',
+      '.claude/**',
+      'CHANGELOG.md',
+      'test-sync-fix.js',
+    ],
+  },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.cjs', '**/*.mjs'],
     languageOptions: {
