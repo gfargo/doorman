@@ -230,6 +230,8 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       // convention guess: `oldId` is the local rule's id if it had one (a
       // caller should match on it), otherwise omitted (match on `name`).
       const idRemappings: NonNullable<SyncResult['idRemappings']> = []
+      // Rules whose create response carried no id; resolved from the post-sync config by name.
+      const createdWithoutId: { rule: (typeof toAdd)[number]; created: CustomRule }[] = []
 
       // Delete custom rules
       for (const rule of toDelete) {
@@ -263,7 +265,12 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
           logger.debug(`Adding new custom rule: ${rule.name}`)
           const newRule = await this.client.createFirewallRule(rule)
           addedRules.push(newRule)
-          if (newRule.id && newRule.id !== rule.id) {
+          if (!newRule.id) {
+            // Vercel's PATCH response is not guaranteed to echo the created rule
+            // (and so its server-assigned id). Resolve it from the post-sync
+            // config below rather than leaving the local id looking valid.
+            createdWithoutId.push({ rule, created: newRule })
+          } else if (newRule.id !== rule.id) {
             idRemappings.push({ oldId: rule.id || undefined, newId: newRule.id, name: rule.name })
           }
           logger.debug(`New custom rule added: ${newRule.id}`)
@@ -337,6 +344,22 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
         const activeConfig = await this.client.fetchFirewallConfig()
         finalVersion = activeConfig.version
         finalUpdatedAt = activeConfig.updatedAt
+
+        for (const { rule, created } of createdWithoutId) {
+          const matches = activeConfig.rules.filter((r) => r.name === rule.name)
+          if (matches.length === 1) {
+            const newId = matches[0]!.id
+            created.id = newId
+            if (newId && newId !== rule.id) {
+              idRemappings.push({ oldId: rule.id || undefined, newId, name: rule.name })
+            }
+          } else {
+            warnings.push(
+              `Could not determine the Vercel-assigned id for new rule "${rule.name}" (${matches.length} remote rules share that name); ` +
+                `its local id may not match the remote one, so a later sync may re-create it. Run \`doorman download\` to reconcile.`,
+            )
+          }
+        }
 
         const remoteRuleIds = new Set(activeConfig.rules.map((r) => r.id))
         const remoteIPIds = new Set(activeConfig.ips.map((r) => r.id))

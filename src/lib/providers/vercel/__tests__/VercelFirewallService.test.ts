@@ -538,6 +538,41 @@ describe('VercelFirewallService', () => {
       expect(result.idRemappings).toEqual([{ oldId: 'stale_local_id', newId: 'rule_server_assigned', name: 'My Rule' }])
     })
 
+    it('resolves the id from the post-sync config when the create response carries none', async () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [
+          {
+            id: 'my_local_id',
+            name: 'My Rule',
+            enabled: true,
+            conditions: [{ field: 'path', operator: 'eq', value: '/a' }],
+            action: { type: 'deny' },
+          },
+        ],
+        ips: [],
+      }
+      const remoteRule = {
+        id: 'rule_my_rule_AbC123',
+        name: 'My Rule',
+        active: true,
+        conditionGroup: [],
+        action: { mitigate: { action: 'deny' as const, rateLimit: null, redirect: null, actionDuration: null } },
+      }
+
+      jest
+        .spyOn(client, 'fetchFirewallConfig')
+        .mockResolvedValueOnce({ ...mockVercelConfig, rules: [], ips: [] })
+        .mockResolvedValue({ ...mockVercelConfig, rules: [remoteRule], ips: [] })
+      // Vercel's PATCH response was not the rule: no id on it.
+      jest.spyOn(client, 'createFirewallRule').mockResolvedValue({ name: 'My Rule' } as never)
+
+      const result = await service.syncRules(config)
+
+      expect(result.idRemappings).toEqual([{ oldId: 'my_local_id', newId: 'rule_my_rule_AbC123', name: 'My Rule' }])
+    })
+
     it('omits oldId when the local rule had no id at all', async () => {
       const config: UnifiedConfig = {
         version: '2.0',
