@@ -162,6 +162,27 @@ describe('VercelClient', () => {
         expect(result).toBeNull()
       })
 
+      it('creates an empty config without prompting when assumeYes is set', async () => {
+        fetchSpy
+          .mockResolvedValueOnce(createMockResponse({ active: null }))
+          .mockResolvedValueOnce(createMockResponse(mockVercelConfig))
+
+        const result = await client.fetchFirewallConfig(undefined, { assumeYes: true })
+
+        expect(prompt).not.toHaveBeenCalled()
+        expect(fetchSpy).toHaveBeenCalledTimes(2)
+        expect(result).toEqual(mockVercelConfig.active)
+      })
+
+      it('never creates when allowCreate is false, even with assumeYes', async () => {
+        fetchSpy.mockResolvedValue(createMockResponse({ active: null }))
+
+        await client.fetchFirewallConfig(undefined, { allowCreate: false, assumeYes: true })
+
+        expect(prompt).not.toHaveBeenCalled()
+        expect(fetchSpy).toHaveBeenCalledTimes(1)
+      })
+
       it('creates an empty config when the user confirms the prompt (allowCreate defaults to true)', async () => {
         fetchSpy
           .mockResolvedValueOnce(createMockResponse({ active: null }))

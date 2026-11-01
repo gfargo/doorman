@@ -19,7 +19,7 @@ export const prompt: typeof consola.prompt = async (message, options) => {
   if (!process.stdin.isTTY) {
     throw new Error(
       `Cannot prompt for "${message}" — no interactive terminal available. ` +
-        `Re-run with the appropriate non-interactive flag for this command (e.g. --interactive=false, --ci, --force).`,
+        `Re-run with the appropriate non-interactive flag for this command (e.g. --interactive=false, --ci, --force; "sync --yes" creates a missing first firewall config).`,
     )
   }
 
