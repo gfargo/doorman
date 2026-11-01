@@ -1,3 +1,10 @@
+## [3.15.7](https://github.com/gfargo/doorman/compare/v3.15.6...v3.15.7) (2026-11-01)
+
+
+### Bug Fixes
+
+* **status,diff:** never prompt or create remote config on a project with none ([#290](https://github.com/gfargo/doorman/issues/290)) ([1193087](https://github.com/gfargo/doorman/commit/11930870c3a956130561eacb44928125e5bf6bad)), closes [#288](https://github.com/gfargo/doorman/issues/288)
+
 ## [3.15.6](https://github.com/gfargo/doorman/compare/v3.15.5...v3.15.6) (2026-11-01)
 
 
