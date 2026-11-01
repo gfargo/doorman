@@ -1,3 +1,10 @@
+## [3.15.8](https://github.com/gfargo/doorman/compare/v3.15.7...v3.15.8) (2026-11-01)
+
+
+### Bug Fixes
+
+* **schema:** generator no longer crashes on a node_modules type error; check it in CI ([#293](https://github.com/gfargo/doorman/issues/293)) ([83a6aa4](https://github.com/gfargo/doorman/commit/83a6aa4e6f44e1d762ad66e8e0b9fc9663f2598e)), closes [#291](https://github.com/gfargo/doorman/issues/291)
+
 ## [3.15.7](https://github.com/gfargo/doorman/compare/v3.15.6...v3.15.7) (2026-11-01)
 
 
