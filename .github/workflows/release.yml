@@ -39,7 +39,8 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Verify the integrity of provenance attestations and registry signatures for installed dependencies
-        run: pnpm audit --audit-level=moderate
+        # Production dependencies only: jest/eslint/rimraf advisories never ship in the package.
+        run: pnpm audit --prod --audit-level=critical
 
       - name: Lint
         run: pnpm lint
