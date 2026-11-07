@@ -1,3 +1,10 @@
+## [3.15.9](https://github.com/gfargo/doorman/compare/v3.15.8...v3.15.9) (2026-11-07)
+
+
+### Bug Fixes
+
+* **vercel:** reject over-long rule name/description up front and surface API error messages ([#296](https://github.com/gfargo/doorman/issues/296)) ([eda6d5c](https://github.com/gfargo/doorman/commit/eda6d5c9ed1f05597d905af9f3172ddde2149980)), closes [#295](https://github.com/gfargo/doorman/issues/295)
+
 ## [3.15.8](https://github.com/gfargo/doorman/compare/v3.15.7...v3.15.8) (2026-11-01)
 
 
