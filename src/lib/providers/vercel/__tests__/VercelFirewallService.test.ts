@@ -507,6 +507,50 @@ describe('VercelFirewallService', () => {
     })
   })
 
+  describe('rule name/description limits', () => {
+    const baseRule = {
+      enabled: true,
+      conditions: [{ field: 'path' as const, operator: 'eq' as const, value: '/a' }],
+      action: { type: 'deny' as const },
+    }
+
+    it('rejects a description over 256 characters before calling the API', async () => {
+      const fetchSpy = jest.spyOn(client, 'fetchFirewallConfig')
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [{ ...baseRule, name: 'Too chatty', description: 'x'.repeat(257) }],
+        ips: [],
+      }
+
+      await expect(service.getChanges(config)).rejects.toThrow(/description is 257 characters \(limit 256\)/)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it('rejects a name over 160 characters', async () => {
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [{ ...baseRule, name: 'n'.repeat(161) }],
+        ips: [],
+      }
+
+      await expect(service.getChanges(config)).rejects.toThrow(/name is 161 characters \(limit 160\)/)
+    })
+
+    it('accepts values exactly at the limits', async () => {
+      jest.spyOn(client, 'fetchFirewallConfig').mockResolvedValue({ ...mockVercelConfig, rules: [], ips: [] })
+      const config: UnifiedConfig = {
+        version: '2.0',
+        provider: 'vercel',
+        rules: [{ ...baseRule, name: 'n'.repeat(160), description: 'x'.repeat(256) }],
+        ips: [],
+      }
+
+      await expect(service.getChanges(config)).resolves.toBeDefined()
+    })
+  })
+
   describe('getChanges on a project with no remote config yet', () => {
     it('never allows creating it when readOnly is set (status/diff)', async () => {
       const config: UnifiedConfig = { version: '2.0', provider: 'vercel', rules: [], ips: [] }
