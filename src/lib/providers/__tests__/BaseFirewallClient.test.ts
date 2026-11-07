@@ -187,6 +187,21 @@ describe('BaseFirewallClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('includes the message from an { error: { message } } error body', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      makeResponse({
+        ok: false,
+        status: 400,
+        statusText: 'Bad Request',
+        jsonBody: { error: { code: 'bad_request', message: 'description must be at most 256 characters' } },
+      }),
+    )
+
+    await expect(client.getJson('/bad', { retries: 0 })).rejects.toThrow(
+      /API error: 400 Bad Request - description must be at most 256 characters/,
+    )
+  })
+
   it('treats AbortError as non-retryable and throws', async () => {
     const abortError = Object.assign(new Error('aborted'), { name: 'AbortError' })
     const fetchMock = jest.spyOn(globalThis, 'fetch').mockRejectedValueOnce(abortError)

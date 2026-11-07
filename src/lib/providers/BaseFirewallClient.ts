@@ -327,6 +327,12 @@ export abstract class BaseFirewallClient {
         const data = errorData as Record<string, unknown>
         if (typeof data.error === 'string') {
           errorMessage = `${base} - ${data.error}`
+        } else if (
+          typeof data.error === 'object' &&
+          data.error !== null &&
+          typeof (data.error as Record<string, unknown>).message === 'string'
+        ) {
+          errorMessage = `${base} - ${(data.error as Record<string, unknown>).message}`
         } else if (typeof data.message === 'string') {
           errorMessage = `${base} - ${data.message}`
         } else if (Array.isArray(data.errors)) {

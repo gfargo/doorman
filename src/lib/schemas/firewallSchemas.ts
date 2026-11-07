@@ -167,8 +167,8 @@ const ruleActionSchema = z.object({
 // Rule schemas
 export const firewallRuleSchema = z.object({
   id: idSchema,
-  name: z.string(),
-  description: z.string().optional(),
+  name: z.string().max(160, 'Vercel limits a rule name to 160 characters'),
+  description: z.string().max(256, 'Vercel limits a rule description to 256 characters').optional(),
   conditionGroup: z.array(conditionGroupSchema),
   action: ruleActionSchema,
   active: z.boolean(),

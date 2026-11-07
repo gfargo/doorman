@@ -22,6 +22,10 @@ import type {
 import type { UnifiedConfig, UnifiedRule, UnifiedIPRule } from '../../types/unified'
 import type { CustomRule, IPBlockingRule } from '../../types/vercel'
 
+/** Vercel's API limits for a custom rule's text fields. */
+const VERCEL_RULE_NAME_MAX = 160
+const VERCEL_RULE_DESCRIPTION_MAX = 256
+
 /**
  * Vercel Firewall Service
  * Implements IFirewallProvider for Vercel Firewall
@@ -422,6 +426,30 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
   }
 
   /**
+   * Vercel rejects a rule whose name is over 160 characters or description over 256 with a bare
+   * 400, so fail up front with the rule and limit named. Called from `getChanges` rather than
+   * `validateConfig()`, which the CLI never calls.
+   */
+  private assertRuleTextLimits(config: UnifiedConfig): void {
+    const problems: string[] = []
+    for (const rule of config.rules) {
+      if (rule.name.length > VERCEL_RULE_NAME_MAX) {
+        problems.push(
+          `rule "${rule.name.slice(0, 40)}…" name is ${rule.name.length} characters (limit ${VERCEL_RULE_NAME_MAX})`,
+        )
+      }
+      if (rule.description && rule.description.length > VERCEL_RULE_DESCRIPTION_MAX) {
+        problems.push(
+          `rule "${rule.name}" description is ${rule.description.length} characters (limit ${VERCEL_RULE_DESCRIPTION_MAX})`,
+        )
+      }
+    }
+    if (problems.length > 0) {
+      throw new Error(`Vercel would reject this configuration: ${problems.join('; ')}.`)
+    }
+  }
+
+  /**
    * Get changes between local and remote configuration
    */
   async getChanges(
@@ -443,6 +471,7 @@ export class VercelFirewallService extends BaseFirewallService implements IFirew
       throw new Error(`Invalid firewall configuration: ${configValidation.error.message}`)
     }
     this.assertManagedRulesSupported(config)
+    this.assertRuleTextLimits(config)
 
     try {
       logger.debug('Fetching existing firewall configuration')
