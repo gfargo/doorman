@@ -56,6 +56,23 @@ yarn global add @gfargo/doorman
 pnpm add -g @gfargo/doorman
 ```
 
+### Install as an agent skill
+
+Doorman ships an [Agent Skill](https://agentskills.io) so coding agents (Claude Code, Cursor, Codex, and others) can manage your WAF rules with the CLI:
+
+```bash
+npx skills add gfargo/doorman
+```
+
+Claude Code users can also install it from the plugin marketplace:
+
+```
+/plugin marketplace add gfargo/skills
+/plugin install security@gfargo-skills
+```
+
+The skill lives at [`skills/doorman`](./skills/doorman/SKILL.md).
+
 ### Get Started in 30 Seconds
 
 ```bash
