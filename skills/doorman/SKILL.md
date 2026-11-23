@@ -1,8 +1,8 @@
 ---
 name: doorman
-description: Manage Vercel, Cloudflare, and Fastly WAF firewall rules as code with the Doorman CLI. Use for any firewall-as-code task — creating rules, IP blocking, rate limiting, bot protection, geo-blocking, syncing local config to providers, validating configurations, exporting documentation, CI/CD automation, or translating rules between provider formats.
+description: Manage Vercel, Cloudflare, Fastly, and Google Cloud Armor (beta) WAF firewall rules as code with the Doorman CLI. Use for any firewall-as-code task — creating rules, IP blocking, rate limiting, bot protection, geo-blocking, syncing local config to providers, validating configurations, exporting documentation, CI/CD automation, or translating rules between provider formats.
 license: MIT
-compatibility: Node.js >= 20. Requires provider API tokens (VERCEL_TOKEN, CLOUDFLARE_API_TOKEN, or FASTLY_API_TOKEN). Install globally via npm install -g @gfargo/doorman.
+compatibility: Node.js >= 20. Requires provider credentials for the provider you use (VERCEL_TOKEN, CLOUDFLARE_API_TOKEN, FASTLY_API_TOKEN, or GCP Application Default Credentials / GOOGLE_APPLICATION_CREDENTIALS with GOOGLE_CLOUD_PROJECT and GCP_POLICY_NAME). Install globally via npm install -g @gfargo/doorman.
 metadata:
   author: gfargo
   version: '1.0'
@@ -12,7 +12,7 @@ metadata:
 
 # Doorman — Firewall Rules as Code
 
-Doorman is a CLI for managing WAF (Web Application Firewall) rules as code across Vercel, Cloudflare, and Fastly Next-Gen WAF. Configuration lives in `.doorman.json`, syncs bidirectionally with provider APIs, and integrates into CI/CD pipelines.
+Doorman is a CLI for managing WAF (Web Application Firewall) rules as code across Vercel, Cloudflare, Fastly Next-Gen WAF, and Google Cloud Armor (beta). Configuration lives in `.doorman.json`, syncs bidirectionally with provider APIs, and integrates into CI/CD pipelines.
 
 ## Command Quick Reference
 
@@ -44,7 +44,7 @@ doorman export --format markdown    # Export as markdown|json|yaml|terraform
 doorman remove --name "Old Rule"    # Remove rules by name/ID
 ```
 
-All commands accept `--provider vercel|cloudflare|fastly` and `--config <path>`.
+All commands accept `--provider vercel|cloudflare|fastly|gcp` and `--config <path>`.
 
 ## Environment Variables
 
