@@ -28,7 +28,7 @@ These files are templates for setting up auto-sync to the [gfargo/skills](https:
 
 4. The workflow runs daily and on `workflow_dispatch`. It:
    - Checks the latest release tag on `gfargo/doorman`
-   - Compares against `.source-version` in the destination
+   - Compares against `source-version.txt` in the destination
    - If newer, clones at that tag, mirrors `skills/doorman/` content
    - Bumps the security plugin version, commits, tags, and creates a release
 

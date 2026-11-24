@@ -90,7 +90,7 @@ These translate cleanly to the unified format's condition fields (`mapVercelType
 | `geo_as_number` | ASN number                       | `13335`                 |
 | `scheme`        | URL scheme                       | `"https"`               |
 
-**Vercel-only types** — these round-trip fine between the legacy shape and the unified format (Vercel stays Vercel), but have no _other_ provider's equivalent: migrating to Fastly drops them with a translation warning, while migrating to Cloudflare currently produces a broken filter expression with no warning at all (`mapUnifiedFieldToCloudflare` in `src/lib/translators/ExpressionBuilder.ts` has no entry for them and falls through to the bare field name, which isn't valid Wirefilter syntax) — avoid these in a rule you intend to sync to Cloudflare:
+**Vercel-only types** — these round-trip fine between the legacy shape and the unified format (Vercel stays Vercel), but have no _other_ provider's equivalent: migrating to Fastly drops them with a translation warning, while migrating to Cloudflare currently produces a broken filter expression that the CLI does not flag (`mapUnifiedFieldToCloudflare` in `src/lib/translators/ExpressionBuilder.ts` has no entry for them and falls through to the bare field name, which isn't valid Wirefilter syntax) — avoid these in a rule you intend to sync to Cloudflare:
 
 - `geo_continent` — continent code (`"NA"`)
 - `geo_country_region` — region/state code (`"CA"`) — distinct from `region` below, not interchangeable
