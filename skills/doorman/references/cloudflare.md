@@ -148,7 +148,8 @@ Doorman validates Cloudflare configs against:
 - Rule count limits per plan
 - Action compatibility (e.g., `js_challenge` deprecated in favor of `managed_challenge`)
 - List reference validity (when using Lists API)
-- Rate limit configuration completeness
+
+Validation does not catch a `rate_limit` rule that is missing `action.rateLimit`; it deploys as a plain `block`. Check that field yourself before you deploy.
 
 ## Optimizer
 
