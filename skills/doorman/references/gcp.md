@@ -67,19 +67,19 @@ Cloud Armor rules match on CEL (Common Expression Language) — an expression-st
 
 ### Field Mapping
 
-| Doorman Field | Cloud Armor CEL                                       | Notes                                                                          |
-| ------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `ip`          | `origin.ip == '...'` or `inIpRange(origin.ip, '...')` | Bare address uses `==`; a CIDR value (contains `/`) uses `inIpRange()`         |
-| `path`        | `request.path`                                        |                                                                                |
-| `method`      | `request.method`                                      |                                                                                |
-| `country`     | `origin.region_code`                                  | Country-level only                                                             |
-| `asn`         | `origin.asn`                                          | Numeric comparison                                                             |
-| `host`        | `request.headers['host']`                             | Guarded with `has(...)` — indexing an absent header key is a CEL runtime error |
-| `user_agent`  | `request.headers['user-agent']`                       | Guarded with `has(...)`                                                        |
-| `referer`     | `request.headers['referer']`                          | Guarded with `has(...)`                                                        |
-| `header`      | `request.headers['<key>']`                            | Requires `key` (the header name); guarded with `has(...)`                      |
-| `query`       | `request.query`                                       | Raw, undecoded query string — no parsed per-parameter map                      |
-| `cookie`      | `request.headers['cookie']`                           | No parsed cookie map — see Cookie Matching below                               |
+| Doorman Field | Cloud Armor CEL | Notes |
+| --- | --- | --- |
+| `ip` | `origin.ip == '...'` or `inIpRange(origin.ip, '...')` | Bare address uses `==`; a CIDR value (contains `/`) uses `inIpRange()` |
+| `path` | `request.path` |  |
+| `method` | `request.method` |  |
+| `country` | `origin.region_code` | Country-level only |
+| `asn` | `origin.asn` | Numeric comparison |
+| `host` | `request.headers['host']` | Guarded with `has(...)` — indexing an absent header key is a CEL runtime error |
+| `user_agent` | `request.headers['user-agent']` | Guarded with `has(...)` |
+| `referer` | `request.headers['referer']` | Guarded with `has(...)` |
+| `header` | `request.headers['<key>']` | Requires `key` (the header name); guarded with `has(...)` |
+| `query` | `request.query` | Raw, undecoded query string — no parsed per-parameter map |
+| `cookie` | `request.headers['cookie']` | No parsed cookie map — see Cookie Matching below |
 
 Fields with **no CEL equivalent at all** (`region`, `city`, `port`, `scheme`) fail loudly with a clear error rather than being silently dropped or approximated — Cloud Armor has no continent/region/city-level geo attribute (only country-level `origin.region_code`), and no per-request port attribute (Cloud Armor operates at L7 behind a load balancer). A rule using one of these doesn't sync at all; there's no partial/lossy version of it to fall back to.
 
@@ -89,15 +89,15 @@ Cloud Armor has no parsed per-cookie map, only the raw `Cookie` header string. W
 
 ### Action Mapping
 
-| Doorman Action  | Cloud Armor Action           | Notes                                                               |
-| --------------- | ---------------------------- | ------------------------------------------------------------------- |
-| `deny`, `block` | `deny(403)`                  |                                                                     |
-| `allow`         | `allow`                      |                                                                     |
-| `bypass`        | `allow`                      |                                                                     |
-| `rate_limit`    | `throttle`                   | Requires `rateLimitOptions` — see below                             |
-| `redirect`      | `redirect`                   | Requires `redirectOptions` (target URL)                             |
-| `log`           | `allow` + `preview: true`    | No dedicated log-only action — evaluates and logs without enforcing |
-| `challenge`     | `deny(403)` (with a warning) | No standalone challenge action for ordinary custom rules            |
+| Doorman Action | Cloud Armor Action | Notes |
+| --- | --- | --- |
+| `deny`, `block` | `deny(403)` |  |
+| `allow` | `allow` |  |
+| `bypass` | `allow` |  |
+| `rate_limit` | `throttle` | Requires `rateLimitOptions` — see below |
+| `redirect` | `redirect` | Requires `redirectOptions` (target URL) |
+| `log` | `allow` + `preview: true` | No dedicated log-only action — evaluates and logs without enforcing |
+| `challenge` | `deny(403)` (with a warning) | No standalone challenge action for ordinary custom rules |
 
 ## The Priority Model
 
@@ -127,15 +127,15 @@ Every mutating call (`addRule`/`patchRule`/`removeRule`) returns a long-running 
 
 ## Limitations & Differences
 
-| Feature                     | Vercel                        | GCP Cloud Armor                               | Notes                                                                      |
-| --------------------------- | ----------------------------- | --------------------------------------------- | -------------------------------------------------------------------------- |
-| Rule ordering               | Best-effort (insertion order) | Explicit required `priority`                  | Lower priority number evaluates first; collisions rejected outright        |
-| IP blocking                 | Dedicated resource            | Just a specially-shaped `rules[]` entry       | No separate list/resource — see above                                      |
-| Geo targeting               | Country/city/continent/region | Country only (`origin.region_code`)           | `region`/`city` fields throw rather than silently drop                     |
-| Port / scheme conditions    | Yes                           | No CEL equivalent                             | Throw rather than silently drop                                            |
-| Managed/vendor rule groups  | —                             | Preconfigured WAF rules exist on the real API | Not yet configurable through Doorman for any provider (tracked separately) |
-| Standalone challenge action | Yes                           | No                                            | Falls back to `deny(403)` with a warning                                   |
-| Change a rule's priority    | N/A (no priority concept)     | Remove + re-add under the new priority        | No in-place relocation on the real API                                     |
+| Feature | Vercel | GCP Cloud Armor | Notes |
+| --- | --- | --- | --- |
+| Rule ordering | Best-effort (insertion order) | Explicit required `priority` | Lower priority number evaluates first; collisions rejected outright |
+| IP blocking | Dedicated resource | Just a specially-shaped `rules[]` entry | No separate list/resource — see above |
+| Geo targeting | Country/city/continent/region | Country only (`origin.region_code`) | `region`/`city` fields throw rather than silently drop |
+| Port / scheme conditions | Yes | No CEL equivalent | Throw rather than silently drop |
+| Managed/vendor rule groups | — | Preconfigured WAF rules exist on the real API | Not yet configurable through Doorman for any provider (tracked separately) |
+| Standalone challenge action | Yes | No | Falls back to `deny(403)` with a warning |
+| Change a rule's priority | N/A (no priority concept) | Remove + re-add under the new priority | No in-place relocation on the real API |
 
 ## Manual End-to-End Verification
 

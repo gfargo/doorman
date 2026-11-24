@@ -32,14 +32,14 @@ Every rule in the `rules` array has this shape:
 
 ### Fields
 
-| Field            | Type    | Required | Description                                                                           |
-| ---------------- | ------- | -------- | ------------------------------------------------------------------------------------- |
-| `id`             | string  | No       | Unique identifier. Convention: `rule_` prefix, snake_case. Auto-generated if omitted. |
-| `name`           | string  | Yes      | Display name shown in tables and logs.                                                |
-| `description`    | string  | No       | Explains the rule's purpose. Improves health score.                                   |
-| `active`         | boolean | Yes      | `true` to enforce, `false` to disable without deleting.                               |
-| `conditionGroup` | array   | Yes      | Array of condition groups (see below).                                                |
-| `action`         | object  | Yes      | What to do when conditions match (see below).                                         |
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | No | Unique identifier. Convention: `rule_` prefix, snake_case. Auto-generated if omitted. |
+| `name` | string | Yes | Display name shown in tables and logs. |
+| `description` | string | No | Explains the rule's purpose. Improves health score. |
+| `active` | boolean | Yes | `true` to enforce, `false` to disable without deleting. |
+| `conditionGroup` | array | Yes | Array of condition groups (see below). |
+| `action` | object | Yes | What to do when conditions match (see below). |
 
 ## Condition Groups
 
@@ -63,32 +63,32 @@ Each condition has:
 { "type": "field_type", "op": "operator", "value": "match_value", "key": "header_name", "neg": false }
 ```
 
-| Field   | Type                | Required | Description                                                   |
-| ------- | ------------------- | -------- | ------------------------------------------------------------- |
-| `type`  | string              | Yes      | What to match against (see types below).                      |
-| `op`    | string              | Yes      | How to compare (see operators below).                         |
-| `value` | string/number/array | Yes      | Value to match. Arrays for `inc` operator.                    |
-| `key`   | string              | No       | Required for `header`, `query`, `cookie` types.               |
-| `neg`   | boolean             | No       | `true` to negate the condition (NOT logic). Default: `false`. |
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `type` | string | Yes | What to match against (see types below). |
+| `op` | string | Yes | How to compare (see operators below). |
+| `value` | string/number/array | Yes | Value to match. Arrays for `inc` operator. |
+| `key` | string | No | Required for `header`, `query`, `cookie` types. |
+| `neg` | boolean | No | `true` to negate the condition (NOT logic). Default: `false`. |
 
 ### Condition Types
 
 These translate cleanly to the unified format's condition fields (`mapVercelTypeToUnified` in `src/lib/providers/vercel/translator.ts`), so a rule built from them survives migration to Cloudflare or Fastly:
 
-| Type            | Description                      | Example Value           |
-| --------------- | -------------------------------- | ----------------------- |
-| `path`          | URL path                         | `"/api/users"`          |
-| `method`        | HTTP method                      | `"POST"`                |
-| `host`          | Hostname                         | `"example.com"`         |
-| `user_agent`    | User-Agent header                | `"Googlebot"`           |
-| `ip_address`    | Client IP                        | `"192.168.1.1"`         |
-| `header`        | HTTP header (requires `key`)     | `"application/json"`    |
-| `query`         | Query parameter (requires `key`) | `"true"`                |
-| `cookie`        | Cookie value (requires `key`)    | `"session_abc"`         |
-| `geo_country`   | Country code (ISO 3166-1)        | `"US"` or `["US","CA"]` |
-| `geo_city`      | City name                        | `"New York"`            |
-| `geo_as_number` | ASN number                       | `13335`                 |
-| `scheme`        | URL scheme                       | `"https"`               |
+| Type | Description | Example Value |
+| --- | --- | --- |
+| `path` | URL path | `"/api/users"` |
+| `method` | HTTP method | `"POST"` |
+| `host` | Hostname | `"example.com"` |
+| `user_agent` | User-Agent header | `"Googlebot"` |
+| `ip_address` | Client IP | `"192.168.1.1"` |
+| `header` | HTTP header (requires `key`) | `"application/json"` |
+| `query` | Query parameter (requires `key`) | `"true"` |
+| `cookie` | Cookie value (requires `key`) | `"session_abc"` |
+| `geo_country` | Country code (ISO 3166-1) | `"US"` or `["US","CA"]` |
+| `geo_city` | City name | `"New York"` |
+| `geo_as_number` | ASN number | `13335` |
+| `scheme` | URL scheme | `"https"` |
 
 **Vercel-only types** — these round-trip fine between the legacy shape and the unified format (Vercel stays Vercel), but have no _other_ provider's equivalent: migrating to Fastly drops them with a translation warning, while migrating to Cloudflare currently produces a broken filter expression that the CLI does not flag (`mapUnifiedFieldToCloudflare` in `src/lib/translators/ExpressionBuilder.ts` has no entry for them and falls through to the bare field name, which isn't valid Wirefilter syntax) — avoid these in a rule you intend to sync to Cloudflare:
 
@@ -104,16 +104,16 @@ These translate cleanly to the unified format's condition fields (`mapVercelType
 
 ### Operators
 
-| Operator | Name       | Description                 | Value Type             |
-| -------- | ---------- | --------------------------- | ---------------------- |
-| `eq`     | Equals     | Exact match                 | string/number          |
-| `pre`    | Prefix     | Starts with                 | string                 |
-| `suf`    | Suffix     | Ends with                   | string                 |
-| `sub`    | Substring  | Contains                    | string                 |
-| `inc`    | Includes   | Is any of (array match)     | string[]               |
-| `re`     | Regex      | Regular expression match    | string (regex pattern) |
-| `ex`     | Exists     | Field/header exists         | `true`                 |
-| `nex`    | Not Exists | Field/header does not exist | `true`                 |
+| Operator | Name | Description | Value Type |
+| --- | --- | --- | --- |
+| `eq` | Equals | Exact match | string/number |
+| `pre` | Prefix | Starts with | string |
+| `suf` | Suffix | Ends with | string |
+| `sub` | Substring | Contains | string |
+| `inc` | Includes | Is any of (array match) | string[] |
+| `re` | Regex | Regular expression match | string (regex pattern) |
+| `ex` | Exists | Field/header exists | `true` |
+| `nex` | Not Exists | Field/header does not exist | `true` |
 
 ### Using `key` for Header/Query/Cookie
 
@@ -169,13 +169,13 @@ Duration formats: `"30s"`, `"5m"`, `"1h"`, `"1d"`, `"permanent"`
 }
 ```
 
-| Field                | Type     | Required | Description                                                                                                                            |
-| -------------------- | -------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `requests`           | number   | Yes      | Max requests allowed in window.                                                                                                        |
-| `window`             | string   | Yes      | Time window: `"10s"`, `"1m"`, `"5m"`, `"1h"`                                                                                           |
-| `characteristics`    | string[] | No       | What to rate limit by. Default: `["ip.src"]`. Options: `"ip.src"`, `"http.request.uri.path"`, `"http.request.headers[\"user-agent\"]"` |
-| `mitigationTimeout`  | number   | No       | How long (seconds) to block after limit exceeded. Default: 3600.                                                                       |
-| `countingExpression` | string   | No       | Cloudflare-specific: expression for what counts toward the limit.                                                                      |
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `requests` | number | Yes | Max requests allowed in window. |
+| `window` | string | Yes | Time window: `"10s"`, `"1m"`, `"5m"`, `"1h"` |
+| `characteristics` | string[] | No | What to rate limit by. Default: `["ip.src"]`. Options: `"ip.src"`, `"http.request.uri.path"`, `"http.request.headers[\"user-agent\"]"` |
+| `mitigationTimeout` | number | No | How long (seconds) to block after limit exceeded. Default: 3600. |
+| `countingExpression` | string | No | Cloudflare-specific: expression for what counts toward the limit. |
 
 ### Redirect
 
@@ -190,10 +190,10 @@ Duration formats: `"30s"`, `"5m"`, `"1h"`, `"1d"`, `"permanent"`
 }
 ```
 
-| Field       | Type    | Description                               |
-| ----------- | ------- | ----------------------------------------- |
-| `location`  | string  | Redirect URL (absolute or relative path). |
-| `permanent` | boolean | `true` for 301, `false` for 302.          |
+| Field | Type | Description |
+| --- | --- | --- |
+| `location` | string | Redirect URL (absolute or relative path). |
+| `permanent` | boolean | `true` for 301, `false` for 302. |
 
 ### Log Only
 
@@ -225,13 +225,13 @@ IP rules go in the `ips` array, separate from `rules`:
 }
 ```
 
-| Field      | Type   | Required | Description                                         |
-| ---------- | ------ | -------- | --------------------------------------------------- |
-| `id`       | string | No       | Unique identifier.                                  |
-| `ip`       | string | Yes      | IP address or CIDR range. Use `/32` for single IPs. |
-| `hostname` | string | No       | Associated hostname (documentation only).           |
-| `action`   | string | Yes      | `"deny"` (only supported value currently).          |
-| `notes`    | string | No       | Why this IP was blocked.                            |
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | No | Unique identifier. |
+| `ip` | string | Yes | IP address or CIDR range. Use `/32` for single IPs. |
+| `hostname` | string | No | Associated hostname (documentation only). |
+| `action` | string | Yes | `"deny"` (only supported value currently). |
+| `notes` | string | No | Why this IP was blocked. |
 
 ### CIDR Notation
 
