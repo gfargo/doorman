@@ -60,24 +60,24 @@ Doorman translates its unified rule format (`conditions`/`enabled`/`action: {typ
 
 Cloudflare supports all 16 unified condition fields:
 
-| Doorman Field  | Cloudflare Field                                                                        | Notes                                                                                                                         |
-| -------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `ip`           | `ip.src`                                                                                |                                                                                                                               |
-| `country`      | `ip.geoip.country`                                                                      |                                                                                                                               |
-| `region`       | `ip.geoip.subdivision_1`                                                                | Client geo subdivision (e.g. `"CA"`) — see the legacy-field note below for how this differs from Vercel's own `region`        |
-| `city`         | `ip.geoip.city`                                                                         |                                                                                                                               |
-| `asn`          | `ip.geoip.asnum`                                                                        |                                                                                                                               |
-| `path`         | `http.request.uri.path`                                                                 |                                                                                                                               |
-| `host`         | `http.host`                                                                             |                                                                                                                               |
-| `method`       | `http.request.method`                                                                   |                                                                                                                               |
-| `header`       | `any(http.request.headers["key"][*] op value)` / `has_key(...)`                         | Requires `key` (the header name, lowercased before compiling) — see the keyed-field note below                                |
-| `query`        | `http.request.uri.query`, or `any(http.request.uri.args["key"][*] op value)` when keyed | Unkeyed matches the whole query string; `key` scopes to one parameter — see the keyed-field note below                        |
-| `cookie`       | `http.cookie`, or `any(http.request.cookies["key"][*] op value)` when keyed             | Unkeyed matches the whole `Cookie` header; keyed requires Cloudflare Pro/Business/Enterprise — see the keyed-field note below |
-| `user_agent`   | `http.user_agent`                                                                       |                                                                                                                               |
-| `referer`      | `http.referer`                                                                          |                                                                                                                               |
-| `scheme`       | `ssl` (boolean)                                                                         |                                                                                                                               |
-| `port`         | `cf.edge.server_port`                                                                   |                                                                                                                               |
-| `threat_score` | `cf.threat_score`                                                                       | Cloudflare bot/attack threat score (0-100)                                                                                    |
+| Doorman Field | Cloudflare Field | Notes |
+| --- | --- | --- |
+| `ip` | `ip.src` |  |
+| `country` | `ip.geoip.country` |  |
+| `region` | `ip.geoip.subdivision_1` | Client geo subdivision (e.g. `"CA"`) — see the legacy-field note below for how this differs from Vercel's own `region` |
+| `city` | `ip.geoip.city` |  |
+| `asn` | `ip.geoip.asnum` |  |
+| `path` | `http.request.uri.path` |  |
+| `host` | `http.host` |  |
+| `method` | `http.request.method` |  |
+| `header` | `any(http.request.headers["key"][*] op value)` / `has_key(...)` | Requires `key` (the header name, lowercased before compiling) — see the keyed-field note below |
+| `query` | `http.request.uri.query`, or `any(http.request.uri.args["key"][*] op value)` when keyed | Unkeyed matches the whole query string; `key` scopes to one parameter — see the keyed-field note below |
+| `cookie` | `http.cookie`, or `any(http.request.cookies["key"][*] op value)` when keyed | Unkeyed matches the whole `Cookie` header; keyed requires Cloudflare Pro/Business/Enterprise — see the keyed-field note below |
+| `user_agent` | `http.user_agent` |  |
+| `referer` | `http.referer` |  |
+| `scheme` | `ssl` (boolean) |  |
+| `port` | `cf.edge.server_port` |  |
+| `threat_score` | `cf.threat_score` | Cloudflare bot/attack threat score (0-100) |
 
 **Keyed `header`/`cookie`/`query` conditions** ([doorman#269](https://github.com/gfargo/doorman/issues/269)): `http.request.headers`, `http.request.cookies`, and (when keyed) `http.request.uri.args` all type as Cloudflare's `Map<Array<String>>`, not a scalar `String` — indexing one yields an `Array<String>`, so a bare `field["key"] eq "value"` is an Array-vs-String type mismatch the Cloudflare API rejects. Doorman compiles a keyed condition to the idiom Cloudflare's Ruleset Engine actually documents instead: `any(field["key"][*] <op> value)` for a value comparison, `has_key(field, "key")` for `exists`/`not_exists`. A `header` condition always requires `key` — there's no "all headers as one value" fallback the way `cookie`'s unkeyed `http.cookie` is. `http.request.cookies` requires Cloudflare Pro, Business, or Enterprise; doorman emits it regardless of plan and lets Cloudflare's API reject it on an unsupported plan, the same policy already applied to `matches`/regex below.
 
@@ -91,16 +91,16 @@ Cloudflare supports all 15 unified operators exactly, no approximation — `not_
 
 ### Action Mapping
 
-| Doorman Action | Cloudflare Action                | Notes                                                                                                                                               |
-| -------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `log`          | `log`                            |                                                                                                                                                     |
-| `deny`         | `block`                          |                                                                                                                                                     |
-| `challenge`    | `managed_challenge`              | Cloudflare's `challenge`/`managed_challenge`/`js_challenge` all fold back to unified `challenge` on `download` — a one-way narrowing, not a failure |
-| `bypass`       | `skip`                           |                                                                                                                                                     |
-| `allow`        | `allow`                          |                                                                                                                                                     |
-| `block`        | `block`                          | Same target as `deny`                                                                                                                               |
-| `rate_limit`   | `block` + `ratelimit` config     | ⚠️ If `action.rateLimit` is omitted, this silently becomes a plain unconditional `block` rule with no rate-limit effect — no error raised locally   |
-| `redirect`     | `redirect` + `from_value` params | ⚠️ If `action.redirect` is omitted, this silently becomes a rule with no redirect target — no error raised locally                                  |
+| Doorman Action | Cloudflare Action | Notes |
+| --- | --- | --- |
+| `log` | `log` |  |
+| `deny` | `block` |  |
+| `challenge` | `managed_challenge` | Cloudflare's `challenge`/`managed_challenge`/`js_challenge` all fold back to unified `challenge` on `download` — a one-way narrowing, not a failure |
+| `bypass` | `skip` |  |
+| `allow` | `allow` |  |
+| `block` | `block` | Same target as `deny` |
+| `rate_limit` | `block` + `ratelimit` config | ⚠️ If `action.rateLimit` is omitted, this silently becomes a plain unconditional `block` rule with no rate-limit effect — no error raised locally |
+| `redirect` | `redirect` + `from_value` params | ⚠️ If `action.redirect` is omitted, this silently becomes a rule with no redirect target — no error raised locally |
 
 ## Lists API (Bulk IP Management)
 
@@ -120,14 +120,14 @@ Without `CLOUDFLARE_ACCOUNT_ID`, IP blocking falls back to individual WAF rules 
 - Vercel's own `region` (the edge/deployment location a request was served from, e.g. `"sfo1"`) is namespaced internally to `vercel_region` so it can't collide with the unified `region` field in the table above (client geo subdivision) — before [doorman#270](https://github.com/gfargo/doorman/issues/270) the two silently shared one name, so a Vercel edge-region condition became a Cloudflare `ip.geoip.subdivision_1` check that could never match. `vercel_region` itself is still Cloudflare-unsupported and gets dropped-with-warning like the rest of this list.
 - Vercel's `geo_country_region` ("Region/state code", e.g. `"CA"`) _is_ the same concept as the unified `region` field — it maps there directly and translates to `ip.geoip.subdivision_1` normally, unlike the rest of this list.
 
-| Feature             | Cloudflare                               | Notes                                                                                                   |
-| ------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `matches` (regex)   | Enterprise-plan-restricted on some plans | Doorman emits it regardless; Cloudflare's API may reject it — see Operator Mapping above                |
-| IP Lists (bulk)     | Lists API                                | Needs `accountId`; without it, falls back to individual `ip.src` rules                                  |
-| Max custom rules    | 5-125 (plan dependent)                   | Free: 5, Pro: 20, Business: 100, Enterprise: 125+                                                       |
-| Rate limit          | Separate phase                           | `ratelimit` config attached to a `block` action, not a distinct rule type                               |
-| Rule order          | Sequential (first match wins)            | `priority` is fully honoured — unlike Vercel, which can't reposition rules that already exist remotely  |
-| Managed rule groups | Supported via `managedRules`             | See [Managed Rule Groups](#managed-rule-groups) below — Cloudflare-only among doorman's providers today |
+| Feature | Cloudflare | Notes |
+| --- | --- | --- |
+| `matches` (regex) | Enterprise-plan-restricted on some plans | Doorman emits it regardless; Cloudflare's API may reject it — see Operator Mapping above |
+| IP Lists (bulk) | Lists API | Needs `accountId`; without it, falls back to individual `ip.src` rules |
+| Max custom rules | 5-125 (plan dependent) | Free: 5, Pro: 20, Business: 100, Enterprise: 125+ |
+| Rate limit | Separate phase | `ratelimit` config attached to a `block` action, not a distinct rule type |
+| Rule order | Sequential (first match wins) | `priority` is fully honoured — unlike Vercel, which can't reposition rules that already exist remotely |
+| Managed rule groups | Supported via `managedRules` | See [Managed Rule Groups](#managed-rule-groups) below — Cloudflare-only among doorman's providers today |
 
 ## Translation Warnings
 
@@ -180,14 +180,14 @@ Cloudflare is the only provider doorman can deploy vendor-managed rulesets (Clou
 }
 ```
 
-| Property    | Type    | Required | Description                                                                                                                                                                        |
-| ----------- | ------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`        | string  | No       | Doorman's diff/sync identifier for this deployment. Omit for a new declaration — doorman assigns one on first sync.                                                                |
-| `ruleset`   | string  | Yes      | The vendor ruleset id to deploy (e.g. Cloudflare Managed Ruleset's well-known id shown above)                                                                                      |
-| `name`      | string  | No       | Human label                                                                                                                                                                        |
-| `enabled`   | boolean | Yes      | Whether this deployment is active                                                                                                                                                  |
-| `action`    | string  | No       | Ruleset-wide override — downgrade every rule in the group to this action. One of `log`, `deny`, `challenge`, `allow`                                                               |
-| `overrides` | array   | No       | Per-rule overrides within the ruleset — `{ "ruleId": string, "action"?: string, "enabled"?: boolean }`, referenced by the _vendor's_ rule id within that ruleset, not a doorman id |
+| Property | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | string | No | Doorman's diff/sync identifier for this deployment. Omit for a new declaration — doorman assigns one on first sync. |
+| `ruleset` | string | Yes | The vendor ruleset id to deploy (e.g. Cloudflare Managed Ruleset's well-known id shown above) |
+| `name` | string | No | Human label |
+| `enabled` | boolean | Yes | Whether this deployment is active |
+| `action` | string | No | Ruleset-wide override — downgrade every rule in the group to this action. One of `log`, `deny`, `challenge`, `allow` |
+| `overrides` | array | No | Per-rule overrides within the ruleset — `{ "ruleId": string, "action"?: string, "enabled"?: boolean }`, referenced by the _vendor's_ rule id within that ruleset, not a doorman id |
 
 Managed rule groups deploy in Cloudflare's separate managed-rules phase, evaluated independently of custom `rules` — no ordering interaction to think about between the two. `getChanges`/`syncRules` diff `managedRules` the same way as `rules`/`ips` — `doorman diff`/`doorman sync` cover it with no extra flags.
 
