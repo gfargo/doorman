@@ -145,3 +145,6 @@ TODO
 CHANGELOG.md
 # agent worktrees
 .claude
+
+# Skill docs keep compact tables: aligned padding trips skill security scanners
+skills/**/*.md
