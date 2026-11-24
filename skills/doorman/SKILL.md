@@ -137,14 +137,14 @@ Two different rule shapes, picked by whether the config has `provider`/`provider
 
 Load the relevant reference file for detailed documentation:
 
-| Task                                                                                           | Reference                                            |
-| ---------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| Writing rules — full field docs, operators, actions, IP blocking, patterns                     | [references/rules.md](references/rules.md)           |
+| Task | Reference |
+| --- | --- |
+| Writing rules — full field docs, operators, actions, IP blocking, patterns | [references/rules.md](references/rules.md) |
 | Cloudflare-specific setup, Lists API, managed rule groups, expression translation, limitations | [references/cloudflare.md](references/cloudflare.md) |
-| Fastly-specific setup, condition/action mapping, rate-limit signal requirement, limitations    | [references/fastly.md](references/fastly.md)         |
-| GCP Cloud Armor setup, CEL translation, priority model, manual e2e verification runbook        | [references/gcp.md](references/gcp.md)               |
-| Available templates and what they protect against                                              | [references/templates.md](references/templates.md)   |
-| CI/CD integration, automation, export formats, validation in pipelines                         | [references/cicd.md](references/cicd.md)             |
+| Fastly-specific setup, condition/action mapping, rate-limit signal requirement, limitations | [references/fastly.md](references/fastly.md) |
+| GCP Cloud Armor setup, CEL translation, priority model, manual e2e verification runbook | [references/gcp.md](references/gcp.md) |
+| Available templates and what they protect against | [references/templates.md](references/templates.md) |
+| CI/CD integration, automation, export formats, validation in pipelines | [references/cicd.md](references/cicd.md) |
 
 ## Principles
 
