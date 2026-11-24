@@ -211,13 +211,13 @@ doorman sync --provider cloudflare --config .doorman.json
 
 Common flags (availability varies by command):
 
-| Flag                                              | Description                                                                                           |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `--config <path>`                                 | Path to config file (default: auto-discovered `.doorman.json`)                                        |
-| `--provider vercel\|cloudflare\|fastly\|gcp`      | Override provider detection — `sync`/`diff`/`download`/`list`/`status`/`watch`/`backup`/`export` only |
-| `--format json\|table\|yaml\|markdown\|terraform` | Output format (command-dependent)                                                                     |
-| `--verbose`                                       | Show detailed output                                                                                  |
-| `--output <path>`                                 | Write output to file instead of stdout                                                                |
+| Flag | Description |
+| --- | --- |
+| `--config <path>` | Path to config file (default: auto-discovered `.doorman.json`) |
+| `--provider vercel\|cloudflare\|fastly\|gcp` | Override provider detection — `sync`/`diff`/`download`/`list`/`status`/`watch`/`backup`/`export` only |
+| `--format json\|table\|yaml\|markdown\|terraform` | Output format (command-dependent) |
+| `--verbose` | Show detailed output |
+| `--output <path>` | Write output to file instead of stdout |
 
 ## Error Handling in Automation
 
