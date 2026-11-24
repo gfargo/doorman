@@ -38,15 +38,19 @@ jobs:
 
       - name: Fetch source at latest tag
         if: steps.check.outputs.up_to_date == 'false'
+        env:
+          LATEST: ${{ steps.check.outputs.latest }}
         run: |
-          git clone --depth 1 --branch "${{ steps.check.outputs.latest }}" \
+          git clone --depth 1 --branch "${LATEST}" \
             "https://github.com/${SOURCE_REPO}.git" /tmp/source
 
       - name: Mirror skill content
         if: steps.check.outputs.up_to_date == 'false'
+        env:
+          LATEST: ${{ steps.check.outputs.latest }}
         run: |
           rsync -a --delete --exclude='sync/' "/tmp/source/${SOURCE_SKILL_PATH}/" "${DEST_SKILL_PATH}/"
-          echo "${{ steps.check.outputs.latest }}" > "${DEST_SKILL_PATH}/source-version.txt"
+          echo "${LATEST}" > "${DEST_SKILL_PATH}/source-version.txt"
 
       - name: Bump security plugin version
         if: steps.check.outputs.up_to_date == 'false'
@@ -61,20 +65,25 @@ jobs:
 
       - name: Commit and tag
         if: steps.check.outputs.up_to_date == 'false'
+        env:
+          LATEST: ${{ steps.check.outputs.latest }}
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add "${DEST_SKILL_PATH}" "${PLUGIN_JSON}" "${MARKETPLACE_JSON}"
-          git commit -m "sync: doorman ${{ steps.check.outputs.latest }} (security v${{ steps.bump.outputs.new_version }})"
-          git tag "v${{ steps.bump.outputs.new_version }}"
+          git commit -m "sync: doorman ${LATEST} (security v${NEW_VERSION})"
+          git tag "v${NEW_VERSION}"
           git push origin HEAD:main
-          git push origin "v${{ steps.bump.outputs.new_version }}"
+          git push origin "v${NEW_VERSION}"
 
       - name: Create release
         if: steps.check.outputs.up_to_date == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ steps.check.outputs.latest }}
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
         run: |
-          gh release create "v${{ steps.bump.outputs.new_version }}" \
-            --title "security v${{ steps.bump.outputs.new_version }} — doorman ${{ steps.check.outputs.latest }}" \
-            --notes "Synced security:doorman to [gfargo/doorman@${{ steps.check.outputs.latest }}](https://github.com/${SOURCE_REPO}/releases/tag/${{ steps.check.outputs.latest }})"
+          gh release create "v${NEW_VERSION}" \
+            --title "security v${NEW_VERSION} — doorman ${LATEST}" \
+            --notes "Synced security:doorman to [gfargo/doorman@${LATEST}](https://github.com/${SOURCE_REPO}/releases/tag/${LATEST})"
