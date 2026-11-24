@@ -53,43 +53,43 @@ Doorman translates its unified rule format into Fastly's structured `request`-ty
 
 ### Field Mapping
 
-| Doorman Field | Fastly Condition           | Notes                                                   |
-| ------------- | -------------------------- | ------------------------------------------------------- |
-| `path`        | `path`                     |                                                         |
-| `method`      | `method`                   |                                                         |
-| `host`        | `domain`                   |                                                         |
-| `user_agent`  | `user_agent`               |                                                         |
-| `ip`          | `ip`                       |                                                         |
-| `country`     | `country`                  | Country-level only — no region/city/continent condition |
-| `scheme`      | `scheme`                   |                                                         |
-| `header`      | `request_header` multival  | Requires `key` (the header name)                        |
-| `query`       | `query_parameter` multival | Requires `key` (the parameter name)                     |
-| `cookie`      | `request_cookie` multival  | Requires `key` (the cookie name)                        |
+| Doorman Field | Fastly Condition | Notes |
+| --- | --- | --- |
+| `path` | `path` |  |
+| `method` | `method` |  |
+| `host` | `domain` |  |
+| `user_agent` | `user_agent` |  |
+| `ip` | `ip` |  |
+| `country` | `country` | Country-level only — no region/city/continent condition |
+| `scheme` | `scheme` |  |
+| `header` | `request_header` multival | Requires `key` (the header name) |
+| `query` | `query_parameter` multival | Requires `key` (the parameter name) |
+| `cookie` | `request_cookie` multival | Requires `key` (the cookie name) |
 
 Fields with no Fastly equivalent (`region`, `city`, `asn`, `referer`, `port`, `target_path`, `environment`, `ja3_digest`, `ja4_digest`) are dropped with a translation warning rather than silently mistranslated — the rule still syncs with its remaining conditions.
 
 ### Operator Mapping
 
-| Doorman Operator           | Fastly Operator                             | Notes                                                          |
-| -------------------------- | ------------------------------------------- | -------------------------------------------------------------- |
-| `eq`                       | `equals` (or `does_not_equal` if `negated`) |                                                                |
-| `contains`                 | `contains` (or `does_not_contain`)          |                                                                |
-| `matches`                  | `matches` (or `does_not_match`)             | Regex syntax may need adjustment                               |
-| `starts_with`, `ends_with` | `like` (or `not_like`)                      | Fastly's wildcard matching isn't a true prefix/suffix operator |
-| `in`                       | `in_list` (or `not_in_list`)                |                                                                |
-| `gt`, `lt`                 | `greater_equal`, `lesser_equal`             | No strict `>`/`<` on Fastly — boundary value also matches      |
+| Doorman Operator | Fastly Operator | Notes |
+| --- | --- | --- |
+| `eq` | `equals` (or `does_not_equal` if `negated`) |  |
+| `contains` | `contains` (or `does_not_contain`) |  |
+| `matches` | `matches` (or `does_not_match`) | Regex syntax may need adjustment |
+| `starts_with`, `ends_with` | `like` (or `not_like`) | Fastly's wildcard matching isn't a true prefix/suffix operator |
+| `in` | `in_list` (or `not_in_list`) |  |
+| `gt`, `lt` | `greater_equal`, `lesser_equal` | No strict `>`/`<` on Fastly — boundary value also matches |
 
 ### Action Mapping
 
-| Doorman Action  | Fastly Action                                   | Notes                                                                                          |
-| --------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `block`, `deny` | `block`                                         |                                                                                                |
-| `allow`         | `allow`                                         |                                                                                                |
-| `challenge`     | `browser_challenge`                             |                                                                                                |
-| `redirect`      | `redirect`                                      | Uses `redirect_url` + `response_code`                                                          |
-| `rate_limit`    | Rule `type: rate_limit` + `block_signal` action | See Rate Limiting below                                                                        |
-| `log`           | `allow` (with a warning)                        | Fastly has no dedicated log-only action; `request_logging` is set at the rule level regardless |
-| `bypass`        | `allow` (with a warning)                        | No equivalent action                                                                           |
+| Doorman Action | Fastly Action | Notes |
+| --- | --- | --- |
+| `block`, `deny` | `block` |  |
+| `allow` | `allow` |  |
+| `challenge` | `browser_challenge` |  |
+| `redirect` | `redirect` | Uses `redirect_url` + `response_code` |
+| `rate_limit` | Rule `type: rate_limit` + `block_signal` action | See Rate Limiting below |
+| `log` | `allow` (with a warning) | Fastly has no dedicated log-only action; `request_logging` is set at the rule level regardless |
+| `bypass` | `allow` (with a warning) | No equivalent action |
 
 ## Condition Grouping
 
@@ -115,12 +115,12 @@ Unlike classic Fastly VCL services, Next-Gen WAF rule and list writes take effec
 
 ## Limitations & Differences
 
-| Feature                    | Vercel                        | Fastly                 | Notes                                                                                                                          |
-| -------------------------- | ----------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Geo targeting              | Country/city/continent/region | Country only           | No sub-country condition field                                                                                                 |
-| Rule ordering              | Best-effort (insertion order) | None                   | Next-Gen WAF rules are evaluated independently — `priority` has no effect                                                      |
-| Managed/vendor rule groups | CRS (enterprise)              | Templated signal rules | Doorman-managed on Cloudflare only ([cloudflare.md](cloudflare.md)); not yet configurable through Doorman for Vercel or Fastly |
-| Signal/exclusion rules     | —                             | `type: signal`         | Not managed by Doorman — see below                                                                                             |
+| Feature | Vercel | Fastly | Notes |
+| --- | --- | --- | --- |
+| Geo targeting | Country/city/continent/region | Country only | No sub-country condition field |
+| Rule ordering | Best-effort (insertion order) | None | Next-Gen WAF rules are evaluated independently — `priority` has no effect |
+| Managed/vendor rule groups | CRS (enterprise) | Templated signal rules | Doorman-managed on Cloudflare only ([cloudflare.md](cloudflare.md)); not yet configurable through Doorman for Vercel or Fastly |
+| Signal/exclusion rules | — | `type: signal` | Not managed by Doorman — see below |
 
 Fastly rules of type `signal` or `templated_signal` (which tag or exclude WAF signals rather than allow/block/redirect a request) are skipped entirely by `doorman download`/`fetchConfig` rather than forced into a lossy `UnifiedRule` — they simply don't appear in the local config.
 
